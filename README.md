@@ -28,7 +28,7 @@ OmniAdaptor-Spark是Spark与OmniOperator之间的桥梁组件，作为胶水层�
 OmniAdaptor-Flink编译命令如下
 
 ```
-cd omniop-flink-extension
+cd omnistream/omniop-flink-extension/omni-flink-bundle
 mvn clean package -DskipTests
 ```
 

@@ -15,7 +15,6 @@ public class ShuffleDescriptorPOJO {
     private boolean hasLocalResource;
     private ResourceIDPOJO storesLocalResourcesOn;
 
-
     public ShuffleDescriptorPOJO() {
     }
 

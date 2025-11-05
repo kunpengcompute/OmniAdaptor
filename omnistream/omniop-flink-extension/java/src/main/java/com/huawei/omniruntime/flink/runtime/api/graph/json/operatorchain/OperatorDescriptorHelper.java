@@ -1,5 +1,12 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 package com.huawei.omniruntime.flink.runtime.api.graph.json.operatorchain;
@@ -102,7 +109,6 @@ public class OperatorDescriptorHelper {
         LOG.info("operatorFactory class name {} and getStreamOperatorClass {}",
                 operatorFactory.getClass().getCanonicalName(),
                 operatorFactory.getStreamOperatorClass(userCodeClassloader).getCanonicalName());
-        //StreamOperator op =  operatorConfig.getStreamOperator(userCodeClassloader);
         fillBasicOperatorDescriptions(opDesc, operatorFactory, operatorConfig, userCodeClassloader);
         if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SimpleInputFormatOperatorFactory) {
             LOG.info("operatorFactory is {}", operatorFactory.getClass().getCanonicalName());
@@ -220,7 +226,7 @@ public class OperatorDescriptorHelper {
             } else {
                 typeName += "64";
             }
-            typeName += "("+precision.toString() + "," + scale.toString() + ")";
+            typeName += "(" + precision.toString() + "," + scale.toString() + ")";
         }
         return typeName;
     }
@@ -260,7 +266,7 @@ public class OperatorDescriptorHelper {
             LOG.info("parse nexmarkSourceFunction Plan for nexmark 0.3");
             NexmarkFormatPOJO nexmarkFormatPOJO = new NexmarkFormatPOJO();
             nexmarkFormatPOJO.setFormat("nexmark");
-            nexmarkFormatPOJO.setBatchSize(1000);
+            nexmarkFormatPOJO.setBatchSize(10000);
             Map<String, Object> configMap = nexmarkFormatPOJO.getConfigMap();
             try {
                 getNexmarkConfig(source, configMap);
@@ -335,7 +341,7 @@ public class OperatorDescriptorHelper {
             LOG.info("parse nexmarkSourceFunction Plan for nexmark 0.2");
             NexmarkFormatPOJO nexmarkFormatPOJO = new NexmarkFormatPOJO();
             nexmarkFormatPOJO.setFormat("nexmark");
-            nexmarkFormatPOJO.setBatchSize(1000);
+            nexmarkFormatPOJO.setBatchSize(10000);
             Map<String, Object> configMap = nexmarkFormatPOJO.getConfigMap();
             try {
                 getNexmarkConfigForVersion2(userFunction, configMap);
@@ -486,6 +492,9 @@ public class OperatorDescriptorHelper {
         Integer vertexID = opConfig.getVertexID();
         opDesc.setVertexID(vertexID);
         opDesc.setOperatorId(opConfig.getOperatorID().toString());
+        opDesc.setJobType(opConfig.getJobType());
+        opDesc.setTaskType(opConfig.getTaskType());
+        opDesc.setOperatorType(opConfig.getOperatorType());
         LOG.info("handling input for op {}", opConfig.getOperatorName());
         LOG.info("handling description for op {}", opConfig.getDescription());
         { // input
@@ -599,7 +608,7 @@ public class OperatorDescriptorHelper {
     }
 
     private static String[] parseTypeSerializer(TypeSerializer<?> ts) {
-        String data[] = new String[2];
+        String[] data = new String[2];
         String typeObj = "Void";
         String kindStr = "basic";
 
@@ -644,8 +653,8 @@ public class OperatorDescriptorHelper {
             throw new RuntimeException("Cannot setup OmniOperatorChain because an unsupported serializer type was requested: " + ts.toString());
         }
 
-        data[0] = kindStr; //"kind"
-        data[1] = typeObj;// "type"
+        data[0] = kindStr; // "kind"
+        data[1] = typeObj; // "type"
         return data;
     }
 
@@ -686,7 +695,6 @@ public class OperatorDescriptorHelper {
             jsonObject = new JSONObject(description);
         } catch (JSONException e) {
             LOG.error("Description is not JSON format {}", description, e);
-            //throw new RuntimeException(e);
         }
         return jsonObject;
     }

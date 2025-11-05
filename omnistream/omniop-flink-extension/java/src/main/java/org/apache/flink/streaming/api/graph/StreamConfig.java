@@ -1,22 +1,29 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.streaming.api.graph;
 
+import com.huawei.omniruntime.flink.streaming.api.graph.JobType;
+import com.huawei.omniruntime.flink.streaming.api.graph.OperatorType;
+import com.huawei.omniruntime.flink.streaming.api.graph.TaskType;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
@@ -121,7 +128,15 @@ public class StreamConfig implements Serializable {
 
     private static final String JOB_TYPE = "jobType";
 
+    private static final String TASK_TYPE = "taskType";
+
+    private static final String OPERATOR_TYPE = "operatorType";
+
     private static final String OMNI_CONF = "omniconf";
+
+    private static final String CHECKPOINT_CONF = "checkpointConf";
+
+    private static final String EXECUTION_CHECKPOINT_CONF = "executionCheckpointConf";
 
     private static final String MANAGED_MEMORY_FRACTION_PREFIX = "managedMemFraction.";
     private static final ConfigOption<Boolean> STATE_BACKEND_USE_MANAGED_MEMORY =
@@ -573,7 +588,23 @@ public class StreamConfig implements Serializable {
     }
 
     public int getJobType() {
-        return config.getInteger(JOB_TYPE, 0);
+        return config.getInteger(JOB_TYPE, JobType.NULL.getValue());
+    }
+
+    public void setTaskType(int taskType) {
+        config.setInteger(TASK_TYPE, taskType);
+    }
+
+    public int getTaskType() {
+        return config.getInteger(TASK_TYPE, TaskType.NULL.getValue());
+    }
+
+    public void setOperatorType(int operatorType) {
+        config.setInteger(OPERATOR_TYPE, operatorType);
+    }
+
+    public int getOperatorType() {
+        return config.getInteger(OPERATOR_TYPE, OperatorType.NULL.getValue());
     }
 
     public void setOmniConf(String omniConf) {
@@ -583,6 +614,23 @@ public class StreamConfig implements Serializable {
     public String getOmniConf() {
         return config.getString(OMNI_CONF, "0");
     }
+
+    public void setCheckpointConf(String checkpointConf) {
+        config.setString(CHECKPOINT_CONF, checkpointConf);
+    }
+
+    public String getCheckpointConf() {
+        return config.getString(CHECKPOINT_CONF, "");
+    }
+
+    public void setExecutionCheckpointConf(String executionCheckpointConf){
+        config.setString(EXECUTION_CHECKPOINT_CONF, executionCheckpointConf);
+    }
+
+    public String getExecutionCheckpointConf() {
+        return config.getString(EXECUTION_CHECKPOINT_CONF, "");
+    }
+    
     /**
      * Sets the job vertex level non-chained outputs. The given output list must have the same order
      * with {@link JobVertex#getProducedDataSets()}.

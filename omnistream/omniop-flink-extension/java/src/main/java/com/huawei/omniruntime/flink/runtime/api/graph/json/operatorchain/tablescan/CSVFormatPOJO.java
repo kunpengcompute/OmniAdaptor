@@ -16,7 +16,7 @@ import java.util.List;
  */
 
 public class CSVFormatPOJO {
-    private String format; //"csv"
+    private String format; // "csv"
     private String delimiter; // only support default comma
     private String filePath; // local file path
     private List<TypeDescriptionPOJO> fields; // csv field type
@@ -101,8 +101,8 @@ public class CSVFormatPOJO {
     public String toString() {
         return "CSVFormatPOJO{"
                 + "format='" + format + '\'' +
-                ", delimiter='" + delimiter + '\''
-                + ", filePath='" + filePath + '\'' +
+                ", delimiter='" + delimiter + '\'' +
+                ", filePath='" + filePath + '\'' +
                 ", fields=" + fields
                 + ", selectFields=" + Arrays.toString(selectFields) +
                 ", csvSelectFieldToProjectFieldMapping=" + Arrays.toString(csvSelectFieldToProjectFieldMapping)

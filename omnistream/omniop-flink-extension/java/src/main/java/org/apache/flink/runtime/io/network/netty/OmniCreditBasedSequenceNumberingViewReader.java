@@ -1,11 +1,23 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
 package org.apache.flink.runtime.io.network.netty;
 
-import static com.huawei.omniruntime.flink.core.memory.MemoryUtils.getByteBufferAddress;
 import static org.apache.flink.runtime.io.network.api.StopMode.DRAIN;
+import static com.huawei.omniruntime.flink.core.memory.MemoryUtils.getByteBufferAddress;
 
 import com.huawei.omniruntime.flink.core.memory.MemoryUtils;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.descriptor.ResultPartitionIDPOJO;
 import com.huawei.omniruntime.flink.runtime.io.network.buffer.NativeBufferRecycler;
+import com.huawei.omniruntime.flink.runtime.io.network.buffer.NativeNetworkBufferRecycler;
 
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentFactory;
@@ -72,6 +84,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
     private volatile int numCreditsAvailable;
     private volatile int initialCredit;
     private Executor executor = Executors.newSingleThreadExecutor();
+    private final Object localChannelLocker = new Object();
 
     OmniCreditBasedSequenceNumberingViewReader(
             InputChannelID receiverId, int initialCredit, PartitionRequestQueue requestQueue) {
@@ -86,11 +99,11 @@ public class OmniCreditBasedSequenceNumberingViewReader
      */
     public void initDirectBuffers() {
         // the init outputBuffer size  with an initial size of 128
-        // [ elementNum(default 10) * (elementAddress + elementLength)  10 * (8+4) = 120 powerOfTwo(120) = 128 ]
+        // [ elementNum(default 10) * (elementAddress + elementLength+memoryType[vectorBatch:0,memorySegment:1])  10 * (8+4+4) = 160 powerOfTwo(160) = 256 ]
         // in the future maybe we can change the size of outputBuffer dynamically,
         // but  for the vectorBatch data type scenario,
         // the fixed size of outputBuffer  is not a problem
-        this.outputBufferCapacity = 128;
+        this.outputBufferCapacity = 256;
         this.outputBuffer = ByteBuffer.allocateDirect(this.outputBufferCapacity);
         this.outputBufferAddress = getByteBufferAddress(outputBuffer);
 
@@ -116,24 +129,6 @@ public class OmniCreditBasedSequenceNumberingViewReader
         outputBufferStatus.putInt(0);  // output buffer is owned by java
     }
 
-    public void getNativeReaderRef() {
-        executor.execute(() -> {
-            long count = 0L;
-            while (nativeCreditBasedSequenceNumberingViewReaderRef == -1) {
-                try {
-                    count++;
-                    LOG.info("count num is {}", count);
-                    Thread.sleep(20);
-                } catch (InterruptedException e) {
-                    LOG.error("Error sleeping", e);
-                }
-            }
-
-            firstDataAvailableNotification(nativeCreditBasedSequenceNumberingViewReaderRef);
-            LOG.info("call first notification  for task: {} ## {} successfully..........", taskName.substring(0,
-                    15), subPartitionIndex);
-        });
-    }
 
     @Override
     public void requestSubpartitionView(
@@ -142,18 +137,14 @@ public class OmniCreditBasedSequenceNumberingViewReader
             int subPartitionIndex)
             throws IOException {
         synchronized (requestLock) {
-            LOG.info("start requestSubpartitionView");
-            try {
-                super.requestSubpartitionView(partitionProvider, resultPartitionId, subPartitionIndex);
+            super.requestSubpartitionView(partitionProvider, resultPartitionId, subPartitionIndex);
 
             ResultPartitionIDPOJO resultPartitionIDPOJO = new ResultPartitionIDPOJO(resultPartitionId);
             JSONObject jsonObject = new JSONObject(resultPartitionIDPOJO);
             String parititonIdString = jsonObject.toString();
             this.subPartitionIndex = subPartitionIndex;
             this.partitionId = parititonIdString;
-//            Thread.currentThread().setName("Netty Server for task: " + taskName);
-
-
+            try {
                 LOG.info("requestSubpartitionView for task: {} ## {}", taskName.substring(0, 15), subPartitionIndex);
                 nativeCreditBasedSequenceNumberingViewReaderRef = createNativeCreditBasedSequenceNumberingViewReader(
                         nativeTaskRef, statusAddress, partitionId, subPartitionIndex);
@@ -170,10 +161,28 @@ public class OmniCreditBasedSequenceNumberingViewReader
             }
             Thread thread = new Thread(this);
             thread.start();
-
-            getNativeReaderRef();
+            // start the thread
+            startFirstDataAvailableNotificationThread();
         }
-        // start the thread
+    }
+    
+    private void startFirstDataAvailableNotificationThread() {
+        executor.execute(() -> {
+            synchronized (localChannelLocker) {
+                if (nativeCreditBasedSequenceNumberingViewReaderRef == -1) {
+                    try {
+                        localChannelLocker.wait();
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                // here, nativeCreditBasedSequenceNumberingViewReaderRef should not be -1
+                firstDataAvailableNotification(nativeCreditBasedSequenceNumberingViewReaderRef);
+                LOG.info("call first notification  for task: {} ## {} successfully..........", taskName.substring(0,
+                        15), subPartitionIndex);
+            }
+            
+        });
     }
 
 
@@ -207,13 +216,18 @@ public class OmniCreditBasedSequenceNumberingViewReader
                         Thread.sleep(20);
                     }
                 } else {
-                    LOG.error("nativeCreditBasedSequenceNumberingViewReaderRef is -1 for task: {} ## {},{},{}",
-                            taskName.substring(0, 15), subPartitionIndex, this.hashCode(),
-                            this.nativeCreditBasedSequenceNumberingViewReaderRef);
-                    nativeCreditBasedSequenceNumberingViewReaderRef =
-                            createNativeCreditBasedSequenceNumberingViewReader(nativeTaskRef, statusAddress,
-                                    partitionId, subPartitionIndex);
-                    Thread.sleep(1000);
+                    synchronized (localChannelLocker) {
+                        LOG.error("nativeCreditBasedSequenceNumberingViewReaderRef is -1 for task: {} ## {},{},{}",
+                                taskName.substring(0, 15), subPartitionIndex, this.hashCode(),
+                                this.nativeCreditBasedSequenceNumberingViewReaderRef);
+                        nativeCreditBasedSequenceNumberingViewReaderRef =
+                                createNativeCreditBasedSequenceNumberingViewReader(nativeTaskRef, statusAddress,
+                                        partitionId, subPartitionIndex);
+                        if (nativeCreditBasedSequenceNumberingViewReaderRef != -1) {
+                            localChannelLocker.notifyAll();
+                        }
+                    }
+
                 }
             } catch (InterruptedException e) {
                 LOG.error("InterruptedException in OmniCreditBasedSequenceNumberingViewReader", e);
@@ -361,46 +375,75 @@ public class OmniCreditBasedSequenceNumberingViewReader
         for (int i = 0; i < readElementNum; i++) {
             long address = outputBuffer.getLong();
             int length = outputBuffer.getInt();
-            // this means this is an event
-            if (address == -1) {
-                int eventType = length;
-                AbstractEvent event = getEventById(eventType);
-                LOG.info("[{}###{}]----------------got a event with Event type: {} for natve ref {}",
-                        taskName.substring(0, 15),
-                        subPartitionIndex, event, nativeCreditBasedSequenceNumberingViewReaderRef);
-
-                try {
-                    ByteBuffer eventBuffer = EventSerializer.toSerializedEvent(event);
-                    MemorySegment memorySegment = MemorySegmentFactory.wrap(eventBuffer.array());
-                    NetworkBuffer buffer = new NetworkBuffer(
-                            memorySegment,
-                            FreeingBufferRecycler.INSTANCE,
-                            Buffer.DataType.EVENT_BUFFER);
-                    buffer.setReaderIndex(0);
-                    buffer.setSize(eventBuffer.remaining());
-                    bufferInfos.add(new BufferInfo(buffer, address, length));
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+            int memoryType = outputBuffer.getInt(); // 0 for vectorBatch, 1 for memorySegment
+            if (memoryType == 0) {
+                // vectorBatch
+                doDecodeVectorBatchBuffer(address, length);
+            } else if (memoryType == 1 || memoryType == 2) {
+                // memorySegment
+                doDecodeMemorySegmentBuffer(address, length,memoryType);
             } else {
-                ByteBuffer resultBuffer = MemoryUtils.wrapUnsafeMemoryWithByteBuffer(address, length);
-                resultBuffer.order(ByteOrder.BIG_ENDIAN);
-                MemorySegment memorySegment = MemorySegmentFactory.wrapOffHeapMemory(resultBuffer);
-                NativeBufferRecycler nativeBufferRecycler =
-                        NativeBufferRecycler.getInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
-                nativeBufferRecycler.registerMemorySegment(memorySegment, address);
-
-                NetworkBuffer buffer = new NetworkBuffer(memorySegment, nativeBufferRecycler);
-
-                buffer.setReaderIndex(0);
-                buffer.setSize(length);
-                bufferInfos.add(new BufferInfo(buffer, address, length));
+                LOG.error("Unknown memory type: {} for task: {} ## {}", memoryType,
+                        taskName.substring(0, 15), subPartitionIndex);
             }
         }
         // reset the outputBuffer
         outputBuffer.clear();
     }
+    
+    
+    private void doDecodeVectorBatchBuffer(long address, int length) {
+        // this means this is an event
+        if (address == -1) {
+            int eventType = length;
+            AbstractEvent event = getEventById(eventType);
+            LOG.info("[{}###{}]----------------got a event with Event type: {} for natve ref {}",
+                    taskName.substring(0, 15), subPartitionIndex, event,
+                    nativeCreditBasedSequenceNumberingViewReaderRef);
+            
+            try {
+                ByteBuffer eventBuffer = EventSerializer.toSerializedEvent(event);
+                MemorySegment memorySegment = MemorySegmentFactory.wrap(eventBuffer.array());
+                NetworkBuffer buffer = new NetworkBuffer(memorySegment, FreeingBufferRecycler.INSTANCE,
+                        Buffer.DataType.EVENT_BUFFER);
+                buffer.setReaderIndex(0);
+                buffer.setSize(eventBuffer.remaining());
+                bufferInfos.add(new BufferInfo(buffer, address, length));
+            } catch (IOException e) {
+                LOG.error("{}", taskName, e);
+            }
+        } else {
+            ByteBuffer resultBuffer = MemoryUtils.wrapUnsafeMemoryWithByteBuffer(address, length);
+            resultBuffer.order(ByteOrder.BIG_ENDIAN);
+            MemorySegment memorySegment = MemorySegmentFactory.wrapOffHeapMemory(resultBuffer);
+            NativeBufferRecycler nativeBufferRecycler =
+                    NativeBufferRecycler.getInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
+            nativeBufferRecycler.registerMemorySegment(memorySegment, address);
+            
+            NetworkBuffer buffer = new NetworkBuffer(memorySegment, nativeBufferRecycler);
+            
+            buffer.setReaderIndex(0);
+            buffer.setSize(length);
+            bufferInfos.add(new BufferInfo(buffer, address, length));
+        }
+    }
 
+    private void doDecodeMemorySegmentBuffer(long address, int length,int memoryType) {
+        MemorySegment memorySegment = MemorySegmentFactory.wrapOffHeapMemory(
+                MemoryUtils.wrapUnsafeMemoryWithByteBuffer(address, length));
+        NativeBufferRecycler nativeBufferRecycler =
+                NativeNetworkBufferRecycler.getInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
+        nativeBufferRecycler.registerMemorySegment(memorySegment, address);
+        
+        NetworkBuffer buffer = new NetworkBuffer(memorySegment, nativeBufferRecycler);
+        buffer.order(ByteOrder.BIG_ENDIAN);
+        if(memoryType == 2) {
+            buffer.setDataType(Buffer.DataType.EVENT_BUFFER);
+        }
+        buffer.setReaderIndex(0);
+        buffer.setSize(length);
+        bufferInfos.add(new BufferInfo(buffer, address, length));
+    }
 
     private AbstractEvent getEventById(int type) {
         if (type == 0) {
@@ -439,6 +482,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
         }
 
         NativeBufferRecycler.unRegisterInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
+        NativeNetworkBufferRecycler.unRegisterInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
 
         if (nativeCreditBasedSequenceNumberingViewReaderRef != -1) {
             destroyNativeNettyBufferPool(nativeCreditBasedSequenceNumberingViewReaderRef);
@@ -478,6 +522,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
             // consumer side for all floating buffers must have been released
             numCreditsAvailable = 0;
         }
+        resumeConsumption(nativeCreditBasedSequenceNumberingViewReaderRef);
         super.resumeConsumption();
     }
 
@@ -557,4 +602,5 @@ public class OmniCreditBasedSequenceNumberingViewReader
      * @param nativeCreditBasedSequenceNumberingViewReaderRef nativeCreditBasedSequenceNumberingViewReaderRef
      */
     private native void destroyNativeNettyBufferPool(long nativeCreditBasedSequenceNumberingViewReaderRef);
+    private native void resumeConsumption(long nativeCreditBasedSequenceNumberingViewReaderRef);
 }

@@ -1,9 +1,26 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
 package com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public abstract class AbstractValidateOperatorStrategy {
 
@@ -47,22 +64,12 @@ public abstract class AbstractValidateOperatorStrategy {
         RexTypeToIdMap.put("ROW", 17);
         RexTypeToIdMap.put("INVALID", 18);
         RexTypeToIdMap.put("TIME_WITHOUT_TIME_ZONE", 19); // TODO: Is this the same as TIME?
-        RexTypeToIdMap.put("TIMESTAMP_WITHOUT_TIME_ZONE", 20);//TODO: Omni's TIMESTAMP uses int64_t, Flink has the possibility of accuracy>3
-        RexTypeToIdMap.put("TIMESTAMP_TZ", 21);//TIMESTAMP_WITH_TIMEZONE
+        RexTypeToIdMap.put("TIMESTAMP_WITHOUT_TIME_ZONE", 20); // TODO: Omni's TIMESTAMP uses int64_t, Flink has the possibility of accuracy>3
+        RexTypeToIdMap.put("TIMESTAMP_TZ", 21); // TIMESTAMP_WITH_TIMEZONE
         RexTypeToIdMap.put("TIMESTAMP_WITH_LOCAL_TIME_ZONE", 22);
         RexTypeToIdMap.put("ARRAY", 23);
         RexTypeToIdMap.put("MULTISET", 24);
         RexTypeToIdMap.put("MAP", 25);
-        //RexNode sqlTypeName:
-        //BOOLEAN, INTEGER, VARCHAR, DATE, TIME, TIMESTAMP, NULL, DECIMAL,
-        //ANY, CHAR, BINARY, VARBINARY, TINYINT, SMALLINT, BIGINT, REAL,
-        //DOUBLE, SYMBOL, INTERVAL_YEAR, INTERVAL_YEAR_MONTH, INTERVAL_MONTH,
-        //INTERVAL_DAY, INTERVAL_DAY_HOUR, INTERVAL_DAY_MINUTE,
-        //INTERVAL_DAY_SECOND, INTERVAL_HOUR, INTERVAL_HOUR_MINUTE,
-        //INTERVAL_HOUR_SECOND, INTERVAL_MINUTE, INTERVAL_MINUTE_SECOND,
-        //INTERVAL_SECOND, TIME_WITH_LOCAL_TIME_ZONE, TIME_TZ,
-        //TIMESTAMP_WITH_LOCAL_TIME_ZONE, TIMESTAMP_TZ,
-        //FLOAT, MULTISET, DISTINCT, STRUCTURED, ROW, CURSOR, COLUMN_LIST
     }
 
     public abstract boolean executeValidateOperator(Map<String, Object> operatorInfoMap);

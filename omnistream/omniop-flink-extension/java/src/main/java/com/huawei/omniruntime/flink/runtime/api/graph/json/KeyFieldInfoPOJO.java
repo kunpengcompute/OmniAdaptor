@@ -1,6 +1,20 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
 package com.huawei.omniruntime.flink.runtime.api.graph.json;
 
 import static org.apache.flink.util.Preconditions.checkState;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -13,6 +27,7 @@ import java.util.Map;
  */
 
 public class KeyFieldInfoPOJO {
+    private static final Logger LOG = LoggerFactory.getLogger(KeyFieldInfoPOJO.class);
     private String fieldName;
     private String fieldTypeName;
     private int fieldIndex;
@@ -41,11 +56,11 @@ public class KeyFieldInfoPOJO {
 
         KeyFieldInfoPOJO myField = new KeyFieldInfoPOJO(fieldName, fieldTypeName, fieldIndex);
 
-        System.out.println(myField.getFieldName()); // Output: exampleField
-        System.out.println(myField.getFieldTypeName()); // Output: java.lang.String
-        System.out.println(myField.getFieldIndex()); // Output: 0
+        LOG.info("Field name: {}", myField.getFieldName()); // Output: exampleField
+        LOG.info("Field type name: {}", myField.getFieldTypeName()); // Output: java.lang.String
+        LOG.info("Field index: {}", myField.getFieldIndex()); // Output: 0
 
-        System.out.println(myField); // Output: FieldInfo{fieldName='exampleField', fieldTypeName='java.lang.String', fieldIndex=0}
+        LOG.info("Field info: {}", myField); // Output: FieldInfo{fieldName='exampleField', fieldTypeName='java.lang.String', fieldIndex=0}
     }
 
     // Getters

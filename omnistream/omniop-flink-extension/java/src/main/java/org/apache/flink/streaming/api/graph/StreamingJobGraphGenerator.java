@@ -1,25 +1,39 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.streaming.api.graph;
 
+import static org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguration.MINIMAL_CHECKPOINT_TIME;
+import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.checkState;
+
+import com.huawei.omniruntime.flink.runtime.api.graph.json.CheckpointConfigPOJO;
+import com.huawei.omniruntime.flink.runtime.api.graph.json.ExecutionCheckpointConfigPOJO;
 import com.huawei.omniruntime.flink.streaming.api.graph.JobType;
 import com.huawei.omniruntime.flink.streaming.api.graph.OmniGraphOverride;
+
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
@@ -64,12 +78,15 @@ import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.checkpoint.WithMasterCheckpointHook;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
+import org.apache.flink.streaming.api.operators.StreamGroupedReduceOperator;
+import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.InputSelectable;
 import org.apache.flink.streaming.api.operators.SourceOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.UdfStreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.YieldingOperatorFactory;
+import org.apache.flink.streaming.api.operators.co.KeyedCoProcessOperator;
 import org.apache.flink.streaming.api.transformations.StreamExchangeMode;
 import org.apache.flink.streaming.runtime.partitioner.CustomPartitionerWrapper;
 import org.apache.flink.streaming.runtime.partitioner.ForwardForConsecutiveHashPartitioner;
@@ -88,7 +105,6 @@ import org.apache.flink.util.concurrent.FutureUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -114,10 +130,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguration.MINIMAL_CHECKPOINT_TIME;
-import static org.apache.flink.util.Preconditions.checkArgument;
-import static org.apache.flink.util.Preconditions.checkNotNull;
-import static org.apache.flink.util.Preconditions.checkState;
+import javax.annotation.Nullable;
 
 /**
  * The StreamingJobGraphGenerator converts a {@link StreamGraph} into a {@link JobGraph}.
@@ -582,21 +595,23 @@ public class StreamingJobGraphGenerator {
     }
 
     private void overrideVertices() {
-        JobType jobType = OmniGraphOverride.getJobType(chainInfos);
+        // The input para is the entire job chain.
+        // the member jobType, taskTypes, operatorTypes in class OmniGraphOverride is assigned value by the method.
+        OmniGraphOverride.generateTypeInfo(chainInfos);
+        JobType jobType = OmniGraphOverride.getJobType();
         if (jobType.equals(JobType.NULL) || jobType.equals(JobType.SQL_STREAM)) {
             LOG.error("Override vertices with null or SQL stream");
             return;
         }
 
-        if (streamGraph.getCheckpointConfig().isCheckpointingEnabled()) {
-            LOG.warn("Unsupported Checkpoint Config in native side and will roll back to Original plan.");
+        StateBackend stateBackend = streamGraph.getStateBackend();
+        OmniGraphOverride.setStateBackend(stateBackend);
+        // temp operate, will delete later
+        if (validateDataStreamBackend(jobType, stateBackend)) {
             return;
         }
 
-        StateBackend stateBackend = streamGraph.getStateBackend();
-        OmniGraphOverride.setStateBackend(stateBackend);
-        if (jobType.equals(JobType.STREAM) && stateBackend != null && !(stateBackend instanceof HashMapStateBackend)) {
-            LOG.warn("Unsupported StateBackend in native DataStream and will roll back to Original plan.");
+        if (validateFallBackForCheckpoint(jobType)){
             return;
         }
 
@@ -614,6 +629,88 @@ public class StreamingJobGraphGenerator {
                 vertexConfig.setUseOmniEnabled(false);
             }
         }
+    }
+
+    private boolean validateFallBackForCheckpoint(JobType jobType){
+        if (!streamGraph.getCheckpointConfig().isCheckpointingEnabled()) {
+            return false;
+        }
+        if (jobType.equals(JobType.SQL)) {
+            LOG.warn("SQL Unsupported Checkpoint in native side and will roll back to Original plan.");
+            return true;
+        }
+        if (!containKeyCoProcessOperator().getRight()){
+            return true;
+        }
+        CheckpointConfigPOJO checkpointConfigPOJO = new CheckpointConfigPOJO(streamGraph.getConfiguration(), streamGraph);
+        ExecutionCheckpointConfigPOJO executionCheckpointConfigPOJO =
+                new ExecutionCheckpointConfigPOJO(streamGraph.getCheckpointConfig(), streamGraph.getConfiguration());
+        boolean incrementalCheckpoints = checkpointConfigPOJO.getIncrementalCheckpoints();
+        CheckpointingMode chkMode = streamGraph.getCheckpointConfig().getCheckpointingMode();
+        boolean unalignedCheckpointsEnabled = streamGraph.getCheckpointConfig().isUnalignedCheckpointsEnabled();
+        long alignedCheckpointTimeout = executionCheckpointConfigPOJO.getAlignedCheckpointTimeoutSecond();
+
+        boolean useOmni = incrementalCheckpoints
+                && chkMode == CheckpointingMode.EXACTLY_ONCE
+                && unalignedCheckpointsEnabled
+                && alignedCheckpointTimeout > 0;
+        if (!useOmni) {
+            LOG.warn("flink CheckpointConfig parameter value is not supported by native.");
+        }
+        return !useOmni;
+    }
+
+    private boolean validateDataStreamBackend(JobType jobType, StateBackend stateBackend) {
+        if (!jobType.equals(JobType.STREAM)) {
+            return false;
+        }
+
+        Pair<Boolean, Boolean> containOperator = containKeyCoProcessOperator();
+        if (containOperator.getLeft() && containOperator.getRight()) {
+            LOG.warn("Fallback to native plan: Mix of HashMap-only and RocksDB-only operators is present.");
+            return true;
+        }
+        if (stateBackend == null) {
+            if (containOperator.getRight()) {
+                LOG.warn("Fallback to native plan: Non-Rocksdb backend conflicts with a Rocksdb-only operator.");
+                return true;
+            }
+        } else {
+            String backendName = stateBackend.getClass().getSimpleName();
+            if ("EmbeddedOckStateBackend".equals(backendName)) {
+                LOG.warn("Unsupported StateBackend in native DataStream and will roll back to Original plan.");
+                return true;
+            }
+            if (containOperator.getRight() && !"EmbeddedRocksDBStateBackend".equals(backendName)) {
+                LOG.warn("Fallback to native plan: Non-Rocksdb backend conflicts with a Rocksdb-only operator.");
+                return true;
+            }
+            if (containOperator.getLeft() && !"HashMapStateBackend".equals(backendName)) {
+                LOG.warn(" Fallback to native plan: Non-HashMap backend conflicts with a HashMap-only operator.");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private Pair<Boolean, Boolean> containKeyCoProcessOperator() {
+        boolean isContainedKeyedCoProcessOperator = false;
+        boolean isContainedGroupedReduceOperator = false;
+        for (StreamingJobGraphGenerator.OperatorChainInfo chainInfo : chainInfos.values()) {
+            List<StreamNode> chainedNodes = chainInfo.getAllChainedNodes();
+            // the operator is in reverse order within chainedNode
+            for (int i = chainedNodes.size() - 1; i >= 0; i--) {
+                StreamOperator<?> operator = chainedNodes.get(i).getOperator();
+                if (operator instanceof KeyedCoProcessOperator) {
+                    isContainedKeyedCoProcessOperator =  true; // 找到即返回
+                }
+                if (operator instanceof StreamGroupedReduceOperator) {
+                    isContainedGroupedReduceOperator = true;
+                }
+            }
+        }
+        return ImmutablePair.of(isContainedGroupedReduceOperator, isContainedKeyedCoProcessOperator); // 未找到
     }
 
     private void waitForSerializationFuturesAndUpdateJobVertices()
@@ -1362,8 +1459,13 @@ public class StreamingJobGraphGenerator {
             ObjectMapper mapper = new ObjectMapper();
             String omniConfJson = mapper.writeValueAsString(map);
             config.setOmniConf(omniConfJson);
+            CheckpointConfigPOJO checkpointConfigPOJO = new CheckpointConfigPOJO(configuration, streamGraph);
+            config.setCheckpointConf(mapper.writeValueAsString(checkpointConfigPOJO));
+            ExecutionCheckpointConfigPOJO executionCheckpointConfigPOJO =
+                new ExecutionCheckpointConfigPOJO(checkpointCfg, configuration);
+            config.setExecutionCheckpointConf(mapper.writeValueAsString(executionCheckpointConfigPOJO));
         } catch (Exception e) {
-            e.printStackTrace();
+            LOG.warn("get OmniConf or CheckpointConf failed!", e);
         }
 
         vertexConfigs.put(vertexID, config);

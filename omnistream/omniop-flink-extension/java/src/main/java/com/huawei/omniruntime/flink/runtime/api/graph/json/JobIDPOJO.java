@@ -3,6 +3,8 @@ package com.huawei.omniruntime.flink.runtime.api.graph.json;
 import static org.apache.flink.util.Preconditions.checkState;
 
 import org.apache.flink.api.common.JobID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 
@@ -14,6 +16,7 @@ import java.util.Objects;
  */
 
 public class JobIDPOJO {
+    private static final Logger LOG = LoggerFactory.getLogger(JobIDPOJO.class);
     private final long upperPart;
     private final long lowerPart;
 
@@ -21,7 +24,6 @@ public class JobIDPOJO {
         this.upperPart = upperPart;
         this.lowerPart = lowerPart;
     }
-
 
     public JobIDPOJO(JobID jobId) {
         this(jobId.getUpperPart(), jobId.getLowerPart());
@@ -32,16 +34,16 @@ public class JobIDPOJO {
         JobIDPOJO jobID2 = new JobIDPOJO(12345L, 67890L);
         JobIDPOJO jobID3 = new JobIDPOJO(99999L, 11111L);
 
-        System.out.println(jobID1);
-        System.out.println("Job ID 1 upper: " + jobID1.getUpperPart());
-        System.out.println("Job ID 1 lower: " + jobID1.getLowerPart());
+        LOG.info("Job ID 1: {}", jobID1);
+        LOG.info("Job ID 1 upper: {}", jobID1.getUpperPart());
+        LOG.info("Job ID 1 lower: {}", jobID1.getLowerPart());
 
-        System.out.println("jobID1 equals jobID2: " + jobID1.equals(jobID2));
-        System.out.println("jobID1 equals jobID3: " + jobID1.equals(jobID3));
+        LOG.info("jobID1 equals jobID2: {}", jobID1.equals(jobID2));
+        LOG.info("jobID1 equals jobID3: {}", jobID1.equals(jobID3));
 
-        System.out.println("jobID1 hashcode: " + jobID1.hashCode());
-        System.out.println("jobID2 hashcode: " + jobID2.hashCode());
-        System.out.println("jobID3 hashcode: " + jobID3.hashCode());
+        LOG.info("jobID1 hashcode: {}", jobID1.hashCode());
+        LOG.info("jobID2 hashcode: {}", jobID2.hashCode());
+        LOG.info("jobID3 hashcode: {}", jobID3.hashCode());
     }
 
     public long getUpperPart() {
@@ -54,8 +56,12 @@ public class JobIDPOJO {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         checkState(o instanceof JobIDPOJO, "o is not JobIDPOJO");
         JobIDPOJO jobIDPOJO = (JobIDPOJO) o;
         return upperPart == jobIDPOJO.upperPart && lowerPart == jobIDPOJO.lowerPart;

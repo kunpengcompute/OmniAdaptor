@@ -15,9 +15,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
+
+import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 import org.apache.calcite.rex.RexNode;
 import org.apache.flink.FlinkVersion;
@@ -36,7 +41,14 @@ import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.logical.WindowAttachedWindowingStrategy;
 import org.apache.flink.table.planner.plan.logical.WindowSpec;
 import org.apache.flink.table.planner.plan.logical.WindowingStrategy;
-import org.apache.flink.table.planner.plan.nodes.exec.*;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeMetadata;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
+import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.spec.JoinSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.util.RexNodeUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
@@ -59,9 +71,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.apache.flink.util.Preconditions.checkArgument;
-import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * {@link StreamExecNode} for WindowJoin.
@@ -146,7 +155,7 @@ public class StreamExecWindowJoin extends ExecNodeBase<RowData>
 
     private String getExtraDescription(String oldDescription, RowType leftType, RowType rightType, int leftWindowEndIndex, int rightWindowEndIndex) {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
-        //get inputType info
+        // get inputType info
         List<String> leftInputTypeList = new ArrayList<>();
         List<RowType.RowField> leftInputFields = leftType.getFields();
         for (RowType.RowField field : leftInputFields) {
@@ -162,7 +171,7 @@ public class StreamExecWindowJoin extends ExecNodeBase<RowData>
             String typeName = fieldType.toString();
             rightInputTypeList.add(typeName);
         }
-        //get outputTypes.
+        // get outputTypes.
         List<String> outputTypeList = new ArrayList<>();
         List<RowType.RowField> fields = ((RowType) getOutputType()).getFields();
         for (RowType.RowField field : fields) {
@@ -170,7 +179,7 @@ public class StreamExecWindowJoin extends ExecNodeBase<RowData>
             String typeName = fieldType.toString();
             outputTypeList.add(typeName);
         }
-        //join info
+        // join info
         final int[] leftJoinKey = joinSpec.getLeftKeys();
         final int[] rightJoinKey = joinSpec.getRightKeys();
         FlinkJoinType joinType = joinSpec.getJoinType();
@@ -181,7 +190,7 @@ public class StreamExecWindowJoin extends ExecNodeBase<RowData>
             nonEquiConditionMap = RexNodeUtil.buildJsonMap(nonEquiCondition);
         }
 
-        //window info
+        // window info
         WindowSpec leftWindowSpec = leftWindowing.getWindow();
         WindowSpec rightWindowSpec = rightWindowing.getWindow();
 

@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
 package com.huawei.omniruntime.flink.runtime.io.network.buffer;
 
 import org.apache.flink.core.memory.MemorySegment;
@@ -20,34 +31,37 @@ public class NativeBufferRecycler implements BufferRecycler {
     private static final Logger LOG = LoggerFactory.getLogger(NativeBufferRecycler.class);
     private static final ConcurrentHashMap<Long, NativeBufferRecycler> INSTANCE_MAP = new ConcurrentHashMap<>();
 
-    private Map<MemorySegment, Long> memorySegmentToAddress = new HashMap<>();
-    private long nativeCreditBasedSequenceNumberingViewReaderRef;
+    protected Map<MemorySegment, Long> memorySegmentToAddress = new HashMap<>();
+    private long nativeReaderRef;
 
-    private NativeBufferRecycler(long nativeCreditBasedSequenceNumberingViewReaderRef) {
-        this.nativeCreditBasedSequenceNumberingViewReaderRef = nativeCreditBasedSequenceNumberingViewReaderRef;
+    NativeBufferRecycler(long nativeReaderRef) {
+        this.nativeReaderRef = nativeReaderRef;
     }
 
     /**
      * getInstance
      *
-     * @param nativeCreditBasedSequenceNumberingViewReaderRef nativeCreditBasedSequenceNumberingViewReaderRef
+     * @param nativeReaderRef nativeReaderRef
      * @return NativeBufferRecycler
      */
-    public static synchronized NativeBufferRecycler getInstance(long nativeCreditBasedSequenceNumberingViewReaderRef) {
-        NativeBufferRecycler bufferRecycler = INSTANCE_MAP.get(nativeCreditBasedSequenceNumberingViewReaderRef);
+    public static synchronized NativeBufferRecycler getInstance(long nativeReaderRef) {
+        NativeBufferRecycler bufferRecycler = getInstanceByNativeReaderRef(nativeReaderRef);
         if (bufferRecycler == null) {
-            bufferRecycler = new NativeBufferRecycler(nativeCreditBasedSequenceNumberingViewReaderRef);
-            INSTANCE_MAP.put(nativeCreditBasedSequenceNumberingViewReaderRef, bufferRecycler);
+            bufferRecycler =  createNativeBufferRecycler(nativeReaderRef);
+            addRecycler(nativeReaderRef, bufferRecycler);
         }
         return bufferRecycler;
     }
-
+    
+    public static NativeBufferRecycler createNativeBufferRecycler(long nativeReaderRef) {
+        return new NativeBufferRecycler(nativeReaderRef);
+    }
 
     @Override
     public void recycle(MemorySegment memorySegment) {
         Long address = memorySegmentToAddress.remove(memorySegment);
         if (address != null) {
-            freeNativeByteBuffer(nativeCreditBasedSequenceNumberingViewReaderRef, address);
+            freeNativeByteBuffer(nativeReaderRef, address);
         }
     }
 
@@ -64,28 +78,35 @@ public class NativeBufferRecycler implements BufferRecycler {
     /**
      * unRegisterInstance
      *
-     * @param nativeCreditBasedSequenceNumberingViewReaderRef nativeCreditBasedSequenceNumberingViewReaderRef
+     * @param nativeReaderRef nativeReaderRef
      */
-    public static void unRegisterInstance(long nativeCreditBasedSequenceNumberingViewReaderRef) {
+    public static void unRegisterInstance(long nativeReaderRef) {
         NativeBufferRecycler nativeBufferRecycler =
-                INSTANCE_MAP.remove(nativeCreditBasedSequenceNumberingViewReaderRef);
+                INSTANCE_MAP.remove(nativeReaderRef);
         if (nativeBufferRecycler != null) {
             LOG.info("**** Unregister native buffer recycler instance and find there are {} memory need to be freed.",
                     nativeBufferRecycler.memorySegmentToAddress.size());
             for (Map.Entry<MemorySegment, Long> entry : nativeBufferRecycler.memorySegmentToAddress.entrySet()) {
-                nativeBufferRecycler.freeNativeByteBuffer(nativeCreditBasedSequenceNumberingViewReaderRef,
+                nativeBufferRecycler.freeNativeByteBuffer(nativeReaderRef,
                         entry.getValue());
             }
             nativeBufferRecycler.memorySegmentToAddress.clear();
         }
     }
 
+    public synchronized  static void addRecycler(long nativeReaderRef, NativeBufferRecycler recycler) {
+        INSTANCE_MAP.put(nativeReaderRef, recycler);
+    }
+    
+    public synchronized static NativeBufferRecycler getInstanceByNativeReaderRef(long nativeReaderRef) {
+        return INSTANCE_MAP.get(nativeReaderRef);
+    }
 
     /**
      * freeNativeByteBuffer
      *
      * @param address address
-     * @param nativeCreditBasedSequenceNumberingViewReaderRef nativeCreditBasedSequenceNumberingViewReaderRef
+     * @param nativeReaderRef nativeReaderRef
      */
-    public native void freeNativeByteBuffer(long nativeCreditBasedSequenceNumberingViewReaderRef, long address);
+    public native void freeNativeByteBuffer(long nativeReaderRef, long address);
 }

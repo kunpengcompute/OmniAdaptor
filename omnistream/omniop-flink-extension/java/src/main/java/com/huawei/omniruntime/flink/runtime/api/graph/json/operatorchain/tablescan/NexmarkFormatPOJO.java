@@ -30,7 +30,6 @@ public class NexmarkFormatPOJO {
         this.configMap = configMap;
     }
 
-
     public int getBatchSize() {
         return batchSize;
     }
@@ -46,7 +45,6 @@ public class NexmarkFormatPOJO {
     public void setFormat(String format) {
         this.format = format;
     }
-
 
     @Override
     public String toString() {

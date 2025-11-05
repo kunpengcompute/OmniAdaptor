@@ -14,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.common;
@@ -809,7 +812,7 @@ public abstract class CommonExecLookupJoin extends ExecNodeBase<RowData>
 
     private String getExtraDescription(String oldDescription, RowType inputRowType, RelOptTable temporalTable) {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
-        //get stream input types
+        // get stream input types
         List<String> inputTypeList = new ArrayList<>();
         List<RowType.RowField> inputFields = inputRowType.getFields();
 
@@ -818,21 +821,21 @@ public abstract class CommonExecLookupJoin extends ExecNodeBase<RowData>
             inputTypeList.add(DescriptionUtil.getFieldType(fieldType));
         }
 
-        //get outputTypes info
+        // get outputTypes info
         List<String> outputTypeList = getOutputTypes();
-        //get condition info
+        // get condition info
         Map<String, Object> conditionMap = null;
         if (joinCondition != null) {
             conditionMap = RexNodeUtil.buildJsonMap(joinCondition);
         }
-        //get projectionOnTemporalTable
+        // get projectionOnTemporalTable
         List<Map<String, Object>> projectionList = new ArrayList<>();
         if (projectionOnTemporalTable != null) {
             for (RexNode rexNode : projectionOnTemporalTable) {
                 projectionList.add(RexNodeUtil.buildJsonMap(rexNode));
             }
         }
-        //get filterOnTemporalTable info
+        // get filterOnTemporalTable info
         Map<String, Object> filterMap = null;
         if (filterOnTemporalTable != null) {
             filterMap = RexNodeUtil.buildJsonMap(filterOnTemporalTable);

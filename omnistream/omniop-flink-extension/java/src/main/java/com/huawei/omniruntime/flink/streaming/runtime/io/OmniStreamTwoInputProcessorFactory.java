@@ -1,5 +1,4 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package com.huawei.omniruntime.flink.streaming.runtime.io;
@@ -36,7 +38,14 @@ import org.apache.flink.streaming.api.operators.InputSelectable;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
 import org.apache.flink.streaming.api.operators.sort.MultiInputSortingDataInput;
 import org.apache.flink.streaming.api.watermark.Watermark;
-import org.apache.flink.streaming.runtime.io.*;
+
+import org.apache.flink.streaming.runtime.io.StreamMultipleInputProcessor;
+import org.apache.flink.streaming.runtime.io.PushingAsyncDataInput;
+import org.apache.flink.streaming.runtime.io.StreamOneInputProcessor;
+import org.apache.flink.streaming.runtime.io.StreamTaskInput;
+import org.apache.flink.streaming.runtime.io.StreamTwoInputProcessorFactory;
+import org.apache.flink.streaming.runtime.io.MultipleInputSelectionHandler;
+import org.apache.flink.streaming.runtime.io.RecordWriterOutput;
 import org.apache.flink.streaming.runtime.io.checkpointing.CheckpointedInputGate;
 import org.apache.flink.streaming.runtime.metrics.WatermarkGauge;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
@@ -51,6 +60,7 @@ import org.apache.flink.util.function.ThrowingConsumer;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 
 import static org.apache.flink.streaming.api.graph.StreamConfig.requiresSorting;
@@ -100,9 +110,8 @@ public class OmniStreamTwoInputProcessorFactory extends StreamTwoInputProcessorF
                         leftProcessorRef,
                         omniStreamTask.getOutputBuffer(),
                         omniStreamTask.getOutputBufferStatus());
+
         TypeSerializer<IN2> typeSerializer2 = streamConfig.getTypeSerializerIn(1, userClassloader);
-
-
         StreamTaskInput<IN2> input2 =
                 OmniStreamTaskNetworkInputFactory.create(
                         checkpointedInputGates[1],
@@ -186,20 +195,16 @@ public class OmniStreamTwoInputProcessorFactory extends StreamTwoInputProcessorF
             }
         }
 
-        @Nullable
-        FinishedOnRestoreWatermarkBypass watermarkBypass =
-                operatorChain.isTaskDeployedAsFinished()
-                        ? new FinishedOnRestoreWatermarkBypass(operatorChain.getStreamOutputs())
-                        : null;
+        Counter numRecordsOut = Objects.requireNonNull(operatorChain.getTailOperator()).getMetricGroup().getIOMetricGroup().getNumRecordsOutCounter();
 
         PushingAsyncDataInput.DataOutput<IN1> output1 =
-                omniStreamTask.createBinaryDataOutput(numRecordsIn);
+                omniStreamTask.createBinaryDataOutput(numRecordsIn, numRecordsOut);
 
         StreamOneInputProcessor<IN1> processor1 =
                 new StreamOneInputProcessor<>(input1, output1, operatorChain);
 
         PushingAsyncDataInput.DataOutput<IN2> output2 =
-                omniStreamTask.createBinaryDataOutput(numRecordsIn);
+                omniStreamTask.createBinaryDataOutput(numRecordsIn, numRecordsOut);
 
         StreamOneInputProcessor<IN2> processor2 =
                 new StreamOneInputProcessor<>(input2, output2, operatorChain);
@@ -294,15 +299,6 @@ public class OmniStreamTwoInputProcessorFactory extends StreamTwoInputProcessorF
                 operator.processLatencyMarker2(latencyMarker);
             }
         }
-
-//        @Override
-//        public void emitRecordAttributes(RecordAttributes recordAttributes) throws Exception {
-//            if (inputIndex == 0) {
-//                operator.processRecordAttributes1(recordAttributes);
-//            } else {
-//                operator.processRecordAttributes2(recordAttributes);
-//            }
-//        }
     }
 
     private static class FinishedOnRestoreWatermarkBypass {

@@ -1,20 +1,12 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 package com.huawei.omniruntime.flink.runtime.tasks;
@@ -50,8 +42,12 @@ import org.apache.flink.streaming.runtime.partitioner.ConfigurableStreamPartitio
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-import org.apache.flink.streaming.runtime.tasks.*;
+import org.apache.flink.streaming.runtime.tasks.StreamTask;
+import org.apache.flink.streaming.runtime.tasks.StreamTaskActionExecutor;
 import org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailbox;
+import org.apache.flink.streaming.runtime.tasks.StreamOperatorWrapper;
+import org.apache.flink.streaming.runtime.tasks.TimerService;
+import org.apache.flink.streaming.runtime.tasks.OmniOperatorChain;
 import org.apache.flink.streaming.runtime.watermarkstatus.WatermarkStatus;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.InstantiationUtil;
@@ -72,7 +68,7 @@ import static com.huawei.omniruntime.flink.core.memory.MemoryUtils.getByteBuffer
 
 public abstract class OmniStreamTask<OUT, OP extends StreamOperator<OUT>> extends StreamTask<OUT, OP> {
 
-    protected static final Logger LOG = LoggerFactory.getLogger(OmniStreamTask.class);
+    private static final Logger LOG = LoggerFactory.getLogger(OmniStreamTask.class);
 
 
     protected long omniTaskRef;
@@ -86,14 +82,14 @@ public abstract class OmniStreamTask<OUT, OP extends StreamOperator<OUT>> extend
     protected int outputBufferCapacity;
 
     // for JNI to return value, should be changed to directbytebuff later, avoid pass object/array through JNI
-    //private int []result = new int[1];
 
     protected ByteBuffer outputBufferStatus;
+
     // long address , int capacity, int resultLength (length in bytes) , int num of element
     protected int resultLength;
     protected int numberOfElement;
     protected long statusAddress;
-//    List<Long> inputProcessorRefs = new ArrayList<>();
+
     protected PartitionWriterDelegate partitionWriter;
 
     protected OmniStreamTask(Environment env) throws Exception {
@@ -146,42 +142,40 @@ public abstract class OmniStreamTask<OUT, OP extends StreamOperator<OUT>> extend
         ByteOrder nativeOrder = ByteOrder.nativeOrder();
 
         if (nativeOrder == ByteOrder.BIG_ENDIAN) {
-            System.out.println("Native byte order is big-endian");
+            LOG.debug("Native byte order is big-endian");
         } else if (nativeOrder == ByteOrder.LITTLE_ENDIAN) {
-            System.out.println("Native byte order is little-endian");
+            LOG.debug("Native byte order is little-endian");
         } else {
-            System.out.println("Unknown byte order");
+            LOG.debug("Unknown byte order");
         }
 
         /*
-        * long address 8, int capacity 4 , int resultLength (length in bytes) 4 , int num of element 4, int output buffer owner 4 (owner =0 java 1 cpp native
-        * uintptr_t outputBuffer_;
-        * int32_t capacity_;
-        * int32_t outputSize; // byte size
-        * int32_t numberElement; // number of element_ of outputToOut
-        * int32_t ownership;  // 0 outputBuffer owned by java, 1 stands  owned by cpp native
-        * */
+         * long address 8, int capacity 4 , int resultLength (length in bytes) 4 , int num of element 4, int output buffer owner 4 (owner =0 java 1 cpp native
+         * uintptr_t outputBuffer_;
+         * int32_t capacity_;
+         * int32_t outputSize; // byte size
+         * int32_t numberElement; // number of element_ of outputToOut
+         * int32_t ownership;  // 0 outputBuffer owned by java, 1 stands  owned by cpp native
+         */
         this.outputBufferStatus = ByteBuffer.allocateDirect(32);
         this.outputBufferStatus.order(ByteOrder.nativeOrder());
         this.statusAddress = getByteBufferAddress(outputBufferStatus);
         outputBufferStatus.putLong(outputBufferAddress);
         outputBufferStatus.putInt(this.outputBufferCapacity);
         outputBufferStatus.position(20); // owner
-        outputBufferStatus.putInt(0);  //output buffer is owned by java
+        outputBufferStatus.putInt(0); // output buffer is owned by java
     }
 
 
 
     public void createNativeOmniStreamTask() throws NoSuchFieldException, IllegalAccessException {
-        //Omni TNEL
+        // Omni TNEL
         LOG.info("Max Parallelism: {}, Subtask Index: {}, Number of Parallel Subtasks: {}", this.getEnvironment().getTaskInfo().getMaxNumberOfParallelSubtasks(), this.getEnvironment().getTaskInfo().getIndexOfThisSubtask(), this.getEnvironment().getTaskInfo().getNumberOfParallelSubtasks());
         Iterable<StreamOperatorWrapper<?, ?>> allOperators = operatorChain.getAllOperators();
         String omniOperatorChain = OmniOperatorChain.prepareJSONConfigurationFromAllOps(allOperators, getEnvironment().getJobID());
         String partitionInfo = OmniPartitionExtractor.extractPartitionInfo(getRecordWriter());
         // The string is json string which should be later NTDD, more information than operator chain
         String nativeStreamTaskConfig = JsonUtils.mergeJsonStringsTogether(omniOperatorChain, partitionInfo);
-//        String inputChannelInfo = StreamTaskUtils.convertChannelInfoToJson(channelInfos);
-//        nativeStreamTaskConfig = JsonUtils.mergeJsonStringsTogether(nativeStreamTaskConfig, inputChannelInfo);
 
 
         LOG.info("Calling createNativeStreamTask: statusAddress: {}, outputBufferAddress  {}, outputBufferCapacity {}",
@@ -247,7 +241,6 @@ public abstract class OmniStreamTask<OUT, OP extends StreamOperator<OUT>> extend
                         environment.getUserCodeClassLoader().asClassLoader());
 
         for (int i = 0; i < outEdgesInOrder.size(); i++) {
-//            StreamEdge edge = outEdgesInOrder.get(i);
             partitionWriters.add(environment.getWriter(i));
         }
         return partitionWriters;
@@ -350,10 +343,6 @@ public abstract class OmniStreamTask<OUT, OP extends StreamOperator<OUT>> extend
             throw new UnsupportedOperationException("not support actually");
         }
 
-//        @Override
-//        public void emitRecordAttributes(RecordAttributes recordAttributes) throws Exception {
-//            throw new UnsupportedOperationException("not support actually");
-//        }
 
         @Override
         public void emitRecord(ByteBuffer record, int targetSubpartition) {
@@ -361,7 +350,9 @@ public abstract class OmniStreamTask<OUT, OP extends StreamOperator<OUT>> extend
             try {
                 this.writer.getPartitionWriter(0).emitRecord(record, targetSubpartition);
             } catch (Exception e) {
-                // LOG.error(e.toString());
+                /*
+                 * Log the exception for debugging purposes - ignore for now as this is expected behavior
+                 */
             }
         }
 

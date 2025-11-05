@@ -1,5 +1,4 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,12 +14,16 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package com.huawei.omniruntime.flink.streaming.runtime.io;
 
 import com.huawei.omniruntime.flink.runtime.tasks.OmniStreamTask;
 import com.huawei.omniruntime.flink.core.memory.MemoryUtils;
+
 import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.checkpoint.channel.ChannelStateWriter;
 import org.apache.flink.runtime.checkpoint.channel.InputChannelInfo;
@@ -49,7 +52,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class OmniStreamTaskSourceInput<T> implements StreamTaskInput<T>, CheckpointableInput {
 
-    Logger logger = LoggerFactory.getLogger(OmniStreamTaskSourceInput.class);
+    private static final Logger LOG = LoggerFactory.getLogger(OmniStreamTaskSourceInput.class);
 
     private final SourceOperator<T, ?> operator;
     private final long nativeStreamTaskRef;
@@ -117,17 +120,17 @@ public class OmniStreamTaskSourceInput<T> implements StreamTaskInput<T>, Checkpo
     private static native int emitNextNative(long nativeStreamTaskRef);
 
     private void readOutputStatus(DataOutput<T> output) {
-        outputBufferStatus.position(0);//reset position to the start of the buffer
+        outputBufferStatus.position(0); // reset position to the start of the buffer
 
         long newResultBufferAddress = this.outputBufferStatus.getLong();
-        logger.debug("old resultBufferAddress  = {} newResultBufferAddress  = {}", this.resultBufferAddress, newResultBufferAddress);
+        LOG.debug("old resultBufferAddress  = {} newResultBufferAddress  = {}", this.resultBufferAddress, newResultBufferAddress);
         if (newResultBufferAddress != this.resultBufferAddress) {
             this.resultBufferAddress = newResultBufferAddress;
             int capacity = this.outputBufferStatus.getInt();
             this.resultBuffer = MemoryUtils.wrapUnsafeMemoryWithByteBuffer(resultBufferAddress,capacity);
             this.resultBuffer.order(ByteOrder.BIG_ENDIAN);
             outputBufferStatus.position(20); // owner
-            outputBufferStatus.putInt(0);//output buffer is owned by java
+            outputBufferStatus.putInt(0); // output buffer is owned by java
         }
         this.outputBufferStatus.position(12);
         this.resultLength = outputBufferStatus.getInt();
@@ -151,8 +154,8 @@ public class OmniStreamTaskSourceInput<T> implements StreamTaskInput<T>, Checkpo
                 int channelNumber = resultBuffer.getInt(newLimit);
                 this.resultBuffer.limit(newLimit);
                 binaryDataOutput.emitRecord(this.resultBuffer, channelNumber);
-                elementIdx = newLimit + 4;// bytes for partition
-                //reset outputbuffer limit
+                elementIdx = newLimit + 4; // bytes for partition
+                // reset outputbuffer limit
                 resultBuffer.limit(limit);
             }
         } else {

@@ -1,5 +1,12 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 package com.huawei.omniruntime.flink.utils;
@@ -226,19 +233,19 @@ public class ReflectionUtils {
         String parentFieldValue = ReflectionUtils.retrievePrivateField(child, "parentField");
         int childFieldValue = ReflectionUtils.retrievePrivateField(child, "childField");
 
-        System.out.println("Parent Field Value: " + parentFieldValue);  // Output: Parent Value
-        System.out.println("Child Field Value: " + childFieldValue);    // Output: 42
+        LOG.info("Parent Field Value: {}", parentFieldValue);  // Output: Parent Value
+        LOG.info("Child Field Value: {}", childFieldValue);    // Output: 42
 
         // Example of a non-existent field to show exception handling:
         try {
             String nonExistentField = ReflectionUtils.retrievePrivateField(child, "nonExistentField");
         } catch (RuntimeException e) {
-            System.err.println("Caught RuntimeException: " + e.getMessage()); // Correctly catches and logs
+            LOG.error("Caught RuntimeException: {}", e.getMessage()); // Correctly catches and logs
         }
 
         Parent parent = new Parent();
         String parentFieldValue2 = ReflectionUtils.retrievePrivateField(parent, "parentField");
-        System.out.println("Parent Field Value (parent instance): " + parentFieldValue2);  // Output: Parent Value
+        LOG.info("Parent Field Value (parent instance): {}", parentFieldValue2);  // Output: Parent Value
     }
 }
 

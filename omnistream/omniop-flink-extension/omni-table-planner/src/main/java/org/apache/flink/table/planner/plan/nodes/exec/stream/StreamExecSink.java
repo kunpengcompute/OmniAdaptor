@@ -14,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
@@ -211,7 +214,7 @@ public class StreamExecSink extends CommonExecSink implements StreamExecNode<Obj
         HashMap<Integer, Integer> accessIndexMap = new HashMap<>();
         HashMap<Integer, Integer> fieldCountMap = new HashMap<>();
 
-        //get inputType info
+        // get inputType info
         List<String> inputTypeList = new ArrayList<>();
         List<RowType.RowField> inputFields = ((InternalTypeInfo) inputTransform.getOutputType()).toRowType().getFields();
         int currentIndex = 0;
@@ -234,7 +237,7 @@ public class StreamExecSink extends CommonExecSink implements StreamExecNode<Obj
             }
         }
 
-        //get outputTypes info
+        // get outputTypes info
         List<String> outputTypeList = new ArrayList<>();
         List<RowType.RowField> fields = ((RowType) getOutputType()).getFields();
         for (int oldIndex = 0; oldIndex < fields.size(); oldIndex++) {

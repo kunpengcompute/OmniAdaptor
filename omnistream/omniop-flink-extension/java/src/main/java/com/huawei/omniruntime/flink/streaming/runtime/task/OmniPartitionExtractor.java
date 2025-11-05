@@ -1,16 +1,36 @@
-package com.huawei.omniruntime.flink.streaming.runtime.task;
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
 
+package com.huawei.omniruntime.flink.streaming.runtime.task;
 
 import com.huawei.omniruntime.flink.runtime.execution.OmniEnvironment;
 import com.huawei.omniruntime.flink.runtime.io.network.api.writer.PartitionWriterDelegate;
+
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
 import org.apache.flink.runtime.execution.Environment;
-import org.apache.flink.runtime.io.network.api.writer.*;
+import org.apache.flink.runtime.io.network.api.writer.ChannelSelector;
+import org.apache.flink.runtime.io.network.api.writer.ChannelSelectorRecordWriter;
+import org.apache.flink.runtime.io.network.api.writer.MultipleRecordWriters;
+import org.apache.flink.runtime.io.network.api.writer.RecordWriter;
+import org.apache.flink.runtime.io.network.api.writer.RecordWriterDelegate;
+import org.apache.flink.runtime.io.network.api.writer.SingleRecordWriter;
 import org.apache.flink.streaming.api.graph.NonChainedOutput;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.graph.StreamEdge;
-import org.apache.flink.streaming.runtime.partitioner.*;
+import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.KeyGroupStreamPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.RebalancePartitioner;
+import org.apache.flink.streaming.runtime.partitioner.RescalePartitioner;
+import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.table.runtime.keyselector.BinaryRowDataKeySelector;
 import org.apache.flink.table.types.logical.RowType;
 import org.json.JSONObject;
@@ -23,7 +43,7 @@ import java.util.List;
 
 public class OmniPartitionExtractor {
 
-    private static final Logger log = LoggerFactory.getLogger(OmniPartitionExtractor.class);
+    private static final Logger LOG = LoggerFactory.getLogger(OmniPartitionExtractor.class);
 
     public static String extractPartitionInfo(
             RecordWriterDelegate recordWriterDelegate)
@@ -33,7 +53,6 @@ public class OmniPartitionExtractor {
 
         if (recordWriterDelegate instanceof SingleRecordWriter) {
             RecordWriter recordWriter = recordWriterDelegate.getRecordWriter(0);
-            //ResultPartitionWriter resultPartitionWriter = resultPartitionWriter;
             int channelNumber = getNumberOfChannels(recordWriter);
             JSONObject partitionInfo = new JSONObject();
             partitionInfo.put("channelNumber", channelNumber);
@@ -57,22 +76,22 @@ public class OmniPartitionExtractor {
                     partitionInfo.put("hashFields", hashPartitionFields);
 
                 } else {
-                    //todo
+                    // todo
                     partitionInfo.put("partitionName", "none");
                 }
 
                 partitionBody.put("partition", partitionInfo);
 
             } else {
-                //todo broadcasting
+                // todo broadcasting
             }
 
 
         } else if (recordWriterDelegate instanceof MultipleRecordWriters) {
-            //todo
+            // todo
         } else {
-            //todo
-            //belongs to NonRecordWriter
+            // todo
+            // belongs to NonRecordWriter
         }
 
         return partitionBody.toString();
@@ -100,15 +119,15 @@ public class OmniPartitionExtractor {
                 List<JSONObject> hashPartitionFields = generateHashPartitionInfoFor((KeyGroupStreamPartitioner) channelSelector);
                 partitionInfo.put("hashFields", hashPartitionFields);
             } else {
-                //todo broadcasting
+                // todo broadcasting
                 partitionInfo.put("partitionName", "none");
             }
             partitionBody.put("partition", partitionInfo);
         } else if (nonChainedOutputs.size() > 1) {
-            //todo
+            // todo
         } else {
-            //todo
-            //belongs to NonRecordWriter
+            // todo
+            // belongs to NonRecordWriter
         }
         return partitionBody.toString();
     }
@@ -144,7 +163,7 @@ public class OmniPartitionExtractor {
                 }
             }
         } catch (Exception e) {
-            log.error("can not get hash partition field info .................");
+            LOG.error("can not get hash partition field info .................");
         }
         return hashPartitionFieldInfoList;
 
@@ -163,10 +182,10 @@ public class OmniPartitionExtractor {
             StreamPartitioner streamPartitioner = new StreamConfig(environment.getTaskConfiguration()).getOutEdgesInOrder(environment.getUserCodeClassLoader().asClassLoader()).get(0).getPartitioner();
             return streamPartitioner;
         }catch (IndexOutOfBoundsException e){
-            //sink task does not have partitioner
+            // sink task does not have partitioner
             return null;
         }catch (Exception e){
-            //todo for other potential exceptions , return null as well
+            // todo for other potential exceptions , return null as well
             return  null;
         }
 

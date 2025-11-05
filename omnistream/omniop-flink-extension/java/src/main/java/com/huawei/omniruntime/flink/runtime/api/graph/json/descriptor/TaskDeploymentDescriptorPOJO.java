@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
 package com.huawei.omniruntime.flink.runtime.api.graph.json.descriptor;
 
 import static org.apache.flink.util.Preconditions.checkState;
@@ -25,7 +36,8 @@ public class TaskDeploymentDescriptorPOJO {
     private List<ResultPartitionDeploymentDescriptorPOJO> producedPartitions;
     @JsonInclude(JsonInclude.Include.ALWAYS)
     private List<InputGateDeploymentDescriptorPOJO> inputGates;
-
+    private String taskStateSnapshot = "";
+    private long restoreCheckpointId;
     public TaskDeploymentDescriptorPOJO() {
     }
 
@@ -77,15 +89,36 @@ public class TaskDeploymentDescriptorPOJO {
         this.inputGates = inputGates;
     }
 
+    public void setTaskStateSnapshot(String json) {
+        this.taskStateSnapshot = Objects.toString(json, "");
+    }
+
+    public String getTaskStateSnapshot() {
+        return taskStateSnapshot;
+    }
+
+    public long getRestoreCheckpointId() {
+        return restoreCheckpointId;
+    }
+
+    public void setRestoreCheckpointId(long restoreCheckpointId) {
+        this.restoreCheckpointId = restoreCheckpointId;
+    }
+
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         checkState(o instanceof TaskDeploymentDescriptorPOJO, "o is not TaskDeploymentDescriptorPOJO");
         TaskDeploymentDescriptorPOJO that = (TaskDeploymentDescriptorPOJO) o;
         return Objects.equals(jobId, that.jobId)
                 && Objects.equals(producedPartitions, that.producedPartitions)
-                && Objects.equals(inputGates, that.inputGates);
+                && Objects.equals(inputGates, that.inputGates)
+                && Objects.equals(taskStateSnapshot, that.taskStateSnapshot);
     }
 
     @Override
@@ -99,6 +132,7 @@ public class TaskDeploymentDescriptorPOJO {
                 + "jobId=" + jobId
                 + ", producedPartitions=" + producedPartitions
                 + ", inputGates=" + inputGates
+                + ", taskStateSnapshot=" + taskStateSnapshot
                 + '}';
     }
 }

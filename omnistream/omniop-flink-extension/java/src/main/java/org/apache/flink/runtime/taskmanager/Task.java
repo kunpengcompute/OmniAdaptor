@@ -14,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.runtime.taskmanager;
@@ -488,7 +491,7 @@ public class Task
         }
 
         if (shuffleEnvironment instanceof NettyShuffleEnvironment) {
-            //noinspection deprecation
+            // noinspection deprecation
             ((NettyShuffleEnvironment) shuffleEnvironment)
                     .registerLegacyNetworkMetrics(
                             metrics.getIOMetricGroup(), resultPartitionWriters, gates);
@@ -556,7 +559,7 @@ public class Task
 
         // instantiate the class
         try {
-            //noinspection ConstantConditions  --> cannot happen
+            // noinspection ConstantConditions  --> cannot happen
             return statelessCtor.newInstance(environment);
         } catch (InvocationTargetException e) {
             // directly forward exceptions from the eager initialization

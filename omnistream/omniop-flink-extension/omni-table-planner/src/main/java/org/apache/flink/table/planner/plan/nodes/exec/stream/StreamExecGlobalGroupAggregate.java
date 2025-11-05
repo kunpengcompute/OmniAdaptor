@@ -14,9 +14,15 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
+
+import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.tools.RelBuilder;
@@ -63,7 +69,6 @@ import org.apache.flink.util.jackson.JacksonMapperFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -72,8 +77,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.apache.flink.util.Preconditions.checkArgument;
-import static org.apache.flink.util.Preconditions.checkNotNull;
+import javax.annotation.Nullable;
 
 /**
  * Stream {@link ExecNode} for unbounded global group aggregate.
@@ -191,15 +195,15 @@ public class StreamExecGlobalGroupAggregate extends StreamExecAggregateBase {
                                                     LogicalType[] globalAggValueTypes,
                                                     Transformation<RowData> inputTransform,
                                                     int[] grouping, boolean generateUpdateBefore) {
-        //get inputType info
+        // get inputType info
         List<String> inputTypeList = DescriptionUtil.getFieldTypeList(
                 ((InternalTypeInfo) inputTransform.getOutputType()).toRowType().getFields()
         );
 
-        //get outputTypes info
+        // get outputTypes info
         List<String> outputTypeList = DescriptionUtil.getFieldTypeList(((RowType) execNode.getOutputType()).getFields());
 
-        //get aggInfoList info map
+        // get aggInfoList info map
         Map<String, Object> aggInfoListMap = new LinkedHashMap<>();
         // local agg
         List<Map<String, Object>> localAggregateCalls = DescriptionUtil

@@ -1,9 +1,3 @@
-package com.huawei.omniruntime.flink.streaming.runtime.io;
-
-
-// init code copoied from StreamTaskNetworkInput
-// need to re-verify later
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -20,8 +14,15 @@ package com.huawei.omniruntime.flink.streaming.runtime.io;
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
+// init code copoied from StreamTaskNetworkInput
+// need to re-verify later
+
+package com.huawei.omniruntime.flink.streaming.runtime.io;
 
 import com.huawei.omniruntime.flink.core.memory.MemoryUtils;
 import com.huawei.omniruntime.flink.runtime.tasks.OmniStreamTask;
@@ -82,7 +83,7 @@ public final class OmniStreamTaskNetworkInput<T>
         SpillingAdaptiveSpanningRecordDeserializer<
                 DeserializationDelegate<StreamElement>>> {
 
-    Logger logger = LoggerFactory.getLogger(OmniStreamTaskNetworkInput.class);
+    private static final Logger LOG = LoggerFactory.getLogger(OmniStreamTaskNetworkInput.class);
 
     private Buffer currentBuffer;
 
@@ -90,6 +91,7 @@ public final class OmniStreamTaskNetworkInput<T>
     private ByteBuffer outputBuffer;
 
     private ByteBuffer outputBufferStatus;
+    
     // long address 8, int capacity 4 , int resultLength (length in bytes) 4 , int num of element 4, int owner 4 (owner =0 java 1 cpp native
     private int resultLength;
     private long statusAddress;
@@ -102,17 +104,17 @@ public final class OmniStreamTaskNetworkInput<T>
     private long resultBufferAddress;
 
     private void readOutputStatus(DataOutput<T> output) {
-        outputBufferStatus.position(0);//reset position to the start of the buffer
+        outputBufferStatus.position(0); // reset position to the start of the buffer
 
         long newResultBufferAddress = this.outputBufferStatus.getLong();
-        logger.debug("old resultBufferAddress  = {} newResultBufferAddress  = {}", this.resultBufferAddress, newResultBufferAddress);
+        LOG.debug("old resultBufferAddress  = {} newResultBufferAddress  = {}", this.resultBufferAddress, newResultBufferAddress);
         if (newResultBufferAddress != this.resultBufferAddress) {
             this.resultBufferAddress = newResultBufferAddress;
             int capacity = this.outputBufferStatus.getInt();
             this.resultBuffer = MemoryUtils.wrapUnsafeMemoryWithByteBuffer(resultBufferAddress, capacity);
             this.resultBuffer.order(ByteOrder.BIG_ENDIAN);
             outputBufferStatus.position(20); // owner
-            outputBufferStatus.putInt(0);//output buffer is owned by java
+            outputBufferStatus.putInt(0); // output buffer is owned by java
         }
         this.outputBufferStatus.position(12);
         this.resultLength = outputBufferStatus.getInt();
@@ -122,16 +124,13 @@ public final class OmniStreamTaskNetworkInput<T>
     private static final int RESULT_STATUS_MORE_AVAILABLE = 0;
 
 
-    private static final int MASK_DataInputStatus = 0xFF;
+    private static final int MASK_DATA_INPUT_STATUS = 0xFF;
     private static final int MASK_BUFFER_CONSUMED = 0xFF00;
     private static final int MASK_FULL_RECORD = 0xFF0000;
     private static final int MASK_BREAK_BATCH_EMITTING = 0xFF000000;
     private static final int AT_LEAST_ONE_RECORD_CONSUMED = 8;
 
-    /**
-     * The logger used by the StreamTask and its subclasses.
-     */
-    protected static final Logger LOG = LoggerFactory.getLogger(OmniStreamTaskNetworkInput.class);
+
 
 
     public OmniStreamTaskNetworkInput(
@@ -203,8 +202,8 @@ public final class OmniStreamTaskNetworkInput<T>
     public DataInputStatus emitNext(DataOutput<T> output) throws Exception {
 
         boolean isDataAvailable = false;
-        long channelId = 0;
-        long segmentAddress = 0;
+        long channelId = 0L;
+        long segmentAddress = 0L;
         int numBytes = 0;
         int segmentOffset = 0;
 
@@ -223,23 +222,22 @@ public final class OmniStreamTaskNetworkInput<T>
 
                 isDataAvailable = false;
                 if ((resultStatus & MASK_BUFFER_CONSUMED) != 0) {
-                    //NetworkBuffer has been consumed, recycle it,actually reduce its ref count
+                    // NetworkBuffer has been consumed, recycle it,actually reduce its ref count
                     if (currentBuffer != null) {
                         currentBuffer.recycleBuffer();
                         currentBuffer = null;
                     }
                 }
 
-                //under this condition resultStatus & MASK_FULL_RECORD) != 0,if the last data in the buffer is not a full record,  go to buffer processing,
+                // under this condition resultStatus & MASK_FULL_RECORD) != 0,if the last data in the buffer is not a full record,  go to buffer processing,
                 // but question is that maybe native method always return partial record,under this case,email does not have chance to run. but does it really happen?
-                //another question is for two input stream task, other processor maybe starved
-                //so right now solution is to check if at least one record has been consumed, we go back to mailboxprocessor loop
+                // another question is for two input stream task, other processor maybe starved
+                // so right now solution is to check if at least one record has been consumed, we go back to mailboxprocessor loop
                 if ((resultStatus & AT_LEAST_ONE_RECORD_CONSUMED) != 0) {
                     readOutputStatus(output);
                     writeProcessedDataToTargetPartition(output);
 
                     if ((resultStatus & MASK_BREAK_BATCH_EMITTING) == 0) {
-                        //LOG.info("continue");
                         continue;
                         // Short-circuiting to continue processing element in local loop
                     }
@@ -269,7 +267,6 @@ public final class OmniStreamTaskNetworkInput<T>
                             | inputChannelInfo.getInputChannelIdx();
 
                     isDataAvailable = true;
-//                    TNELProcessBuffer(this.nOmniStreamTaskRef, address, offset, numBytes, channelInfo);
 
                 } else {
                     LOG.debug(" processEvent(bufferOrEvent.get());");
@@ -293,7 +290,7 @@ public final class OmniStreamTaskNetworkInput<T>
                 LOG.debug(" return checkpointedInputGate.isFinished();");
                 return DataInputStatus.NOTHING_AVAILABLE;
             }
-        }//while loop
+        } // while loop
     }
 
 
@@ -306,7 +303,7 @@ public final class OmniStreamTaskNetworkInput<T>
     }
 
 
-    //get outputBuffer ready for reading,now the buffer data structure is like this:
+    // get outputBuffer ready for reading,now the buffer data structure is like this:
     /*
      * | Header (Fixed Size) | Body (Variable Size) |ChannelNumber (fixSize Size) | Header (Fixed Size) | Body (Variable Size) |ChannelNumber (fixSize Size) |...
      * |----------4B---------|--------N B-----------|----------4B-----------------|----------4B--------|--------N B------------|----------4B-----------------|...
@@ -330,8 +327,8 @@ public final class OmniStreamTaskNetworkInput<T>
                 int channelNumber = resultBuffer.getInt(newLimit);
                 this.resultBuffer.limit(newLimit);
                 binaryDataOutput.emitRecord(this.resultBuffer, channelNumber);
-                elementIdx = newLimit + 4;// bytes for partition
-                //reset outputbuffer limit
+                elementIdx = newLimit + 4; // bytes for partition
+                // reset outputbuffer limit
                 resultBuffer.limit(limit);
             }
         } else {

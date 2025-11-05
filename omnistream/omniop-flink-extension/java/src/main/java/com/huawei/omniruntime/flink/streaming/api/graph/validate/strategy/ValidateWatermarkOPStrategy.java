@@ -1,10 +1,25 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
 package com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy;
 
 import org.apache.flink.util.CollectionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrategy {
 
@@ -20,7 +35,6 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
 
     @Override
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {
-//        Map<String, Object> jsonMap = (Map<String, Object>) operatorInfoMap.get("config");
         int inputSize = 0;
         if (operatorInfoMap.containsKey("inputTypes")) {
             List<String> inputTypes = (List<String>) operatorInfoMap.get("inputTypes");
@@ -42,7 +56,7 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
             return false;
         }
 
-        //check condition
+        // check condition
         if (operatorInfoMap.containsKey("config")) {
             Map<String, Object> watermarkExpr = (Map<String, Object>) operatorInfoMap.get("config");
             if ((watermarkExpr != null) && !validateCalcExpr(watermarkExpr, inputSize)) {
@@ -51,14 +65,7 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
         }
 
 
-//        String watermarkStrategy = operatorInfoMap.get("watermarkStrategy").toString();
         Long idleTimeout = Long.parseLong(operatorInfoMap.getOrDefault("idleTimeout", 0L).toString());
-//
-//        // Validate watermark strategy
-//        if (!isSupportedWatermarkStrategy(watermarkStrategy)) {
-//            LOG.warn("Unsupported watermark strategy: {}", watermarkStrategy);
-//            return false;
-//        }
 
         // Validate allowed lateness (should be non-negative)
         if (idleTimeout < 0) {
@@ -76,7 +83,7 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
             LOG.warn("RowTimeFieldIndex do not exist.");
             return false;
         }
-        //check dataTypes
+        // check dataTypes
         return validateDataTypes(getDataTypes(operatorInfoMap, "inputTypes", "outputTypes"));
 
     }
@@ -97,7 +104,7 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
                 }
                 Object leftExpr = exprMap.get("left");
                 if (leftExpr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) leftExpr, inputSize)) {
                         return false;
                     }
@@ -107,7 +114,7 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
                 }
                 Object rightExpr = exprMap.get("right");
                 if (rightExpr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) rightExpr, inputSize)) {
                         return false;
                     }
@@ -126,7 +133,7 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
                 }
                 Object expr = exprMap.get("expr");
                 if (expr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) expr, inputSize)) {
                         return false;
                     }
@@ -134,7 +141,7 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
                     LOG.error("Cannot parse expr in an unary expression: {}", unaryOperatorType);
                     return false;
                 }
-                //we currently only deal with a fake CAST
+                // we currently only deal with a fake CAST
 
                 LOG.info("WARNING: CAST/NEGATION might not be supported.");
                 return true;

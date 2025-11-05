@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -13,6 +15,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modify this part of the code to implement native execution of Flink operators.
  */
 
 package org.apache.flink.streaming.api.graph;
@@ -118,6 +122,7 @@ public class StreamGraph implements Pipeline {
     private PipelineOptions.VertexDescriptionMode descriptionMode =
             PipelineOptions.VertexDescriptionMode.TREE;
     private boolean vertexNameIncludeIndexPrefix = false;
+    
     // omnistream need use
     private ReadableConfig configuration;
 

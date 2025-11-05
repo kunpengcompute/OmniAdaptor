@@ -14,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.runtime.io.network.netty;
@@ -91,7 +94,7 @@ class PartitionRequestServerHandler extends SimpleChannelInboundHandler<NettyMes
                 try {
                     NetworkSequenceViewReader reader;
 
-                    //check if target CreditBasedSequenceNumberingViewReader is native or not
+                    // check if target CreditBasedSequenceNumberingViewReader is native or not
                     boolean isNative = checkIfCreditBasedSequenceNumberingViewReaderIsNative(request.partitionId);
 
                     if (isNative) {
@@ -186,8 +189,7 @@ class PartitionRequestServerHandler extends SimpleChannelInboundHandler<NettyMes
                 Map<ResultPartitionID, ResultPartition> registeredPartitions =
                         (Map<ResultPartitionID, ResultPartition>) field.get(resultPartitionManager);
                 ResultPartition resultPartition = registeredPartitions.get(partitionId);
-                if (resultPartition == null) {
-                    LOG.info("resultPartition is null");
+                if(resultPartition == null) {
                     throw new PartitionNotFoundException(partitionId);
                 }
                 if (resultPartition instanceof BufferWritingResultPartition) {

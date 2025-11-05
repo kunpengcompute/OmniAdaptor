@@ -1,5 +1,4 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package com.huawei.omniruntime.flink.runtime.tasks;
@@ -77,13 +79,11 @@ public class OmniOneInputStreamTaskV2<IN, OUT> extends OmniStreamTask<OUT, OneIn
 
             List<InputChannelInfo> channelInfos = inputGate.getChannelInfos();
 
-
-            //create OmniInputProcessor
+            // create OmniInputProcessor
             long inputProcessorRef = this.createNativeOmniInputProcessor(channelInfos, 0);
             PushingAsyncDataInput.DataOutput<IN> output = createBinaryDataOutput(numRecordsIn, numRecordsOut);
 
             StreamTaskInput<IN> input = createTaskInput(inputGate, omniStreamTaskRef, inputProcessorRef);
-
 
             StreamConfig.InputConfig[] inputConfigs =
                     configuration.getInputs(getUserCodeClassLoader());

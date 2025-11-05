@@ -14,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
@@ -65,8 +68,10 @@ import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import scala.reflect.ClassTag$;
 
 import java.util.ArrayList;
@@ -169,7 +174,7 @@ public class StreamExecGroupAggregate extends StreamExecAggregateBase {
 
         List<String> outputTypeList = getOutputTypes();
 
-        //get aggInfoList info map
+        // get aggInfoList info map
         Map<String, Object> aggInfoListMap = new LinkedHashMap<>();
         List<Map<String, Object>> aggregateCalls = getAggregateCalls(aggInfoList);
         aggInfoListMap.put("aggregateCalls", aggregateCalls);
@@ -251,8 +256,8 @@ public class StreamExecGroupAggregate extends StreamExecAggregateBase {
                 typeName += "(" + varcharType.getLength() + ")";
             }
             if (typeRoot == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE
-                || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE
-                || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                    || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE
+                    || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
 
                 // Cast to TimestampType to access precision
                 if (fieldType instanceof TimestampType) {
@@ -278,8 +283,8 @@ public class StreamExecGroupAggregate extends StreamExecAggregateBase {
                 typeName += "(" + varcharType.getLength() + ")";
             }
             if (typeRoot == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE
-                || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE
-                || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                    || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_TIME_ZONE
+                    || typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
 
                 // Cast to TimestampType to access precision
                 if (fieldType instanceof TimestampType) {
@@ -315,11 +320,6 @@ public class StreamExecGroupAggregate extends StreamExecAggregateBase {
                                 config, planner.getFlinkContext().getClassLoader()),
                         planner.createRelBuilder(),
                         JavaScalaConversionUtil.toScala(inputRowType.getChildren()),
-
-                        //  we have to copy input field
-
-                        //  improve this in future
-
                         true)
                         .needAccumulate();
 

@@ -14,9 +14,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.tools.RelBuilder;
@@ -83,8 +88,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.apache.flink.util.Preconditions.checkNotNull;
-
 /**
  * Stream {@link ExecNode} for window table-valued based aggregate.
  *
@@ -105,7 +108,7 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
 
     public static final String WINDOW_AGGREGATE_TRANSFORMATION = "window-aggregate";
 
-    private static final long WINDOW_AGG_MEMORY_RATIO = 100;
+    private static final long WINDOW_AGG_MEMORY_RATIO = 100L;
 
     public static final String FIELD_NAME_WINDOWING = "windowing";
     public static final String FIELD_NAME_NAMED_WINDOW_PROPERTIES = "namedWindowProperties";
@@ -253,7 +256,7 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
 
         WindowSpec windowSpec= windowing.getWindow();
         getSliceAssignerInfo(windowing,shiftTimeZone,jsonMap);
-        //window info
+        // window info
         String typeName = DescriptionUtil.getFieldType(windowing.getTimeAttributeType());
         jsonMap.put("window", windowSpec.toString());
         jsonMap.put("timeAttributeType",typeName);
@@ -271,15 +274,15 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
                                               LogicalType[] aggValueTypes,
                                               Transformation<RowData> inputTransform,
                                               int[] grouping, boolean generateUpdateBefore) {
-        //get inputType info
+        // get inputType info
         List<String> inputTypeList = DescriptionUtil.getFieldTypeList(
                 ((InternalTypeInfo) inputTransform.getOutputType()).toRowType().getFields()
         );
 
-        //get outputTypes info
+        // get outputTypes info
         List<String> outputTypeList = DescriptionUtil.getFieldTypeList(((RowType) execNode.getOutputType()).getFields());
 
-        //get aggInfoList info map
+        // get aggInfoList info map
         Map<String, Object> aggInfoListMap = new LinkedHashMap<>();
         List<Map<String, Object>> aggregateCalls = DescriptionUtil
                 .getAggregateCalls(aggInfoList.getActualAggregateInfos());
@@ -345,7 +348,6 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
                 jsonMap.put("offset",offset.toMillis());
             }
             jsonMap.put("timeAttributeIndex",timeAttributeIndex);
-//            jsonMap.put("shiftTimeZone",shiftTimeZone);
             jsonMap.put("size",size.toMillis());
         } else if (windowSpec instanceof HoppingWindowSpec) {
             Duration size = ((HoppingWindowSpec) windowSpec).getSize();
@@ -362,7 +364,6 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
                 jsonMap.put("offset",offset.toMillis());
             }
             jsonMap.put("timeAttributeIndex",timeAttributeIndex);
-//            jsonMap.put("shiftTimeZone",shiftTimeZone);
             jsonMap.put("size",size.toMillis());
             jsonMap.put("slide",slide.toMillis());
         } else if (windowSpec instanceof CumulativeWindowSpec) {
@@ -380,7 +381,6 @@ public class StreamExecWindowAggregate extends StreamExecWindowAggregateBase {
                 jsonMap.put("offset",offset.toMillis());
             }
             jsonMap.put("timeAttributeIndex",timeAttributeIndex);
-//            jsonMap.put("shiftTimeZone",shiftTimeZone);
             jsonMap.put("maxSize",maxSize.toMillis());
             jsonMap.put("step",step.toMillis());
         } else {

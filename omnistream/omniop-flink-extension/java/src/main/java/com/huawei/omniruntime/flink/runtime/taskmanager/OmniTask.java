@@ -1,5 +1,4 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,23 +14,41 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package com.huawei.omniruntime.flink.runtime.taskmanager;
 
-import com.huawei.omniruntime.flink.runtime.io.network.partition.RemoteDataFetcher;
+import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
+import com.huawei.omniruntime.flink.runtime.io.network.partition.OriginalTaskDataFetcher;
+import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskMetricGroup;
 import com.huawei.omniruntime.flink.runtime.metrics.utils.OmniMetricHelper;
+import com.huawei.omniruntime.flink.runtime.state.TaskStateManagerWrapper;
+import com.huawei.omniruntime.flink.runtime.taskexecutor.TaskOperatorGatewayWrapper;
+import com.huawei.omniruntime.flink.streaming.api.graph.JobType;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
 
-import com.huawei.omniruntime.flink.runtime.tasks.NativeStreamTask;
-import com.huawei.omniruntime.flink.streaming.api.graph.JobType;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.cache.DistributedCache;
+import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.contrib.streaming.state.RocksDBStateUploader;
+import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FileSystemSafetyNet;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.core.memory.DataOutputView;
+import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.core.security.FlinkSecurityManager;
+import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
+import org.apache.flink.runtime.checkpoint.CheckpointException;
+import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
+import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.CheckpointStoreUtil;
+import org.apache.flink.runtime.checkpoint.channel.ChannelStateWriter;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
@@ -46,14 +63,20 @@ import org.apache.flink.runtime.externalresource.ExternalResourceInfoProvider;
 import org.apache.flink.runtime.filecache.FileCache;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
+import org.apache.flink.runtime.io.network.TaskEventPublisher;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.partition.BufferWritingResultPartition;
-import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
+import org.apache.flink.runtime.io.network.partition.consumer.ChannelStatePersister;
 import org.apache.flink.runtime.io.network.partition.consumer.IndexedInputGate;
+import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
+import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
+import org.apache.flink.runtime.io.network.partition.consumer.OmniLocalInputChannel;
+import org.apache.flink.runtime.io.network.partition.consumer.OmniRemoteInputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.RecoveredInputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
-import org.apache.flink.runtime.io.network.partition.consumer.OmniRemoteInputChannel;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.tasks.CoordinatedTask;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
@@ -72,17 +95,27 @@ import org.apache.flink.runtime.source.event.NoMoreSplitsEvent;
 import org.apache.flink.runtime.source.event.ReaderRegistrationEvent;
 import org.apache.flink.runtime.source.event.SourceEventWrapper;
 import org.apache.flink.runtime.source.event.WatermarkAlignmentEvent;
+import org.apache.flink.runtime.state.CheckpointStreamFactory;
+import org.apache.flink.runtime.state.CheckpointStreamWithResultProvider;
+import org.apache.flink.runtime.state.CheckpointStorageAccess;
+import org.apache.flink.runtime.state.CheckpointedStateScope;
+import org.apache.flink.runtime.state.IncrementalKeyedStateHandle.HandleAndLocalPath;
+import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
+import org.apache.flink.runtime.state.StateUtil;
+import org.apache.flink.runtime.state.StreamStateHandle;
+import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.apache.flink.runtime.taskexecutor.GlobalAggregateManager;
 import org.apache.flink.runtime.taskexecutor.KvStateService;
 import org.apache.flink.runtime.taskexecutor.PartitionProducerStateChecker;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.InputGateWithMetrics;
+import org.apache.flink.runtime.taskmanager.RuntimeEnvironment;
 import org.apache.flink.runtime.taskmanager.Task;
+import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
-import org.apache.flink.runtime.taskmanager.RuntimeEnvironment;
-import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -92,6 +125,7 @@ import org.apache.flink.streaming.runtime.tasks.OperatorEventDispatcherImpl;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
+import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
 import org.slf4j.Logger;
@@ -102,6 +136,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -110,6 +145,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 /**
  * customized OmniTask for OmniRuntime
@@ -135,13 +171,13 @@ public class OmniTask extends Task {
     private static final String TWOINPUT_STREAM_TASK_CLASS_NAME =
             "org.apache.flink.streaming.runtime.tasks.TwoInputStreamTask";
 
-    private long nativeTaskRef;
+    private long nativeTaskRef = 0L;
     private JobType jobType; // 0 default vanilla java task, 1 native sql task, 2 native datastream task. 3 future - hybrid java+cpp source task
 
     // dup fields of the Task as those field are prviate in parent class Task
     private JobInformation __jobInformation;
     private TaskInformation __taskInformation;
-    private RemoteDataFetcher remoteDataFetcher;
+    private OriginalTaskDataFetcher originalTaskDataFetcher;
     private OperatorEventDispatcherImpl operatorEventDispatcher;
     private Map<OperatorID, OperatorEventHandler> operatorEventHandlers;
 
@@ -151,7 +187,20 @@ public class OmniTask extends Task {
     private String aliasOfInvokableClass;
     private long nativeTaskMetricGroupRef;
     private OmniTaskMetricGroup omniTaskMetricGroup;
+    private Map<ExecutionAttemptID,OmniTaskReferenceCounter> taskSlotTable;
 
+    /**
+     * checkpointing
+     */
+    private TaskStateManagerWrapper taskStateManagerWrapper;
+    private TaskOperatorGatewayWrapper taskOperatorGatewayWrapper;
+
+    private CheckpointOptions checkpointOptions;
+    private CheckpointStreamFactory checkpointStreamFactory;
+
+    // temporarily use public for easy access from OmniTaskWrapper
+    public RuntimeEnvironment checkpointingEnv;
+    
     /**
      * <b>IMPORTANT:</b> This constructor may not start any work that would need to be undone in the
      * case of a failing task deployment.
@@ -183,17 +232,18 @@ public class OmniTask extends Task {
      * @param executor
      */
     public OmniTask(JobInformation jobInformation, TaskInformation taskInformation,
-            ExecutionAttemptID executionAttemptID, AllocationID slotAllocationId,
-            List<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
-            List<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors, MemoryManager memManager,
-            IOManager ioManager, ShuffleEnvironment<?, ?> shuffleEnvironment, KvStateService kvStateService,
-            BroadcastVariableManager bcVarManager, TaskEventDispatcher taskEventDispatcher,
-            ExternalResourceInfoProvider externalResourceInfoProvider, TaskStateManager taskStateManager,
-            TaskManagerActions taskManagerActions, InputSplitProvider inputSplitProvider,
-            CheckpointResponder checkpointResponder, TaskOperatorEventGateway operatorCoordinatorEventGateway,
-            GlobalAggregateManager aggregateManager, LibraryCacheManager.ClassLoaderHandle classLoaderHandle,
-            FileCache fileCache, TaskManagerRuntimeInfo taskManagerConfig, @Nonnull TaskMetricGroup metricGroup,
-            PartitionProducerStateChecker partitionProducerStateChecker, Executor executor) {
+                    ExecutionAttemptID executionAttemptID, AllocationID slotAllocationId,
+                    List<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
+                    List<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors, MemoryManager memManager,
+                    IOManager ioManager, ShuffleEnvironment<?, ?> shuffleEnvironment, KvStateService kvStateService,
+                    BroadcastVariableManager bcVarManager, TaskEventDispatcher taskEventDispatcher,
+                    ExternalResourceInfoProvider externalResourceInfoProvider, TaskStateManager taskStateManager,
+                    TaskManagerActions taskManagerActions, InputSplitProvider inputSplitProvider,
+                    CheckpointResponder checkpointResponder, TaskOperatorEventGateway operatorCoordinatorEventGateway,
+                    GlobalAggregateManager aggregateManager, LibraryCacheManager.ClassLoaderHandle classLoaderHandle,
+                    FileCache fileCache, TaskManagerRuntimeInfo taskManagerConfig, @Nonnull TaskMetricGroup metricGroup,
+                    PartitionProducerStateChecker partitionProducerStateChecker, Executor executor,Map<ExecutionAttemptID,OmniTaskReferenceCounter> taskSlotTable,
+                    TaskStateManagerWrapper taskStateManagerWrapper, TaskOperatorGatewayWrapper taskOperatorGatewayWrapper) {
         super(jobInformation, taskInformation, executionAttemptID, slotAllocationId,
                 resultPartitionDeploymentDescriptors, inputGateDeploymentDescriptors, memManager, ioManager,
                 shuffleEnvironment, kvStateService, bcVarManager, taskEventDispatcher, externalResourceInfoProvider,
@@ -203,6 +253,13 @@ public class OmniTask extends Task {
         this.__taskInformation = taskInformation;
         this.__jobInformation = jobInformation;
         this.jobType = JobType.NULL;
+        this.taskSlotTable = taskSlotTable;
+        this.taskStateManagerWrapper = taskStateManagerWrapper;
+        this.taskOperatorGatewayWrapper=taskOperatorGatewayWrapper;
+    }
+
+    public TaskStateManagerWrapper getTaskStateManagerWrapper() {
+        return taskStateManagerWrapper;
     }
 
     /**
@@ -254,9 +311,10 @@ public class OmniTask extends Task {
         } finally {
             try {
                 LOG.info("Freeing task resources for {} ({}).", taskNameWithSubtask, executionId);
-                if (remoteDataFetcher != null) {
-                    remoteDataFetcher.finishRunning();
+                if (originalTaskDataFetcher != null) {
+                    originalTaskDataFetcher.finishRunning();
                 }
+                deleteParentTaskInSlotTable();
                 // clear the reference to the invokable. this helps guard against holding references
                 // to the invokable and its structures in cases where this Task object is still
                 // referenced
@@ -309,7 +367,7 @@ public class OmniTask extends Task {
                     break;
                 }
             } else if (current == ExecutionState.FAILED) {
-                    // we were immediately failed. tell the TaskManager that we reached our final state
+                // we were immediately failed. tell the TaskManager that we reached our final state
                 notifyFinalStateAndCloseMetrics();
                 return;
             } else if (current == ExecutionState.CANCELING) {
@@ -415,6 +473,9 @@ public class OmniTask extends Task {
                 checkpointResponder, operatorCoordinatorEventGateway, taskManagerConfig, metrics, this,
                 externalResourceInfoProvider);
 
+        // Save it so that OmniTaskWrapper can get env for checkpointing
+        checkpointingEnv = (RuntimeEnvironment) env;
+
         // Make sure the user code classloader is accessible thread-locally.
         // We are setting the correct context class loader before instantiating the invokable
         // so that it is available to the invokable during its entire lifetime.
@@ -434,7 +495,8 @@ public class OmniTask extends Task {
 
     private void initAliasOfInvokableClass() {
         LOG.info("the task's taskType is {} ", jobType.getValue());
-        if (jobType == JobType.SQL) {
+        // tmp add stream task
+        if (jobType == JobType.SQL || jobType == JobType.STREAM) {
             StreamConfig streamConfig = new StreamConfig(taskConfiguration);
             StreamOperatorFactory<?> streamOperatorFactory =
                 streamConfig.getStreamOperatorFactory(userCodeClassLoader.asClassLoader());
@@ -470,7 +532,7 @@ public class OmniTask extends Task {
             FlinkSecurityManager.unmonitorUserSystemExitForCurrentThread();
         }
 
-       // ----------------------------------------------------------------
+        // ----------------------------------------------------------------
         //  actual task core work
         // ----------------------------------------------------------------
 
@@ -484,7 +546,8 @@ public class OmniTask extends Task {
         // OmniStreamTask binding to native stream task should be ready as wll
 
         long nativeStreamTask = 0L;
-        if (jobType == JobType.SQL) {
+        boolean useomniFlag = __taskInformation.getTaskConfiguration().getBoolean("useomni", false);
+        if (useomniFlag && (jobType == JobType.SQL || jobType == JobType.STREAM)) {
             nativeStreamTask = setupStreamTaskBeforeInvoke(this.nativeTaskRef, this.aliasOfInvokableClass);
 
             // switch to the INITIALIZING state, if that fails, we have been canceled/failed in the
@@ -506,7 +569,7 @@ public class OmniTask extends Task {
 
             // create RemoteDataFetcher for remote input channelsE
 
-            remoteDataFetcher = createAndStartRemoteDataFetcher(inputGates);
+            originalTaskDataFetcher = createAndStartRemoteDataFetcher(inputGates);
 
             if (!transitionState(ExecutionState.INITIALIZING, ExecutionState.RUNNING)) {
                 throw new CancelTaskException();
@@ -517,9 +580,6 @@ public class OmniTask extends Task {
             registerEventDispatcher((StreamTask<?, ?>) invokable);
             status = doRunInvokeNativeTask(nativeTaskRef, nativeStreamTask);
         } else {
-            if (jobType == JobType.STREAM) {
-                ((NativeStreamTask) invokable).binkNativeTaskAddress(nativeTaskRef);
-            }
             restoreAndInvoke(invokable);
             // mailbox loop ended
 
@@ -549,6 +609,20 @@ public class OmniTask extends Task {
             throw new CancelTaskException();
         }
         return invokable;
+    }
+    public void declineCheckpoint(
+            long checkpointID,
+            CheckpointFailureReason failureReason,
+            @Nullable
+            Throwable failureCause) {
+        checkpointResponder.declineCheckpoint(
+                jobId,
+                executionId,
+                checkpointID,
+                new CheckpointException(
+                        "Task name with subtask : " + taskNameWithSubtask,
+                        failureReason,
+                        failureCause));
     }
 
     @Override
@@ -603,7 +677,7 @@ public class OmniTask extends Task {
 
     @Override
     public void deliverOperatorEvent(OperatorID operator, SerializedValue<OperatorEvent> evt) throws FlinkException {
-        if (jobType != JobType.SQL) {
+        if (jobType != JobType.SQL && jobType != JobType.STREAM) {
             super.deliverOperatorEvent(operator, evt);
             return;
         }
@@ -719,37 +793,105 @@ public class OmniTask extends Task {
     public void setJobType(JobType jobType) {
         this.jobType = jobType;
     }
+    public boolean isOmniStream() {
+        return (this.jobType == JobType.SQL || this.jobType == JobType.STREAM);
+    }
+    public void omniNotifyCheckpointAborted(
+            final long checkpointID, final long latestCompletedCheckpointId) {
+        notifyCheckpoint(
+                checkpointID, latestCompletedCheckpointId, NotifyCheckpointOperation.ABORT);
+    }
+    public void omniNotifyCheckpointComplete(final long checkpointID){
+        notifyCheckpoint(
+                checkpointID,
+                CheckpointStoreUtil.INVALID_CHECKPOINT_ID,
+                NotifyCheckpointOperation.COMPLETE);
+    }
+    public void omniNotifyCheckpointSubsumed(long checkpointID) {
+        notifyCheckpoint(
+                checkpointID,
+                CheckpointStoreUtil.INVALID_CHECKPOINT_ID,
+                NotifyCheckpointOperation.SUBSUME);
+    }
 
-    private RemoteDataFetcher createAndStartRemoteDataFetcher(IndexedInputGate[] inputGates) {
-        List<OmniRemoteInputChannel> remoteInputChannels = new ArrayList<>();
-        for (IndexedInputGate inputGate : inputGates) {
-            InputGateWithMetrics inputGateWithMetrics = (InputGateWithMetrics) inputGate;
+    private void notifyCheckpoint(
+            long checkpointId,
+            long latestCompletedCheckpointId,
+            NotifyCheckpointOperation notifyCheckpointOperation) {
+        long ordinal = notifyCheckpointOperation.ordinal();
+        if (NotifyCheckpointOperation.ABORT == notifyCheckpointOperation) {
+            abortCpp(nativeTaskRef, checkpointId, latestCompletedCheckpointId);
+        } else if (NotifyCheckpointOperation.COMPLETE == notifyCheckpointOperation) {
+            long inputState = convertExecutionState(executionState);
+            completeCpp(nativeTaskRef, checkpointId, inputState);
+        } else if (NotifyCheckpointOperation.SUBSUME == notifyCheckpointOperation) {
+            subsumedCpp(nativeTaskRef, latestCompletedCheckpointId);
+        }
+    }
 
-            int numberOfChannels = inputGateWithMetrics.getNumberOfInputChannels();
-
-            for (int i = 0; i < numberOfChannels; i++) {
-                InputChannel inputChannel = inputGateWithMetrics.getChannel(i);
-                setRecoverInputStateFutureCompleted((RecoveredInputChannel) inputChannel);
-            }
-            convertRemoteRecoveryChannelToNormal(inputGateWithMetrics);
-
-            for (int i = 0; i < numberOfChannels; i++) {
-                InputChannel inputChannel = inputGateWithMetrics.getChannel(i);
-                if (inputChannel instanceof RemoteInputChannel) {
-                    RemoteInputChannel remoteInputChannel = (RemoteInputChannel) inputChannel;
-                    remoteInputChannels.add(new OmniRemoteInputChannel(remoteInputChannel));
+    private OriginalTaskDataFetcher createAndStartRemoteDataFetcher(IndexedInputGate[] inputGates) throws IOException {
+        if (isTaskNative()) {
+            List<OmniRemoteInputChannel> remoteInputChannels = new ArrayList<>();
+            List<OmniLocalInputChannel> localInputChannels = new ArrayList<>();
+            for (IndexedInputGate inputGate : inputGates) {
+                InputGateWithMetrics inputGateWithMetrics = (InputGateWithMetrics) inputGate;
+                
+                int numberOfChannels = inputGateWithMetrics.getNumberOfInputChannels();
+                
+                for (int i = 0; i < numberOfChannels; i++) {
+                    InputChannel inputChannel = inputGateWithMetrics.getChannel(i);
+                    setRecoverInputStateFutureCompleted((RecoveredInputChannel) inputChannel);
+                }
+                convertRemoteRecoveryChannelToNormal(inputGateWithMetrics);
+                
+                for (int i = 0; i < numberOfChannels; i++) {
+                    InputChannel inputChannel = inputGateWithMetrics.getChannel(i);
+                    if (inputChannel instanceof RemoteInputChannel) {
+                        RemoteInputChannel remoteInputChannel = (RemoteInputChannel) inputChannel;
+                        remoteInputChannels.add(new OmniRemoteInputChannel(remoteInputChannel));
+                    } else
+                        if (inputChannel instanceof LocalInputChannel) {
+                            LocalInputChannel localInputChannel = (LocalInputChannel) inputChannel;
+                            boolean targetIsNative =
+                                    checkIfTargetResultPartitionIsNative(localInputChannel.getPartitionId());
+                            if (!targetIsNative) {
+                                // target task is not native,  but myself is a native task, so we need to create
+                                // OmniLocalInputChannel to read data from original java task
+                                OmniLocalInputChannel omniLocalInputChannel =
+                                        createOmniLocalInputChannel(inputGateWithMetrics, localInputChannel);
+                                localInputChannels.add(omniLocalInputChannel);
+                            }
+                        }
                 }
             }
+            
+            if (!remoteInputChannels.isEmpty() || !localInputChannels.isEmpty()) {
+                OriginalTaskDataFetcher originalTaskDataFetcher = new OriginalTaskDataFetcher(nativeTaskRef,
+                        this.getTaskInfo().getTaskName(), jobType);
+                if (!remoteInputChannels.isEmpty()) {
+                    originalTaskDataFetcher.createAndStartRemoteDataFetcher(remoteInputChannels);
+                }
+                if (!localInputChannels.isEmpty()) {
+                    originalTaskDataFetcher.createAndStartLocalDataFetcher(localInputChannels);
+                    
+                }
+                return originalTaskDataFetcher;
+            }
+            return null;
+        } else {
+            return null;
         }
-
-        if (remoteInputChannels.size() > 0) {
-            RemoteDataFetcher remoteDataFetcher = new RemoteDataFetcher(remoteInputChannels, nativeTaskRef,
-                    this.getTaskInfo().getTaskName());
-            Thread thread = new Thread(remoteDataFetcher);
-            thread.start();
-            return remoteDataFetcher;
+    }
+    
+    boolean checkIfTargetResultPartitionIsNative(ResultPartitionID partitionId) {
+        OmniTaskReferenceCounter omniTaskReferenceCounter = taskSlotTable.get(partitionId.getProducerId());
+        if (omniTaskReferenceCounter != null) {
+            OmniTask omniTask = omniTaskReferenceCounter.getTask();
+            return omniTask.isTaskNative();
+        } else {
+            throw new GeneralRuntimeException("OmniTaskReferenceCounter is null for partitionId: " + partitionId);
         }
-        return null;
+        
     }
 
     private void setRecoverInputStateFutureCompleted(RecoveredInputChannel recoveredInputChannel) {
@@ -760,11 +902,11 @@ public class OmniTask extends Task {
             CompletableFuture future = (CompletableFuture) method.invoke(recoveredInputChannel);
             future.complete(null);
         } catch (NoSuchMethodException e) {
-            throw new RuntimeException(e);
+            throw new GeneralRuntimeException(e);
         } catch (InvocationTargetException e) {
-            throw new RuntimeException(e);
+            throw new GeneralRuntimeException(e);
         } catch (IllegalAccessException e) {
-            throw new RuntimeException(e);
+            throw new GeneralRuntimeException(e);
         }
     }
 
@@ -775,11 +917,24 @@ public class OmniTask extends Task {
             SingleInputGate singleInputGate = (SingleInputGate) inputGateField.get(inputGateWithMetrics);
             singleInputGate.convertRecoveredInputChannels();
         } catch (NoSuchFieldException e) {
-            throw new RuntimeException(e);
+            throw new GeneralRuntimeException(e);
         } catch (IllegalAccessException e) {
-            throw new RuntimeException(e);
+            throw new GeneralRuntimeException(e);
         }
     }
+
+    private SingleInputGate getSingleInputGateFromInputGateWithMetrics(InputGateWithMetrics inputGateWithMetrics) {
+        try {
+            Field inputGateField = InputGateWithMetrics.class.getDeclaredField("inputGate");
+            inputGateField.setAccessible(true);
+            return (SingleInputGate) inputGateField.get(inputGateWithMetrics);
+        } catch (NoSuchFieldException e) {
+            throw new GeneralRuntimeException(e);
+        } catch (IllegalAccessException e) {
+            throw new GeneralRuntimeException(e);
+        }
+    }
+
 
     private void bindNativeTaskRefToResultPartition(long nativeTaskRef,
             ResultPartitionWriter[] consumableNotifyingPartitionWriters) {
@@ -787,6 +942,97 @@ public class OmniTask extends Task {
             BufferWritingResultPartition partition = (BufferWritingResultPartition) partitionWriter;
             partition.setNativeTaskRef(nativeTaskRef);
         }
+    }
+    public void omniTriggerCheckpointBarrier(
+            final long checkpointID,
+            final long checkpointTimestamp,
+            final CheckpointOptions checkpointOptions){
+        this.checkpointOptions = checkpointOptions;
+        String checkpointOptionsString=JsonHelper.toJson(checkpointOptions);
+        triggerCheckpointCpp(nativeTaskRef,checkpointID,checkpointTimestamp,checkpointOptionsString);
+    }
+
+    public SnapshotResult<StreamStateHandle> materializeMetaData(
+            final long checkpointId,
+            final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots)
+            throws Exception {
+        
+        if (this.checkpointOptions == null) {
+            LOG.info("checkpointOptions not initialized, using default location");
+            this.checkpointOptions = CheckpointOptions.forCheckpointWithDefaultLocation();
+        }
+        
+        final CloseableRegistry snapshotCloseableRegistry = new CloseableRegistry();
+        final CloseableRegistry tmpResourcesRegistry = new CloseableRegistry();
+
+        final CheckpointStorageAccess checkpointAccess = ((StreamTask<?, ?>) this.invokable).getEnvironment().getCheckpointStorageAccess();
+        this.checkpointStreamFactory = checkpointAccess.resolveCheckpointStorageLocation(checkpointId, this.checkpointOptions.getTargetLocation());
+
+        CheckpointStreamWithResultProvider streamWithResultProvider =
+                CheckpointStreamWithResultProvider.createSimpleStream(
+                        CheckpointedStateScope.EXCLUSIVE, checkpointStreamFactory);
+
+        snapshotCloseableRegistry.registerCloseable(streamWithResultProvider);
+
+        try {
+            final TypeSerializer<?> keySerializer =
+                    BasicTypeInfo.LONG_TYPE_INFO.createSerializer(((StreamTask<?, ?>) this.invokable).getExecutionConfig());
+            
+            KeyedBackendSerializationProxy<?> serializationProxy =
+                    new KeyedBackendSerializationProxy<>(keySerializer, stateMetaInfoSnapshots, false);
+
+            final DataOutputView out =
+                    new DataOutputViewStreamWrapper(streamWithResultProvider.getCheckpointOutputStream());
+
+            serializationProxy.write(out);
+
+            if (snapshotCloseableRegistry.unregisterCloseable(streamWithResultProvider)) {
+                SnapshotResult<StreamStateHandle> result =
+                        streamWithResultProvider.closeAndFinalizeCheckpointStreamResult();
+                streamWithResultProvider = null;
+                tmpResourcesRegistry.registerCloseable(
+                        () -> StateUtil.discardStateObjectQuietly(result));
+                LOG.info("materializeMetaData completed, returned stateSize={}", result.getStateSize());
+                return result;
+            } else {
+                throw new IOException("Stream already closed and cannot return a handle.");
+            }
+        } finally {
+            if (snapshotCloseableRegistry.unregisterCloseable(streamWithResultProvider)) {
+                IOUtils.closeQuietly(streamWithResultProvider);
+            }
+        }
+    }
+    
+    public List<HandleAndLocalPath> uploadFilesToCheckpointFs(List<java.nio.file.Path> paths,
+                                                              int numberOfSnapshottingThreads) throws Exception {
+        if (this.checkpointStreamFactory == null) {
+            throw new IllegalStateException("CheckpointStreamFactory is not initialized.");
+        }
+    
+        final CloseableRegistry snapshotCloseableRegistry = new CloseableRegistry();
+        final CloseableRegistry tmpResourcesRegistry = new CloseableRegistry();
+        final CheckpointedStateScope stateScope = CheckpointedStateScope.SHARED;
+
+        List<HandleAndLocalPath> handles = new ArrayList<>();
+        try {
+            if (paths == null || paths.isEmpty()) {
+                return Collections.emptyList();
+            }
+    
+            RocksDBStateUploader uploader = new RocksDBStateUploader(numberOfSnapshottingThreads);
+            handles =
+                    uploader.uploadFilesToCheckpointFs(
+                            paths,
+                            this.checkpointStreamFactory,
+                            stateScope,
+                            snapshotCloseableRegistry,
+                            tmpResourcesRegistry);
+            LOG.info("Checkpoint files uploaded");
+        } catch (Throwable t) {
+            LOG.info("Error closing registry", t);
+        }
+        return handles;
     }
 
     private void stopOmniCreditBasedSequenceNumberingViewReader() {
@@ -798,6 +1044,167 @@ public class OmniTask extends Task {
     private OmniTaskMetricGroup registerOmniTaskMetrics() {
         return OmniMetricHelper.registerOmniMetrics(this.metrics, nativeTaskMetricGroupRef);
     }
+    private boolean isTaskNative(){
+        return nativeTaskRef!=0;
+    }
+
+    public int getInitialBackoff(Object target) {
+        Object res = getFieldByReflection(InputChannel.class, target, "initialBackoff");
+        if (res instanceof Integer) {
+            return (int) res;
+        } else {
+            throw new RuntimeException("Failed to access initialBackoff field");
+        }
+    }
+
+    public int getMaxBackoff(Object target) {
+        Object res = getFieldByReflection(InputChannel.class, target, "maxBackoff");
+        if (res instanceof Integer) {
+            return (int) res;
+        } else {
+            throw new RuntimeException("Failed to access maxBackoff field");
+        }
+    }
+
+    public Counter getNumBytesIn(Object target) {
+        Object res = getFieldByReflection(InputChannel.class, target, "numBytesIn");
+        if (res instanceof Counter) {
+            return (Counter) res;
+        } else {
+            throw new RuntimeException("Failed to access numBytesIn field");
+        }
+    }
+    public Counter getNumBuffersIn(Object target) {
+        Object res = getFieldByReflection(InputChannel.class, target, "numBuffersIn");
+        if (res instanceof Counter) {
+            return (Counter) res;
+        } else {
+            throw new RuntimeException("Failed to access numBuffersIn field");
+        }
+    }
+
+    public ResultPartitionManager getPartitionManager(Object target) {
+        Object res = getFieldByReflection(LocalInputChannel.class, target, "partitionManager");
+        if (res instanceof ResultPartitionManager) {
+            return (ResultPartitionManager) res;
+        } else {
+            throw new RuntimeException("Failed to access partitionManager field");
+        }
+    }
+
+    public TaskEventPublisher getTaskEventPublisher(Object target) {
+        Object res = getFieldByReflection(LocalInputChannel.class, target, "taskEventPublisher");
+        if (res instanceof TaskEventPublisher) {
+            return (TaskEventPublisher) res;
+        } else {
+            return null;
+        }
+    }
+
+    public ChannelStateWriter getChannelStateWriter(Object target) {
+        Object res = getFieldByReflection(LocalInputChannel.class, target, "channelStatePersister");
+        Object  channelStateWriter = getFieldByReflection(ChannelStatePersister.class, res, "channelStateWriter");
+        if (channelStateWriter instanceof ChannelStateWriter) {
+            return (ChannelStateWriter) channelStateWriter;
+        } else {
+            return null;
+        }
+    }
+
+    public Object getFieldByReflection(Class clazz,Object target,String fieldName) {
+        try {
+            Field field = clazz.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            return null;
+        }
+    }
+    
+    private OmniLocalInputChannel createOmniLocalInputChannel(InputGateWithMetrics inputGateWithMetrics,
+            LocalInputChannel localInputChannel) {
+        SingleInputGate singleInputGate = getSingleInputGateFromInputGateWithMetrics(inputGateWithMetrics);
+        int maxBackoff = getMaxBackoff(localInputChannel);
+        int initialBackoff = getInitialBackoff(localInputChannel);
+        Counter numBytesIn = getNumBytesIn(localInputChannel);
+        Counter numBuffersIn = getNumBuffersIn(localInputChannel);
+        ResultPartitionManager partitionManager = getPartitionManager(localInputChannel);
+        TaskEventPublisher taskEventPublisher = getTaskEventPublisher(localInputChannel);
+        ChannelStateWriter stateWriter = getChannelStateWriter(localInputChannel);
+        OmniLocalInputChannel omniLocalInputChannel = new OmniLocalInputChannel(localInputChannel, partitionManager,
+                nativeTaskRef, singleInputGate, initialBackoff, maxBackoff, numBytesIn, numBuffersIn,
+                taskEventPublisher, stateWriter, this.getTaskInfo().getTaskName());
+        return omniLocalInputChannel;
+    }
+    
+    
+    public int getConsumers() {
+        int consumers = 0;
+        for (ResultPartitionWriter partitionWriter : partitionWriters) {
+            consumers += partitionWriter.getNumberOfSubpartitions();
+        }
+        return consumers;
+    }
+    
+    private void deleteParentTaskInSlotTable() {
+        for (IndexedInputGate inputGate : this.inputGates) {
+            int numOfChannel = inputGate.getNumberOfInputChannels();
+            for (int i = 0; i < numOfChannel; i++) {
+                InputChannel inputChannel = inputGate.getChannel(i);
+                ResultPartitionID partitionId = inputChannel.getPartitionId();
+                OmniTaskReferenceCounter omniTaskReferenceCounter = taskSlotTable.get(partitionId.getProducerId());
+                if (omniTaskReferenceCounter != null) {
+                    omniTaskReferenceCounter.decrementReferenceCount();
+                    if (omniTaskReferenceCounter.isReferenceCountZero()) {
+                        taskSlotTable.remove(partitionId.getProducerId());
+                    }
+                }
+            }
+        }
+        if (this.partitionWriters.length == 0) {
+            taskSlotTable.remove(this.getExecutionId());
+        }
+    }
+
+    private long convertExecutionState(ExecutionState inputState) {
+        long result = -1;
+        switch (inputState) {
+            case CREATED:
+                result = 0;
+                break;
+            case SCHEDULED:
+                result = 1;
+                break;
+            case DEPLOYING:
+                result = 2;
+                break;
+            case RUNNING:
+                result = 3;
+                break;
+            case FINISHED:
+                result = 4;
+                break;
+            case CANCELING:
+                result = 5;
+                break;
+            case CANCELED:
+                result = 6;
+                break;
+            case FAILED:
+                result = 7;
+                break;
+            case RECONCILING:
+                result = 8;
+                break;
+            case INITIALIZING:
+                result = 9;
+                break;
+            default:
+                break;
+        }
+        return result;
+    }
+
     // return nativeAddressOfStreamTask
     private native long setupStreamTaskBeforeInvoke(long nativeTaskRef, String StreamTaskClassName /* possible other
      parameter*/);
@@ -812,5 +1219,18 @@ public class OmniTask extends Task {
 
     private native long createNativeTaskMetricGroup(long nativeTaskRef);
 
+    private native void triggerCheckpointCpp(long nativeTaskRef,long checkpointID,long checkpointTimestamp,String checkpointOptions);
+
+    public TaskOperatorGatewayWrapper getTaskOperatorGatewayWrapper() {
+        return taskOperatorGatewayWrapper;
+    }
+
+    public void setTaskOperatorGatewayWrapper(TaskOperatorGatewayWrapper taskOperatorGatewayWrapper) {
+        this.taskOperatorGatewayWrapper = taskOperatorGatewayWrapper;
+    }
     private native long cancelTask(long nativeTaskRef);
+    private native void abortCpp(long nativeTaskRef,long checkpointId,long latestCompletedCheckpointId);
+    private native void completeCpp(long nativeTaskRef,long checkpointId, long isRunning);
+    private native void subsumedCpp(long nativeTaskRef,long latestCompletedCheckpointId);
+
 }

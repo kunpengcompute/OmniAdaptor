@@ -264,6 +264,10 @@ public class OmniMetricHelper {
      * @return The ViewUpdater instance.
      */
     public static ViewUpdater doGetViewUpdater(MetricRegistryImpl metricRegistry) {
+
+        if (metricRegistry == null) {
+            throw new IllegalArgumentException("MetricRegistry cannot be null");
+        }
         ViewUpdater viewUpdater ;
         try {
             Field field = metricRegistry.getClass().getDeclaredField("viewUpdater");
@@ -287,6 +291,10 @@ public class OmniMetricHelper {
      * @return The MetricQueryService instance.
      */
     public static MetricQueryService getMetricQueryService(MetricRegistryImpl metricRegistry) {
+
+        if (metricRegistry == null) {
+            throw new IllegalArgumentException("MetricRegistry cannot be null");
+        }
         MetricQueryService metricQueryService = null;
         try {
             Field field = metricRegistry.getClass().getDeclaredField("queryService");

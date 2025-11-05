@@ -1,17 +1,27 @@
 package com.huawei.omniruntime.flink.runtime.api.graph.json;
 
+import org.apache.flink.core.fs.Path;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonAutoDetect;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonTypeInfo;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.PropertyAccessor;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.DeserializationFeature;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonSerializer;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.SerializationFeature;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.SerializerProvider;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.module.SimpleModule;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * JsonHelper
@@ -21,6 +31,7 @@ import java.util.Map;
  */
 
 public class JsonHelper {
+    private static final Logger LOG = LoggerFactory.getLogger(JsonHelper.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     static {
@@ -42,6 +53,44 @@ public class JsonHelper {
             return objectMapper.writeValueAsString(object);
         } catch (JsonProcessingException e) {
             throw new JsonHelperException("Error serializing object to JSON", e);
+        }
+    }
+
+    public static <T> String toJsonWithAllFields(T o) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            SimpleModule flinkPathModule = new SimpleModule()
+                    .addSerializer(Path.class, new JsonSerializer<Path>() {
+                        @Override
+                        public void serialize(Path value, JsonGenerator gen,
+                                              SerializerProvider serializers) throws IOException {
+                            gen.writeString(value.toUri().toString());
+                        }
+
+                        @Override
+                        public void serializeWithType(Path value, JsonGenerator gen,
+                                                      SerializerProvider serializers,
+                                                      TypeSerializer typeSer) throws IOException {
+                            serialize(value, gen, serializers);
+                        }
+                    });
+
+            objectMapper.registerModule(flinkPathModule)
+                    .activateDefaultTyping(LaissezFaireSubTypeValidator.instance,
+                            ObjectMapper.DefaultTyping.NON_FINAL,
+                            JsonTypeInfo.As.PROPERTY);
+            objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+            objectMapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+            BasicPolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+                    .allowIfSubType(Object.class)
+                    .build();
+            objectMapper.activateDefaultTyping(
+                    ptv,
+                    ObjectMapper.DefaultTyping.NON_FINAL,
+                    org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonTypeInfo.As.PROPERTY);
+            return objectMapper.writeValueAsString(o);
+        } catch (JsonProcessingException e) {
+            return "Error serializing JobManagerTaskRestore: " + e.getMessage();
         }
     }
 
@@ -98,14 +147,6 @@ public class JsonHelper {
             ((ObjectNode) rootNode).put("udf_so", newValue);
         }
 
-        if (rootNode.has("key_so")) {
-            String originalValue = rootNode.get("key_so").asText();
-            if (!originalValue.isEmpty()) {
-                String newValue = jarPath + originalValue;
-                ((ObjectNode) rootNode).put("key_so", newValue);
-            }
-        }
-
         ((ObjectNode) rootNode).put("hash_path", jarPath);
 
         return objectMapper.writeValueAsString(rootNode);
@@ -117,21 +158,20 @@ public class JsonHelper {
         }
     }
 
-
     // Example usage (in your other classes):
     public static void main(String[] args) throws IOException {
         Address address = new Address("123 Main St", "Anytown");
         Person person = new Person("Alice", 30, address, new String[]{"reading", "hiking", "coding"});
 
         String json = JsonHelper.toJson(person);
-        System.out.println("JSON: " + json);
+        LOG.info("JSON: {}", json);
 
         Person deserializedPerson = JsonHelper.fromJson(json, Person.class);
-        System.out.println("Deserialized Person: " + deserializedPerson);
+        LOG.info("Deserialized Person: {}", deserializedPerson);
 
         JsonHelper.writeToFile(person, new java.io.File("person.json"));
         Person personFromFile = JsonHelper.readFromFile(new java.io.File("person.json"), Person.class);
-        System.out.println("Person from file: " + personFromFile);
+        LOG.info("Person from file: {}", personFromFile);
     }
 
     /**
@@ -228,7 +268,6 @@ public class JsonHelper {
         public void setHobbies(String[] hobbies) {
             this.hobbies = hobbies;
         }
-
 
         @Override
         public String toString() {

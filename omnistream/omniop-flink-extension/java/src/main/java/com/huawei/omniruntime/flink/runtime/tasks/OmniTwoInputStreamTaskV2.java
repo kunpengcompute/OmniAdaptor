@@ -1,5 +1,4 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package com.huawei.omniruntime.flink.runtime.tasks;
@@ -135,13 +137,10 @@ public class OmniTwoInputStreamTaskV2<IN1, IN2, OUT> extends OmniStreamTask<OUT,
 
         checkState(checkpointedInputGates.length == 2);
 
-
         long leftProcessorRef = this.createNativeOmniInputProcessor(checkpointedInputGates[0].getChannelInfos(), 1);
         long rightProcessorRef = this.createNativeOmniInputProcessor(checkpointedInputGates[1].getChannelInfos(), 2);
 
-
-        //before create inputProcessor, we need to create omni native task
-
+        // before create inputProcessor, we need to create omni native task
 
         // Create OmniStreamTaskNetworkInputFactory
         inputProcessor = OmniStreamTwoInputProcessorFactory.create(

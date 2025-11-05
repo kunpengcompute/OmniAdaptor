@@ -44,6 +44,7 @@ public class OmniSizeGauge implements Gauge<Integer>, MetricCloseable {
     /**
      * close the gauge.
      */
+    @Override
     public void close() {
         // jni call to close the counter
         isClosed = true;

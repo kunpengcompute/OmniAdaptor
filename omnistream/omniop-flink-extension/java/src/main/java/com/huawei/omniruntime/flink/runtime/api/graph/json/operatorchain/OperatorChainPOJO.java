@@ -41,7 +41,6 @@ public class OperatorChainPOJO {
                 + '}';
     }
 
-
     @Override
     public boolean equals(Object o) {
         if (this == o) {

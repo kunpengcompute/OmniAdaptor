@@ -14,9 +14,15 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
+
+import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.tools.RelBuilder;
@@ -34,7 +40,13 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.codegen.agg.AggsHandlerCodeGenerator;
 import org.apache.flink.table.planner.delegation.PlannerBase;
-import org.apache.flink.table.planner.plan.nodes.exec.*;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
+
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeMetadata;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
 import org.apache.flink.table.planner.plan.utils.AggregateInfoList;
 import org.apache.flink.table.planner.plan.utils.AggregateUtil;
@@ -51,10 +63,11 @@ import org.apache.flink.util.jackson.JacksonMapperFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
-
-import static org.apache.flink.util.Preconditions.checkArgument;
-import static org.apache.flink.util.Preconditions.checkNotNull;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /** Stream {@link ExecNode} for unbounded incremental group aggregate. */
 @ExecNodeMetadata(
@@ -240,7 +253,7 @@ public class StreamExecIncrementalGroupAggregate extends StreamExecAggregateBase
         transform.setStateKeySelector(partialKeySelector);
         transform.setStateKeyType(partialKeySelector.getProducedType());
 
-        String oldDescription= transform.getDescription();
+        String oldDescription = transform.getDescription();
         transform.setDescription(getExtraDescription(oldDescription, partialLocalAggInfoList, incrementalAggInfo,
                 inputTransform, config.get(ExecutionConfigOptions.IDLE_STATE_RETENTION).toMillis()));
 
@@ -273,15 +286,15 @@ public class StreamExecIncrementalGroupAggregate extends StreamExecAggregateBase
                                        AggregateInfoList incrementalAggInfo, Transformation<RowData> inputTransform,
                                        long stateRetentionTime) {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
-        //get inputType info
+        // get inputType info
         List<String> inputTypeList = DescriptionUtil.getFieldTypeList(
                 ((InternalTypeInfo) inputTransform.getOutputType()).toRowType().getFields()
         );
 
-        //get outputTypes info
+        // get outputTypes info
         List<String> outputTypeList = DescriptionUtil.getFieldTypeList(((RowType) getOutputType()).getFields());
 
-        //get aggInfoList info map
+        // get aggInfoList info map
         Map<String, Object> aggInfoListMap = new LinkedHashMap<>();
         // partialLocal agg
         List<Map<String, Object>> partialLocalAggregateCalls = DescriptionUtil

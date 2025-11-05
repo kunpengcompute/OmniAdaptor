@@ -14,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
@@ -232,7 +235,7 @@ public class StreamExecRank extends ExecNodeBase<RowData>
         try {
             jsonString = objectMapper.writeValueAsString(jsonMap);
         } catch (JsonProcessingException e) {
-            LOG.warn("getExtraDescription error", e);;  // Handle the exception or log it
+            LOG.warn("getExtraDescription error", e);  // Handle the exception or log it
         }
 
         return jsonString;

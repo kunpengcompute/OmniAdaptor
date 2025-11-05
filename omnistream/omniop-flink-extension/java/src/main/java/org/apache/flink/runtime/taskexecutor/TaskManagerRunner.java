@@ -14,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.runtime.taskexecutor;
@@ -89,6 +92,7 @@ import org.apache.flink.util.TaskManagerExceptionUtils;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 import org.apache.flink.util.concurrent.FutureUtils;
 import org.apache.flink.util.function.FunctionUtils;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -492,7 +496,7 @@ public class TaskManagerRunner implements FatalErrorHandler {
     // --------------------------------------------------------------------------------------------
 
     public static void main(String[] args) throws Exception {
-        TNELLibrary.loadLibrary();
+        TNELLibrary.loadLibrary(args);
         // startup checks and logging
         EnvironmentInformation.logEnvironmentInfo(LOG, "TaskManager", args);
         SignalHandler.register(LOG);
@@ -568,8 +572,13 @@ public class TaskManagerRunner implements FatalErrorHandler {
             System.exit(FAILURE_EXIT_CODE);
         }
 
+        JSONObject config = new JSONObject(configuration.toMap());
+        LOG.info("init TMConfiguration: {}", config);
+        initTMConfiguration(config.toString());
         runTaskManagerProcessSecurely(checkNotNull(configuration));
     }
+
+    private static native void initTMConfiguration(String config);
 
     /**
      * runTaskManagerProcessSecurely

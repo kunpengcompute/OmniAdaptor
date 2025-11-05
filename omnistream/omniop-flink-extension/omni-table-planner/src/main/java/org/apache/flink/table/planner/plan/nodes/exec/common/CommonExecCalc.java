@@ -14,9 +14,15 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.common;
+
+import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
@@ -52,7 +58,6 @@ import org.apache.flink.util.jackson.JacksonMapperFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -60,8 +65,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.apache.flink.util.Preconditions.checkArgument;
-import static org.apache.flink.util.Preconditions.checkNotNull;
+import javax.annotation.Nullable;
 
 /**
  * Base class for exec Calc.
@@ -123,7 +127,7 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
         HashMap<Integer, Integer> accessIndexMap = new HashMap<>();
         HashMap<Integer, Integer> fieldCountMap = new HashMap<>();
 
-        //get inputType info
+        // get inputType info
         List<String> inputTypeList = new ArrayList<>();
         List<RowType.RowField> inputFields = ((InternalTypeInfo) inputTransform.getOutputType()).toRowType().getFields();
         int currentIndex = 0;
@@ -147,7 +151,7 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
             }
         }
 
-        //get outputTypes info
+        // get outputTypes info
         List<String> outputTypeList = new ArrayList<>();
         List<RowType.RowField> fields = ((RowType) getOutputType()).getFields();
         for (int oldIndex = 0; oldIndex < fields.size(); oldIndex++) {
@@ -166,7 +170,7 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
         }
         // Set the accessIndexMap
         RexNodeUtil.accessIndexMap = accessIndexMap;
-        //get output indices
+        // get output indices
         List<Map<String, Object>> indicesList = new ArrayList<>();
         for (RexNode rexNode : projection) {
             // A field reference to a row
@@ -179,7 +183,6 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
                 for (int i = 0; i < count; i++) {
                     RexInputRef fieldRef = RexInputRef.of(i, rexNode.getType());
                     Map<String, Object> fieldRefMap = RexNodeUtil.buildJsonMap(fieldRef);
-                    // int colValNew = (int)(fieldRefMap.get("colval")) + offset;
                     fieldRefMap.put("colVal", offset + i);
                     indicesList.add(fieldRefMap);
                 }
@@ -187,7 +190,7 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
                 indicesList.add(RexNodeUtil.buildJsonMap(rexNode));
             }
         }
-        //get condition info
+        // get condition info
         Map<String, Object> conditionMap = null;
         if (condition != null) {
             conditionMap = RexNodeUtil.buildJsonMap(condition);

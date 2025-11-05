@@ -39,7 +39,6 @@ public class ResultPartitionDeploymentDescriptorPOJO {
      */
     private int numberOfSubpartitions;
 
-
     public ResultPartitionDeploymentDescriptorPOJO() {
     }
 

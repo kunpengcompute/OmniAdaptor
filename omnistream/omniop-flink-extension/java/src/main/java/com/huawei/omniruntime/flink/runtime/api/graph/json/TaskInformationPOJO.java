@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
 package com.huawei.omniruntime.flink.runtime.api.graph.json;
 
 import static org.apache.flink.util.Preconditions.checkState;
@@ -6,11 +17,13 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.configuration.StreamC
 
 import org.apache.flink.runtime.executiongraph.TaskInformation;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.taskexecutor.TaskManagerConfiguration;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,11 +58,24 @@ public class TaskInformationPOJO {
 
     private String[] rocksdbStorePaths = new String[0];
 
+    private int taskType;
+
+    private CheckpointConfigPOJO checkpointConfig;
+
+    private ExecutionCheckpointConfigPOJO executionCheckpointConfig;
+
+    private int numberOfTransferThreads = 4;
+
+    private String tmpWorkingDirectory = "";
+
     // Default constructor
+    private String localRecoveryConfig = "";
+
     public TaskInformationPOJO() {
     }
 
-    public TaskInformationPOJO(TaskInformation taskInformation, ClassLoader cl, int indexOfSubtask) {
+    public TaskInformationPOJO(TaskInformation taskInformation, ClassLoader cl, int indexOfSubtask,
+        TaskManagerConfiguration taskManagerConfiguration) {
         this.taskName = taskInformation.getTaskName();
         this.numberOfSubtasks = taskInformation.getNumberOfSubtasks();
         this.maxNumberOfSubtasks = taskInformation.getMaxNumberOfSubtasks();
@@ -61,6 +87,8 @@ public class TaskInformationPOJO {
         LOG.info("after OperatorChainDescriptorHelper.retrieveOperatorChain");
 
         this.chainedConfig = new ArrayList<>(StreamConfigHelper.retrieveChainedConfig(tempStreamConfig, cl).values());
+        getCheckpointConfig(tempStreamConfig);
+        getTmpWorkDir(taskManagerConfiguration);
     }
 
     // Full argument constructor
@@ -89,13 +117,15 @@ public class TaskInformationPOJO {
                 if (!field.isAccessible()) {
                     field.setAccessible(true);
                 }
-                if (!name.equals("localRocksDbDirectories")) {
+                if (name.equals("localRocksDbDirectories")) {
+                    Object value = field.get(backend);
+                    File[] localRocksDbDirectories = (File[]) value;
+                    rocksdbStorePaths = getDbStoragePaths(localRocksDbDirectories);
                     continue;
                 }
-                Object value = field.get(backend);
-                File[] localRocksDbDirectories = (File[]) value;
-                rocksdbStorePaths = getDbStoragePaths(localRocksDbDirectories);
-                break;
+                if (name.equals("numberOfTransferThreads")) {
+                    numberOfTransferThreads = (int) field.get(backend);
+                }
             }
         } catch (IllegalAccessException ex) {
             LOG.warn("get rocksdb storePath failed", ex);
@@ -114,6 +144,19 @@ public class TaskInformationPOJO {
         }
     }
 
+    private void getCheckpointConfig(StreamConfig tempStreamConfig) {
+        this.checkpointConfig = JsonHelper.fromJson(tempStreamConfig.getCheckpointConf(), CheckpointConfigPOJO.class);
+        this.executionCheckpointConfig =
+            JsonHelper.fromJson(tempStreamConfig.getExecutionCheckpointConf(), ExecutionCheckpointConfigPOJO.class);
+    }
+
+    private void getTmpWorkDir(TaskManagerConfiguration taskManagerConfiguration) {
+        try {
+            this.tmpWorkingDirectory = taskManagerConfiguration.getTmpWorkingDirectory().getCanonicalPath();
+        } catch (IOException ex) {
+            LOG.warn("get tmpWorkingDirectory from taskManagerConfiguration error", ex);
+        }
+    }
 
     // Getters and setters
     public String getTaskName() {
@@ -180,10 +223,61 @@ public class TaskInformationPOJO {
         this.rocksdbStorePaths = rocksdbStorePaths;
     }
 
+    public int getTaskType() {
+        return taskType;
+    }
+    public void setTaskType(int taskType) {
+        this.taskType = taskType;
+    }
+
+    public CheckpointConfigPOJO getCheckpointConfig() {
+        return checkpointConfig;
+    }
+
+    public void setCheckpointConfig(CheckpointConfigPOJO checkpointConfig) {
+        this.checkpointConfig = checkpointConfig;
+    }
+
+    public ExecutionCheckpointConfigPOJO getExecutionCheckpointConfig() {
+        return executionCheckpointConfig;
+    }
+
+    public void setExecutionCheckpointConfig(ExecutionCheckpointConfigPOJO executionCheckpointConfig) {
+        this.executionCheckpointConfig = executionCheckpointConfig;
+    }
+
+    public int getNumberOfTransferThreads() {
+        return numberOfTransferThreads;
+    }
+
+    public void setNumberOfTransferThreads(int numberOfTransferThreads) {
+        this.numberOfTransferThreads = numberOfTransferThreads;
+    }
+
+    public String getTmpWorkingDirectory() {
+        return tmpWorkingDirectory;
+    }
+
+    public void setTmpWorkingDirectory(String tmpWorkingDirectory) {
+        this.tmpWorkingDirectory = tmpWorkingDirectory;
+    }
+
+    public String getLocalRecoveryConfig() {
+        return localRecoveryConfig;
+    }
+
+    public void setLocalRecoveryConfig(String localRecoveryConfig) {
+        this.localRecoveryConfig = localRecoveryConfig;
+    }
+    
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         checkState(o instanceof TaskInformationPOJO);
         TaskInformationPOJO that = (TaskInformationPOJO) o;
         return numberOfSubtasks == that.numberOfSubtasks
@@ -191,7 +285,8 @@ public class TaskInformationPOJO {
                 && Objects.equals(taskName, that.taskName)
                 && Objects.equals(streamConfig, that.streamConfig)
                 && Objects.equals(chainedConfig, that.chainedConfig)
-                && Objects.equals(indexOfSubtask, that.indexOfSubtask);
+                && Objects.equals(indexOfSubtask, that.indexOfSubtask)
+                && Objects.equals(localRecoveryConfig, that.localRecoveryConfig);
     }
 
     @Override
@@ -202,7 +297,8 @@ public class TaskInformationPOJO {
                 maxNumberOfSubtasks,
                 indexOfSubtask,
                 streamConfig,
-                chainedConfig);
+                chainedConfig,
+                localRecoveryConfig);
     }
 
     @Override
@@ -214,6 +310,7 @@ public class TaskInformationPOJO {
                 + ", indexOfSubtask=" + indexOfSubtask
                 + ", streamConfig=" + streamConfig
                 + ", chainedConfig=" + chainedConfig
+                + ", localRecoveryConfig=" + localRecoveryConfig
                 + '}';
     }
 }

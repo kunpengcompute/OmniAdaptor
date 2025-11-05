@@ -14,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.runtime.io.network.partition;
@@ -23,6 +26,8 @@ import static org.apache.flink.util.Preconditions.checkElementIndex;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
+import com.huawei.omniruntime.flink.runtime.io.network.partition.OmniPipelinedSubpartitionView;
+
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
@@ -31,6 +36,7 @@ import org.apache.flink.runtime.io.network.buffer.BufferCompressor;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.netty.OmniCreditBasedSequenceNumberingViewReader;
+import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
 import org.apache.flink.runtime.metrics.TimerGauge;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.util.function.SupplierWithException;
@@ -208,7 +214,7 @@ public abstract class BufferWritingResultPartition extends ResultPartition {
         finishUnicastBufferBuilders();
 
         try (BufferConsumer eventBufferConsumer =
-                     EventSerializer.toBufferConsumer(event, isPriorityEvent)) {
+                EventSerializer.toBufferConsumer(event, isPriorityEvent)) {
             for (ResultSubpartition subpartition : subpartitions) {
                 // Retain the buffer so that it can be recycled by each channel of targetPartition
                 subpartition.add(eventBufferConsumer.copy(), 0);
@@ -231,9 +237,16 @@ public abstract class BufferWritingResultPartition extends ResultPartition {
 
         ResultSubpartition subpartition = subpartitions[subpartitionIndex];
         ResultSubpartitionView readView = subpartition.createReadView(availabilityListener);
-
-        // bind nativeTaskRef to availabilityListener if it is an instance of OmniCreditBasedSequenceNumberingViewReader
-        bindOmniCreditBasedSequenceNumberingViewReaderToSubpartitionView(availabilityListener);
+        if(isNative()){
+            // bind nativeTaskRef to availabilityListener if it is an instance of OmniCreditBasedSequenceNumberingViewReader
+            if (availabilityListener instanceof OmniCreditBasedSequenceNumberingViewReader){
+                bindOmniCreditBasedSequenceNumberingViewReaderToSubpartitionView(availabilityListener);
+            }else if(availabilityListener instanceof LocalInputChannel){
+                PipelinedSubpartition pipelinedSubpartition = (PipelinedSubpartition)subpartition;
+                readView = bindNativeLocalInputChannel(availabilityListener,pipelinedSubpartition,subpartitionIndex);
+            }
+        }
+       
 
         LOG.debug("Created {}", readView);
 
@@ -448,13 +461,11 @@ public abstract class BufferWritingResultPartition extends ResultPartition {
 
     private void bindOmniCreditBasedSequenceNumberingViewReaderToSubpartitionView(
             BufferAvailabilityListener availabilityListener) {
-        if (availabilityListener instanceof OmniCreditBasedSequenceNumberingViewReader) {
             ((OmniCreditBasedSequenceNumberingViewReader) availabilityListener).setNativeTaskRef(nativeTaskRef);
             ((OmniCreditBasedSequenceNumberingViewReader) availabilityListener).setTaskName(this.getOwningTaskName());
 
             omniCreditBasedSequenceNumberingViewReaderList
                     .add((OmniCreditBasedSequenceNumberingViewReader) availabilityListener);
-        }
     }
 
     public long getNativeTaskRef() {
@@ -502,5 +513,22 @@ public abstract class BufferWritingResultPartition extends ResultPartition {
         }
 
         return totalWrittenBytes - totalNumberOfBytes;
+    }
+    
+    public ResultSubpartitionView bindNativeLocalInputChannel(BufferAvailabilityListener availabilityListener,
+            PipelinedSubpartition resultSubpartition, int subpartitionIndex) throws PartitionNotFoundException {
+        return new OmniPipelinedSubpartitionView(resultSubpartition, availabilityListener, nativeTaskRef,
+                subpartitionIndex);
+    }
+    
+    public  boolean isNative(){
+        return nativeTaskRef != -1 ;
+    }
+
+    @Override
+    public void alignedBarrierTimeout(long checkpointId) throws IOException {
+        for (ResultSubpartition subpartition : subpartitions) {
+            subpartition.alignedBarrierTimeout(checkpointId);
+        }
     }
 }

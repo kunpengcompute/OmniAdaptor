@@ -1,5 +1,4 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package com.huawei.omniruntime.flink.runtime.tasks;
@@ -114,6 +116,10 @@ public class OmniSourceStreamTaskV2<OUT, SRC extends SourceFunction<OUT>, OP ext
         // we check if the source is actually inducing the checkpoints, rather
         // than the trigger
         SourceFunction<?> source = mainOperator.getUserFunction();
+
+        if (source == null) {
+            throw new IllegalStateException("Source function cannot be null");
+        }
 
         Counter numRecordsIn = setupNumRecordsInCounter(mainOperator);
         Counter numRecordsOut = Objects.requireNonNull(operatorChain.getTailOperator()).getMetricGroup().getIOMetricGroup().getNumRecordsOutCounter();
@@ -217,7 +223,7 @@ public class OmniSourceStreamTaskV2<OUT, SRC extends SourceFunction<OUT>, OP ext
 
     private void readOutputStatus() {
         ByteBuffer outputBufferStatus = getOutputBufferStatus();
-        outputBufferStatus.position(0);//reset position to the start of the buffer
+        outputBufferStatus.position(0); // reset position to the start of the buffer
 
         long newResultBufferAddress = outputBufferStatus.getLong();
         LOG.info("old resultBufferAddress  = {} newResultBufferAddress  = {}", this.resultBufferAddress, newResultBufferAddress);
@@ -227,7 +233,7 @@ public class OmniSourceStreamTaskV2<OUT, SRC extends SourceFunction<OUT>, OP ext
             this.resultBuffer = MemoryUtils.wrapUnsafeMemoryWithByteBuffer(resultBufferAddress, capacity);
             this.resultBuffer.order(ByteOrder.BIG_ENDIAN);
             outputBufferStatus.position(20); // owner
-            outputBufferStatus.putInt(0);//output buffer is owned by java
+            outputBufferStatus.putInt(0); // output buffer is owned by java
         }
         outputBufferStatus.position(12);
         this.resultLength = outputBufferStatus.getInt();
@@ -258,8 +264,8 @@ public class OmniSourceStreamTaskV2<OUT, SRC extends SourceFunction<OUT>, OP ext
                 int channelNumber = resultBuffer.getInt(newLimit);
                 resultBuffer.limit(newLimit);
                 binaryDataOutput.emitRecord(resultBuffer, channelNumber);
-                elementIdx = newLimit + 4;// bytes for partition
-                //reset outputbuffer limit
+                elementIdx = newLimit + 4; // bytes for partition
+                // reset outputbuffer limit
                 resultBuffer.limit(limit);
             }
         } else {
@@ -277,8 +283,7 @@ public class OmniSourceStreamTaskV2<OUT, SRC extends SourceFunction<OUT>, OP ext
     private void cancelOperator() {
         try {
             if (mainOperator != null) {
-                //omni
-                //mainOperator.cancel();
+                // omni
                 cancelStreamSource();
             }
         } finally {
@@ -370,8 +375,7 @@ public class OmniSourceStreamTaskV2<OUT, SRC extends SourceFunction<OUT>, OP ext
                         ? FinishingReason.STOP_WITH_SAVEPOINT_DRAIN
                         : FinishingReason.STOP_WITH_SAVEPOINT_NO_DRAIN;
         if (mainOperator != null) {
-            //omni
-            //mainOperator.stop();
+            // omni
             cancelStreamSource();
         }
     }
@@ -401,8 +405,7 @@ public class OmniSourceStreamTaskV2<OUT, SRC extends SourceFunction<OUT>, OP ext
                     LOG.debug(
                             "Legacy source {} skip execution since the task is finished on restore",
                             getTaskNameWithSubtaskAndId());
-                    //omni
-                    //mainOperator.run(lock, operatorChain);
+                    // omni
                     runStreamSource();
                 }
                 completeProcessing();
@@ -473,10 +476,5 @@ public class OmniSourceStreamTaskV2<OUT, SRC extends SourceFunction<OUT>, OP ext
         this.omniTaskRef = nativeTaskAddress;
     }
 
-//    @Override
-//    public void restore() {
-//        nativeRestore(this.nativeSourceOperatorStreamTaskAddress);
-//    }
-//    private native void nativeRestore(long nativeSourceOperatorStreamTaskAddress);
 
 }

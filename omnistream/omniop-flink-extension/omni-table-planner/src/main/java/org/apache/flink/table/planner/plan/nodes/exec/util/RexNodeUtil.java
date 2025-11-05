@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
 package org.apache.flink.table.planner.plan.nodes.exec.util;
 
 import org.apache.calcite.rex.RexCall;
@@ -53,8 +64,8 @@ public class RexNodeUtil {
         RexTypeToIdMap.put("ROW", 17);
         RexTypeToIdMap.put("INVALID", 18);
         RexTypeToIdMap.put("TIME_WITHOUT_TIME_ZONE", 19); // TODO: Is this the same as TIME?
-        RexTypeToIdMap.put("TIMESTAMP_WITHOUT_TIME_ZONE", 20);//TODO: Omni's TIMESTAMP uses int64_t, Flink has the possibility of accuracy>3
-        RexTypeToIdMap.put("TIMESTAMP_TZ", 21);//TIMESTAMP_WITH_TIMEZONE
+        RexTypeToIdMap.put("TIMESTAMP_WITHOUT_TIME_ZONE", 20); // TODO: Omni's TIMESTAMP uses int64_t, Flink has the possibility of accuracy>3
+        RexTypeToIdMap.put("TIMESTAMP_TZ", 21); // TIMESTAMP_WITH_TIMEZONE
         RexTypeToIdMap.put("TIMESTAMP_WITH_LOCAL_TIME_ZONE", 22);
         RexTypeToIdMap.put("ARRAY", 23);
         RexTypeToIdMap.put("MULTISET", 24);
@@ -118,16 +129,16 @@ public class RexNodeUtil {
 
 
     public enum BinaryExprType {
-        //binary logical operators
+        // binary logical operators
         OR,
         AND,
-        //Arithmetic
+        // Arithmetic
         ADD,
         SUBTRACT,
         MULTIPLY,
         DIVIDE,
         MODULUS,
-        //Comparison
+        // Comparison
         GREATER_THAN,
         GREATER_THAN_OR_EQUAL,
         LESS_THAN,
@@ -240,41 +251,6 @@ public class RexNodeUtil {
             } else if (specialOperatorMap.containsKey(operator.getName())) {
                 SpecialExprType specialType = specialOperatorMap.get(operator.getName());
                 switch (specialType){
-			/*
-                    case SWITCH:
-                        jsonMap.put("exprType",  specialType.SWITCH);
-                        jsonMap.put("returnType", RexTypeToIdMap.get(rexCall.getType().getSqlTypeName().toString()));
-                        int numOfCases = (numOperands-1)/2;
-                        jsonMap.put("numOfCases", numOfCases);
-                        RexNode input = null;
-                        for(int i = 1;i<= numOfCases;i++){
-                            int index = (i-1)*2;
-                            Object[] expr = getExpression(operands.get(index));
-                            if (input != null && (!input.equals(expr[0]))){
-                                //if the input expressions do not match each others
-                                LOG.info("Cannot parse the CASE expression.");
-                                break;
-                            }else{
-                                input = (RexNode) expr[0];
-                                String key= "Case"+Integer.toString(i);
-                                Map<String, Object> valueMap = buildJsonMap((RexNode) expr[1]);
-                                Map<String, Object> resultMap = buildJsonMap((RexNode) operands.get(index+1));
-                                Map<String, Object> whenJsonMap = new LinkedHashMap<>();
-                                whenJsonMap.put("exprType","WHEN" );
-                                whenJsonMap.put("returnType", RexTypeToIdMap.get(rexCall.getType().getSqlTypeName().toString()));
-                                whenJsonMap.put("when", valueMap);
-                                whenJsonMap.put("result", resultMap);
-                                jsonMap.put(key, whenJsonMap);
-                            }
-
-                        }
-                        Map<String, Object> inputMap = buildJsonMap((RexNode) input);
-                        jsonMap.put("input", inputMap);
-                        Map<String, Object> defaultMap = buildJsonMap((RexNode)operands.get(numOperands-1));
-                        jsonMap.put("else", defaultMap);
-                        LOG.info("The expression is {} ", rexCall.toString());
-                        break;
-                    */
                     case SWITCH: // This is the more general switch
                     case IF:
                         jsonMap.put("exprType",  "SWITCH_GENERAL");
@@ -283,8 +259,6 @@ public class RexNodeUtil {
                         // SWITCH([input_expr, condition1], 'result1', [input_expr, condition2], 'result2', 'optional other')
                         int numOfCases = (numOperands - 1) / 2;
                         jsonMap.put("numOfCases", numOfCases);
-
-                        //jsonMap.put("input", buildJsonMap(operands.get(0)));
 
                         for (int i = 0; i < numOfCases; i++) {
                             Map<String, Object> caseMap = new LinkedHashMap<>();
@@ -398,8 +372,7 @@ public class RexNodeUtil {
                         Integer returnType = RexTypeToIdMap.get(rexCall.getType().getSqlTypeName().toString());
                         if (returnType == 1){
                             jsonMap.put("function_name", "mm3hash");
-                        }
-                        else {
+                        } else {
                             jsonMap.put("function_name", "xxhash64");
                         }
                         jsonMap.put("function_name", "mm3hash");
@@ -417,7 +390,7 @@ public class RexNodeUtil {
                         break;
                     case EXTRACT:
                         // Current hardcoded solution for extracting hour
-                        if (operands.get(0).toString().equals("FLAG(HOUR)")) {// && operands.get(1).toString().equals("CAST($2):TIMESTAMP(3)")){
+                        if (operands.get(0).toString().equals("FLAG(HOUR)")) { // && operands.get(1).toString().equals("CAST($2):TIMESTAMP(3)")
                             jsonMap.put("exprType", "FUNCTION");
                             // Returns int for 0-24
                             jsonMap.put("returnType", 1);
@@ -447,8 +420,6 @@ public class RexNodeUtil {
                         break;
                     case PROCTIME:
                         jsonMap.put("exprType", SpecialExprType.PROCTIME);
-//                        jsonMap.put("returnType",  rexCall.getType().getSqlTypeName().toString());
-//                        jsonMap.put("dataType", rexCall.getType().getSqlTypeName().toString());
                         jsonMap.put("returnType", 22);
                         LOG.info("The operator is* {} ", operator.getName());
                         LOG.info("The type is* {} ", rexCall.getType().getSqlTypeName().toString());
@@ -526,15 +497,13 @@ public class RexNodeUtil {
                         break;
                 }
                 return jsonMap;
-            }
-            else{
+            } else {
                 LOG.info("The operator {} is not supported", operator.toString());
                 LOG.info("The expression is {} ", rexCall.toString());
                 jsonMap.put("operator","INVALID");
                 return jsonMap;
             }
-        }
-        else if (rexNode instanceof RexLiteral) {
+        } else if (rexNode instanceof RexLiteral) {
             RexLiteral rexLiteral = (RexLiteral) rexNode;
             jsonMap.put("exprType",  OperatorExprType.LITERAL.name());
             setDataType(rexLiteral, jsonMap, "dataType");
@@ -543,23 +512,23 @@ public class RexNodeUtil {
                 Object value = rexLiteral.getValue2();
                 jsonMap.put("value",value);
             }
-            //todo: for DECIMAL64D and DECIMAL128, add fields: precision and scale
+            // todo: for DECIMAL64D and DECIMAL128, add fields: precision and scale
             return jsonMap;
 
         } else if (rexNode instanceof RexInputRef){
             RexInputRef inputRef = (RexInputRef) rexNode;
             if (inputRef instanceof RexPatternFieldRef || inputRef instanceof RexTableInputRef){
-                //we may parse RexTableInputRef later.
+                // we may parse RexTableInputRef later.
                 LOG.info("RexPatternFieldRef/RexTableInputRef is not supported.");
                 jsonMap.put("exprType",  OperatorExprType.INVALID.name());
                 return jsonMap;
-            } else{ // deal with $index
+            } else { // deal with $index
                 RexInputRef  rexInputRef =(RexInputRef) rexNode;
                 jsonMap.put("exprType",  OperatorExprType.FIELD_REFERENCE.name());
                 SqlTypeName dataType= rexInputRef.getType().getSqlTypeName();
                 setDataType(rexInputRef, jsonMap, "dataType");
                 jsonMap.put("colVal", accessIndexMap.getOrDefault(rexInputRef.hashCode(), rexInputRef.hashCode()));
-                //todo: add fields precision and scale for DECIMAL64D and DECIMAL128
+                // todo: add fields precision and scale for DECIMAL64D and DECIMAL128
                 return jsonMap;
             }
         } else if (rexNode instanceof RexFieldAccess){
@@ -570,19 +539,10 @@ public class RexNodeUtil {
             setDataType(fieldAccess, jsonMap, "dataType");
             int colVal = fieldAccess.getReferenceExpr().hashCode();
             int fieldVal = fieldAccess.getField().getIndex();
-            //offset + fieldVal
+            // offset + fieldVal
             jsonMap.put("colVal", accessIndexMap.get(colVal) + fieldVal);
             return jsonMap;
-            /*
-            jsonMap.put("exprType",  OperatorExprType.FIELD_ACCESS.name());
-            SqlTypeName dataType= fieldAccess.getType().getSqlTypeName();
-	        setDataType(fieldAccess, jsonMap);
-            jsonMap.put("colVal", fieldAccess.getReferenceExpr().hashCode());
-            jsonMap.put("field_colVal", fieldAccess.getField().getIndex());
-            return jsonMap;
-            */
-        }
-        else {// todo: we may consider to parse other types of RexNode later.
+        } else { // todo: we may consider to parse other types of RexNode later.
             SqlKind kind = rexNode.getKind();
             LOG.info("The RexNode is {}", kind);
             jsonMap.put("exprType",  OperatorExprType.INVALID.name());

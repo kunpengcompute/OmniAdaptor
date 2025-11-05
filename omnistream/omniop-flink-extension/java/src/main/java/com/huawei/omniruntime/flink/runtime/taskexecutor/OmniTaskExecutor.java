@@ -1,5 +1,4 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package com.huawei.omniruntime.flink.runtime.taskexecutor;
@@ -28,15 +30,21 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.TaskInformationPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.descriptor.TaskDeploymentDescriptorPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.operatorchain.OperatorPOJO;
 import com.huawei.omniruntime.flink.runtime.shuffle.OmniShuffleEnvironment;
+import com.huawei.omniruntime.flink.runtime.state.TaskStateManagerWrapper;
 import com.huawei.omniruntime.flink.runtime.taskmanager.OmniTask;
-
+import com.huawei.omniruntime.flink.runtime.taskmanager.OmniTaskReferenceCounter;
+import com.huawei.omniruntime.flink.runtime.taskmanager.OmniTaskWrapper;
 import com.huawei.omniruntime.flink.streaming.api.graph.JobType;
 import com.huawei.omniruntime.flink.utils.UdfUtil;
+
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.blob.TaskExecutorBlobService;
+import org.apache.flink.runtime.checkpoint.CheckpointException;
+import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
+import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.execution.librarycache.LibraryCacheManager;
@@ -58,10 +66,13 @@ import org.apache.flink.runtime.metrics.groups.TaskManagerMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcService;
+import org.apache.flink.runtime.state.LocalRecoveryConfig;
 import org.apache.flink.runtime.state.TaskLocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.state.changelog.StateChangelogStorage;
+import org.apache.flink.runtime.state.LocalRecoveryDirectoryProvider;
+import org.apache.flink.runtime.state.LocalRecoveryDirectoryProviderImpl;
 import org.apache.flink.runtime.taskexecutor.GlobalAggregateManager;
 import org.apache.flink.runtime.taskexecutor.JobTable;
 import org.apache.flink.runtime.taskexecutor.PartitionProducerStateChecker;
@@ -74,7 +85,9 @@ import org.apache.flink.runtime.taskexecutor.rpc.RpcTaskOperatorEventGateway;
 import org.apache.flink.runtime.taskexecutor.slot.SlotNotActiveException;
 import org.apache.flink.runtime.taskexecutor.slot.SlotNotFoundException;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
+import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.util.UserCodeClassLoader;
 import org.apache.flink.util.concurrent.FutureUtils;
@@ -82,10 +95,14 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -104,6 +121,7 @@ public class OmniTaskExecutor extends TaskExecutor {
 
     private OmniShuffleEnvironment omniShuffleEnvironment;
     private OmniTaskManagerServices omniTaskManagerServices;
+    private Map<ExecutionAttemptID, OmniTaskReferenceCounter> taskMap = new HashMap<>();
 
     public OmniTaskExecutor(RpcService rpcService,
                             TaskManagerConfiguration taskManagerConfiguration,
@@ -220,7 +238,7 @@ public class OmniTaskExecutor extends TaskExecutor {
                     tdd.getExecutionAttemptId(),
                     tdd.getAllocationId());
 
-            //OmniStream Extension point
+            // OmniStream Extension point
 
             // if omnitask
             createOmniTaskIfUseOmni(tdd, taskInformation, jobInformation, classLoaderHandle, task);
@@ -230,6 +248,8 @@ public class OmniTaskExecutor extends TaskExecutor {
 
             try {
                 taskAdded = taskSlotTable.addTask(task);
+                deleteLeftTaskInTaskMap(executionAttemptID);
+                taskMap.put(task.getExecutionId(), new OmniTaskReferenceCounter(task));
             } catch (SlotNotFoundException | SlotNotActiveException e) {
                 throw new TaskSubmissionException("Could not submit task.", e);
             }
@@ -257,10 +277,10 @@ public class OmniTaskExecutor extends TaskExecutor {
     private void createOmniTaskIfUseOmni(TaskDeploymentDescriptor tdd, TaskInformation taskInformation,
         JobInformation jobInformation, LibraryCacheManager.ClassLoaderHandle classLoaderHandle,
         OmniTask task) throws Exception {
-        boolean useomniFlag = taskInformation.getTaskConfiguration().getBoolean("useomni", false);
+        boolean useOmniFlag = taskInformation.getTaskConfiguration().getBoolean("useomni", false);
         int jobType = taskInformation.getTaskConfiguration().getInteger("jobType", 0);
-        log.info("Task name is {} and useOmniFlag is {} ", taskInformation.getTaskName(), useomniFlag);
-        if (useomniFlag) {
+        log.info("Task name is {} and useOmniFlag is {} ", taskInformation.getTaskName(), useOmniFlag);
+        if (useOmniFlag) {
             // stream config pojo
             Collection<PermanentBlobKey> requiredJarFiles = jobInformation.getRequiredJarFileBlobKeys();
             Collection<URL> requiredClasspaths = jobInformation.getRequiredClasspathURLs();
@@ -274,7 +294,8 @@ public class OmniTaskExecutor extends TaskExecutor {
 
             // task information pojo
             TaskInformationPOJO taskInformationPOJO = new TaskInformationPOJO(taskInformation,
-                codeClassLoader.asClassLoader(), task.getTaskInfo().getIndexOfThisSubtask());
+                codeClassLoader.asClassLoader(), task.getTaskInfo().getIndexOfThisSubtask(), taskManagerConfiguration);
+
             LOG.info("TaskInformationPOJO is {}", taskInformationPOJO);
             LOG.info("TaskInformationPOJO JSON is {}", JsonHelper.toJson(taskInformationPOJO));
 
@@ -285,9 +306,7 @@ public class OmniTaskExecutor extends TaskExecutor {
             LOG.info("JobInformationPOJO JSON is {}", JsonHelper.toJson(jobInformationPOJO));
 
             // tdd pojo
-            TaskDeploymentDescriptorPOJO tddPojo = new TaskDeploymentDescriptorPOJO(tdd);
-            LOG.info("TaskDeploymentDescriptorPOJO is {}", tddPojo);
-            LOG.info("TaskDeploymentDescriptorPOJO JSON is {}", JsonHelper.toJson(tddPojo));
+            TaskDeploymentDescriptorPOJO tddPojo = getTaskDeploymentDescriptorPOJO(tdd);
 
             // update udf info
             for (StreamConfigPOJO config : taskInformationPOJO.getChainedConfig()) {
@@ -298,28 +317,48 @@ public class OmniTaskExecutor extends TaskExecutor {
                 description = JsonHelper.updateJsonString(description, jarPath);
                 operatorDescriptionPOJO.setDescription(description);
             }
-            {
-                OperatorPOJO pojo = taskInformationPOJO.getStreamConfig().getOperatorDescription();
-                String description = pojo.getDescription();
-                JobID jobID = jobInformation.getJobId();
-                String jarPath = UdfUtil.getJobJarPath(jobID);
-                description = JsonHelper.updateJsonString(description, jarPath);
-                pojo.setDescription(description);
-            }
+            OperatorPOJO pojo = taskInformationPOJO.getStreamConfig().getOperatorDescription();
+            String description = pojo.getDescription();
+            JobID jobID = jobInformation.getJobId();
+            String jarPath = UdfUtil.getJobJarPath(jobID);
+            description = JsonHelper.updateJsonString(description, jarPath);
+            pojo.setDescription(description);
 
-            long nativeTaskAddress = submitTaskNative(this.nativeTaskExecutorReference, JsonHelper.toJson(jobInformationPOJO),
-                    JsonHelper.toJson(taskInformationPOJO), JsonHelper.toJson(tddPojo));
+            taskInformationPOJO.setTaskType(jobType);
 
-            LOG.info("task {} native address is {} ", task.getExecutionId(), nativeTaskAddress);
+            final String localRecoveryConfig =
+                getLocalRecoveryConfig(new TaskParam(tdd, tdd.getJobId(), taskInformation, jobInformation));
+            taskInformationPOJO.setLocalRecoveryConfig(Objects.toString(localRecoveryConfig, ""));
+
+            OmniTaskWrapper omniTaskWrapper=new OmniTaskWrapper(task);
+            long nativeTaskAddress = submitTaskNativeWithCheckpointing(this.nativeTaskExecutorReference, JsonHelper.toJson(jobInformationPOJO),
+                    JsonHelper.toJson(taskInformationPOJO), JsonHelper.toJson(tddPojo), task.getTaskStateManagerWrapper(),omniTaskWrapper,task.getTaskOperatorGatewayWrapper());
             ((OmniTask) task).bindNativeTask(nativeTaskAddress);
             ((OmniTask) task).setJobType(JobType.fromValue(jobType));
+        } else {
+            log.info("Task {} is not an OmniTask, no need to create OmniTask.", task.getExecutionId());
         }
+    }
 
+    private static TaskDeploymentDescriptorPOJO getTaskDeploymentDescriptorPOJO(TaskDeploymentDescriptor tdd) {
+        TaskDeploymentDescriptorPOJO tddPojo = new TaskDeploymentDescriptorPOJO(tdd);
+        JobManagerTaskRestore restore = tdd.getTaskRestore();
+        if (restore != null) {
+            String restoreJson = JsonHelper.toJsonWithAllFields(restore.getTaskStateSnapshot());
+            tddPojo.setTaskStateSnapshot(restoreJson);
+            tddPojo.setRestoreCheckpointId(restore.getRestoreCheckpointId());
+            LOG.info("TaskStateSnapshot JSON is {}", restoreJson);
+        } else {
+            LOG.warn("JobManagerTaskRestore is null in TDD");
+        }
+        LOG.info("TaskDeploymentDescriptorPOJO is {}", tddPojo);
+        LOG.info("TaskDeploymentDescriptorPOJO JSON is {}", JsonHelper.toJson(tddPojo));
+        return tddPojo;
     }
 
     private OmniTask getTask(TaskParam taskParam, JobTable.Connection jobManagerConnection,
                              ExecutionAttemptID executionAttemptID,
-                             LibraryCacheManager.ClassLoaderHandle classLoaderHandle) throws TaskSubmissionException {
+                             LibraryCacheManager.ClassLoaderHandle classLoaderHandle) throws TaskSubmissionException, NoSuchFieldException, IllegalAccessException {
         if (!taskParam.jobId.equals(taskParam.jobInformation.getJobId())) {
             throw new TaskSubmissionException(
                     "Inconsistent job ID information inside TaskDeploymentDescriptor ("
@@ -339,13 +378,15 @@ public class OmniTaskExecutor extends TaskExecutor {
         final TaskOperatorEventGateway taskOperatorEventGateway =
                 new RpcTaskOperatorEventGateway(jobManagerConnection.getJobManagerGateway(),
                         executionAttemptID, (t) -> runAsync(() -> failTask(executionAttemptID, t)));
-
+        final TaskOperatorGatewayWrapper taskOperatorGatewayWrapper=new TaskOperatorGatewayWrapper(taskOperatorEventGateway);
         TaskManagerActions taskManagerActions = jobManagerConnection.getTaskManagerActions();
         CheckpointResponder checkpointResponder = jobManagerConnection.getCheckpointResponder();
         GlobalAggregateManager aggregateManager = jobManagerConnection.getGlobalAggregateManager();
         PartitionProducerStateChecker partitionStateChecker = jobManagerConnection.getPartitionStateChecker();
 
         final TaskStateManager taskStateManager = getTaskStateManager(taskParam, jobGroup, checkpointResponder);
+        final TaskStateManagerWrapper taskStateManagerWrapper = new TaskStateManagerWrapper(taskStateManager);
+
 
         MemoryManager memoryManager;
         try {
@@ -362,12 +403,61 @@ public class OmniTaskExecutor extends TaskExecutor {
                         taskExecutorServices.getTaskEventDispatcher(), externalResourceInfoProvider, taskStateManager,
                         taskManagerActions, inputSplitProvider, checkpointResponder, taskOperatorEventGateway,
                         aggregateManager, classLoaderHandle, fileCache, taskManagerConfiguration, taskMetricGroup,
-                        partitionStateChecker, getRpcService().getScheduledExecutor());
+                        partitionStateChecker, getRpcService().getScheduledExecutor(), taskMap,
+                        taskStateManagerWrapper,taskOperatorGatewayWrapper);
 
         taskMetricGroup.gauge(MetricNames.IS_BACK_PRESSURED, task::isBackPressured);
         return task;
     }
 
+    private String getLocalRecoveryConfig(TaskParam taskParam) throws NoSuchFieldException, IllegalAccessException, JsonProcessingException {
+        final TaskLocalStateStore localStateStore =
+            localStateStoresManager.localStateStoreForSubtask(
+                taskParam.jobId,
+                taskParam.tdd.getAllocationId(),
+                taskParam.taskInformation.getJobVertexId(),
+                taskParam.tdd.getSubtaskIndex(),
+                taskManagerConfiguration.getConfiguration(),
+                taskParam.jobInformation.getJobConfiguration());
+
+        LocalRecoveryConfig config = localStateStore.getLocalRecoveryConfig();
+        Field field = LocalRecoveryConfig.class.getDeclaredField("localStateDirectories"); // adjust the field name
+        field.setAccessible(true); // allow access to private field
+
+        // Get the value of the field (interface type)
+        LocalRecoveryDirectoryProvider provider = (LocalRecoveryDirectoryProvider) field.get(config);
+
+        // Cast to the implementation
+        if (provider instanceof LocalRecoveryDirectoryProviderImpl) {
+            LocalRecoveryDirectoryProviderImpl impl = (LocalRecoveryDirectoryProviderImpl) provider;
+            Map<String, Object> directoryProviderMap = new HashMap<>();
+
+            int dirsCount = impl.allocationBaseDirsCount();
+            List<String> allocationBaseDirs = new ArrayList<>(dirsCount);
+            for (int i = 0; i < dirsCount; i++) {
+                File dir = impl.selectAllocationBaseDirectory(i);
+                try {
+                    allocationBaseDirs.add(dir.getCanonicalPath());
+                } catch (IOException e) {
+                    log.warn("Failed to get canonical path for {}:", dir);
+                    allocationBaseDirs.add(null);
+                }
+            }
+            directoryProviderMap.put("allocationBaseDirs", allocationBaseDirs);
+
+            for (String fieldName : new String[] {"jobID", "jobVertexID", "subtaskIndex"}) {
+                Field f = LocalRecoveryDirectoryProviderImpl.class.getDeclaredField(fieldName);
+                f.setAccessible(true);
+                Object val = f.get(impl);
+                directoryProviderMap.put(fieldName, val != null ? val.toString() : null);
+            }
+
+            return JsonHelper.toJson(directoryProviderMap);
+        } else {
+            LOG.info("The provider is not of type LocalRecoveryDirectoryProviderImpl");
+        }
+        return null;
+    }
 
     private TaskStateManager getTaskStateManager(TaskParam taskParam, TaskManagerJobMetricGroup jobGroup,
         CheckpointResponder checkpointResponder) throws TaskSubmissionException {
@@ -444,6 +534,29 @@ public class OmniTaskExecutor extends TaskExecutor {
         }
         return jobManagerConnection;
     }
+    
+    private void deleteLeftTaskInTaskMap(ExecutionAttemptID executionAttemptID) {
+        if (!taskMap.isEmpty()) {
+            ExecutionAttemptID existId = taskMap.keySet().toArray(new ExecutionAttemptID[0])[0];
+            Object existGraphId = getFieldByReflection(ExecutionAttemptID.class, existId, "executionGraphId");
+            Object currentGraphId = getFieldByReflection(ExecutionAttemptID.class, executionAttemptID,
+                    "executionGraphId");
+            if (!existGraphId.equals(currentGraphId)) {
+                taskMap.clear();
+            }
+        }
+        
+    }
+    
+    public Object getFieldByReflection(Class clazz, Object target, String fieldName) {
+        try {
+            Field field = clazz.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            return null;
+        }
+    }
 
     private native long createNativeTaskExecutor(
             String taskExecutorConfiguration,
@@ -455,4 +568,133 @@ public class OmniTaskExecutor extends TaskExecutor {
             String jobJson,
             String taskJson,
             String tddJson);
+
+    // return nativeTaskAddress
+    private native long submitTaskNativeWithCheckpointing(
+            long nativeTaskExecutorReference,
+            String jobJson,
+            String taskJson,
+            String tddJson,
+            TaskStateManagerWrapper taskStateManagerWrapper,
+            OmniTaskWrapper omniTaskWrapper,
+            TaskOperatorGatewayWrapper taskOperatorGatewayWrapper);
+
+
+    // ----------------------------------------------------------------------
+    // Checkpointing RPCs
+    // ----------------------------------------------------------------------
+
+    @Override
+    public CompletableFuture<Acknowledge> triggerCheckpoint(
+            ExecutionAttemptID executionAttemptID,
+            long checkpointId,
+            long checkpointTimestamp,
+            CheckpointOptions checkpointOptions) {
+        log.debug(
+                "Trigger checkpoint {}@{} for {}.",
+                checkpointId,
+                checkpointTimestamp,
+                executionAttemptID);
+
+        final Task task = taskSlotTable.getTask(executionAttemptID);
+
+        if (task != null) {
+            final OmniTask omniTask = (OmniTask) task;
+            if (omniTask.isOmniStream()) {
+                omniTask.omniTriggerCheckpointBarrier(checkpointId, checkpointTimestamp, checkpointOptions);
+            } else {
+                task.triggerCheckpointBarrier(checkpointId, checkpointTimestamp, checkpointOptions);
+            }
+
+            return CompletableFuture.completedFuture(Acknowledge.get());
+        } else {
+            final String message =
+                    "TaskManager received a checkpoint request for unknown task "
+                            + executionAttemptID
+                            + '.';
+
+            log.debug(message);
+            return FutureUtils.completedExceptionally(
+                    new CheckpointException(
+                            message, CheckpointFailureReason.TASK_CHECKPOINT_FAILURE));
+        }
+    }
+
+    @Override
+    public CompletableFuture<Acknowledge> confirmCheckpoint(
+            ExecutionAttemptID executionAttemptID,
+            long completedCheckpointId,
+            long completedCheckpointTimestamp,
+            long lastSubsumedCheckpointId) {
+        log.debug(
+                "Confirm completed checkpoint {}@{} and last subsumed checkpoint {} for {}.",
+                completedCheckpointId,
+                completedCheckpointTimestamp,
+                lastSubsumedCheckpointId,
+                executionAttemptID);
+
+        final Task task = taskSlotTable.getTask(executionAttemptID);
+
+        if (task != null) {
+            final OmniTask omniTask = (OmniTask) task;
+            if (omniTask.isOmniStream()) {
+                omniTask.omniNotifyCheckpointComplete(completedCheckpointId);
+                omniTask.omniNotifyCheckpointSubsumed(lastSubsumedCheckpointId);
+            }else {
+                task.notifyCheckpointComplete(completedCheckpointId);
+                task.notifyCheckpointSubsumed(lastSubsumedCheckpointId);
+            }
+            return CompletableFuture.completedFuture(Acknowledge.get());
+        } else {
+            final String message =
+                    "TaskManager received a checkpoint confirmation for unknown task "
+                            + executionAttemptID
+                            + '.';
+
+            log.debug(message);
+            return FutureUtils.completedExceptionally(
+                    new CheckpointException(
+                            message,
+                            CheckpointFailureReason.UNKNOWN_TASK_CHECKPOINT_NOTIFICATION_FAILURE));
+        }
+    }
+
+
+    @Override
+    public CompletableFuture<Acknowledge> abortCheckpoint(
+            ExecutionAttemptID executionAttemptID,
+            long checkpointId,
+            long latestCompletedCheckpointId,
+            long checkpointTimestamp) {
+        log.debug(
+                "Abort checkpoint {}@{} for {}.",
+                checkpointId,
+                checkpointTimestamp,
+                executionAttemptID);
+
+        final Task task = taskSlotTable.getTask(executionAttemptID);
+        if (task != null) {
+            final OmniTask omniTask = (OmniTask) task;
+            if (omniTask.isOmniStream()) {
+                omniTask.omniNotifyCheckpointAborted(checkpointId, latestCompletedCheckpointId);
+            }else {
+                task.notifyCheckpointAborted(checkpointId, latestCompletedCheckpointId);
+            }
+            return CompletableFuture.completedFuture(Acknowledge.get());
+        } else {
+            final String message =
+                    "TaskManager received an aborted checkpoint for unknown task "
+                            + executionAttemptID
+                            + '.';
+
+            log.debug(message);
+            return FutureUtils.completedExceptionally(
+                    new CheckpointException(
+                            message,
+                            CheckpointFailureReason.UNKNOWN_TASK_CHECKPOINT_NOTIFICATION_FAILURE));
+        }
+    }
+
+
+
 }

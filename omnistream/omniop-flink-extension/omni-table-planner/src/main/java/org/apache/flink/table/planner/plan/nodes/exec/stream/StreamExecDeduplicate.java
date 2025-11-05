@@ -14,9 +14,17 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
+
+import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_DEDUPLICATE_INSERT_UPDATE_AFTER_SENSITIVE_ENABLED;
+import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_DEDUPLICATE_MINIBATCH_COMPACT_CHANGES_ENABLED;
+import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 import org.apache.flink.FlinkVersion;
 import org.apache.flink.annotation.Experimental;
@@ -38,7 +46,15 @@ import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.EqualiserCodeGenerator;
 import org.apache.flink.table.planner.delegation.PlannerBase;
-import org.apache.flink.table.planner.plan.nodes.exec.*;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeMetadata;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
+import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.plan.utils.KeySelectorUtil;
@@ -47,11 +63,18 @@ import org.apache.flink.table.runtime.keyselector.RowDataKeySelector;
 import org.apache.flink.table.runtime.operators.bundle.KeyedMapBundleOperator;
 import org.apache.flink.table.runtime.operators.bundle.MapBundleFunction;
 import org.apache.flink.table.runtime.operators.bundle.trigger.CountBundleTrigger;
-import org.apache.flink.table.runtime.operators.deduplicate.*;
+import org.apache.flink.table.runtime.operators.deduplicate.ProcTimeDeduplicateKeepFirstRowFunction;
+import org.apache.flink.table.runtime.operators.deduplicate.ProcTimeDeduplicateKeepLastRowFunction;
+import org.apache.flink.table.runtime.operators.deduplicate.ProcTimeMiniBatchDeduplicateKeepFirstRowFunction;
+import org.apache.flink.table.runtime.operators.deduplicate.ProcTimeMiniBatchDeduplicateKeepLastRowFunction;
+import org.apache.flink.table.runtime.operators.deduplicate.RowTimeDeduplicateFunction;
+import org.apache.flink.table.runtime.operators.deduplicate.RowTimeMiniBatchDeduplicateFunction;
+import org.apache.flink.table.runtime.operators.deduplicate.RowTimeMiniBatchLatestChangeDeduplicateFunction;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.runtime.typeutils.TypeCheckUtils;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,11 +82,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_DEDUPLICATE_INSERT_UPDATE_AFTER_SENSITIVE_ENABLED;
-import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_DEDUPLICATE_MINIBATCH_COMPACT_CHANGES_ENABLED;
-import static org.apache.flink.util.Preconditions.checkArgument;
-import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * Stream {@link ExecNode} which deduplicate on keys and keeps only first row or last row. This node
@@ -176,22 +194,22 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
     private String getExtraDescription(TableConfig tableConfig, String oldDescription,
                                        Transformation<RowData> inputTransform, RowType inputRowType) {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
-        //get inputType info
+        // get inputType info
         List<String> inputTypeList = DescriptionUtil.getFieldTypeList(
                 ((InternalTypeInfo) inputTransform.getOutputType()).toRowType().getFields()
         );
 
-        //get outputTypes info
+        // get outputTypes info
         List<String> outputTypeList = DescriptionUtil.getFieldTypeList(((RowType) getOutputType()).getFields());
 
 
         // get isCompactChanges
-        boolean isCompactChanges= tableConfig
+        boolean isCompactChanges = tableConfig
                 .getConfiguration()
                 .getBoolean(TABLE_EXEC_DEDUPLICATE_MINIBATCH_COMPACT_CHANGES);
 
         // get minRetentionTime
-        long minRetentionTime= tableConfig.getMinIdleStateRetentionTime();
+        long minRetentionTime = tableConfig.getMinIdleStateRetentionTime();
 
         // get rowtimeIndex
         int rowtimeIndex = -1;
@@ -236,7 +254,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
         jsonMap.put("miniBatchSize", miniBatchSize);
         jsonMap.put("isRowtime", isRowtime);
         jsonMap.put("grouping", uniqueKeys);
-        String jsonString="";
+        String jsonString = "";
         try {
             jsonString = objectMapper.writeValueAsString(jsonMap);
         } catch (JsonProcessingException e) {
@@ -297,7 +315,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
                         planner.getFlinkContext().getClassLoader(), uniqueKeys, rowTypeInfo);
         transform.setStateKeySelector(selector);
         transform.setStateKeyType(selector.getProducedType());
-        String oldDescription= transform.getDescription();
+        String oldDescription = transform.getDescription();
         transform.setDescription(getExtraDescription(planner.getTableConfig()
                 ,oldDescription,inputTransform,inputRowType));
 

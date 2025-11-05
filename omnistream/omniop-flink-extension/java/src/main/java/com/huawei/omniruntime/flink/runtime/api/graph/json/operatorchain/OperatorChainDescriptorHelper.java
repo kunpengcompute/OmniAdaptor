@@ -1,5 +1,4 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,6 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package com.huawei.omniruntime.flink.runtime.api.graph.json.operatorchain;
@@ -47,7 +49,6 @@ import org.apache.flink.formats.csv.CsvReaderFormat;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.dataformat.csv.CsvSchema;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.graph.StreamEdge;
-import org.apache.flink.streaming.api.operators.*;
 import org.apache.flink.streaming.api.operators.SourceOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
@@ -153,7 +154,6 @@ public class OperatorChainDescriptorHelper {
         OperatorPOJO opDesc = new OperatorPOJO();
         LOG.info("operatorFactory class name {}  and getStreamOperatorClass {}", operatorFactory.getClass().getCanonicalName(),
                 operatorFactory.getStreamOperatorClass(userCodeClassloader).getCanonicalName());
-        //StreamOperator op =  operatorConfig.getStreamOperator(userCodeClassloader);
         fillBasicOperatorDescriptions(opDesc, operatorFactory, operatorConfig, userCodeClassloader);
         if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SimpleInputFormatOperatorFactory) {
             LOG.info("operatorFactory is {}", operatorFactory.getClass().getCanonicalName());
@@ -166,7 +166,7 @@ public class OperatorChainDescriptorHelper {
                 LOG.info("parse nexmarkSourceFunction Plan for nexmark 0.3");
                 NexmarkFormatPOJO nexmarkFormatPOJO = new NexmarkFormatPOJO();
                 nexmarkFormatPOJO.setFormat("nexmark");
-                nexmarkFormatPOJO.setBatchSize(1000);
+                nexmarkFormatPOJO.setBatchSize(10000);
                 Map<String, Object> configMap = nexmarkFormatPOJO.getConfigMap();
                 try {
                     getNexmarkConfig(source, configMap);
@@ -240,7 +240,7 @@ public class OperatorChainDescriptorHelper {
             if (functionName.equals("NexmarkSourceFunction")) {
                 NexmarkFormatPOJO nexmarkFormatPOJO = new NexmarkFormatPOJO();
                 nexmarkFormatPOJO.setFormat("nexmark");
-                nexmarkFormatPOJO.setBatchSize(1000);
+                nexmarkFormatPOJO.setBatchSize(10000);
                 Map<String, Object> configMap = nexmarkFormatPOJO.getConfigMap();
                 try {
                     getNexmarkConfigForVersion2(userFunction, configMap);
@@ -355,6 +355,9 @@ public class OperatorChainDescriptorHelper {
         opDesc.setName(opConfig.getOperatorName());
         String id = operatorFactory.getStreamOperatorClass(userCodeClassloader).getCanonicalName().split("\\$")[0];
         opDesc.setId(id);
+        opDesc.setJobType(opConfig.getJobType());
+        opDesc.setTaskType(opConfig.getTaskType());
+        opDesc.setOperatorType(opConfig.getOperatorType());
         LOG.info("handling input for op {}", opConfig.getOperatorName());
         LOG.info("handling description for op {}", opConfig.getDescription());
         { // input
@@ -434,8 +437,8 @@ public class OperatorChainDescriptorHelper {
             throw new RuntimeException("Cannot setup OmniOperatorChain because an unsupported serializer type was requested: " + ts.toString());
         }
 
-        data[0] = kindStr; //"kind"
-        data[1] = typeObj;// "type"
+        data[0] = kindStr; // "kind"
+        data[1] = typeObj; // "type"
         return data;
     }
 
@@ -476,128 +479,8 @@ public class OperatorChainDescriptorHelper {
             jsonObject = new JSONObject(description);
         } catch (JSONException e) {
             LOG.error("Description is not JSON format {}", description, e);
-            //throw new RuntimeException(e);
         }
         return jsonObject;
     }
-
-/**
- *  /**
- *      * Create and return a single operator from the given {@param operatorConfig} that will be
- *      * producing records to the {@param output}.
- *
- *
-
- private <OUT, OP extends StreamOperator<OUT>> OP createOperator(
- *StreamTask<OUT, ?> containingTask,
- *StreamConfig operatorConfig,
- *ClassLoader userCodeClassloader,
- *WatermarkGaugeExposingOutput<StreamRecord<OUT>> output,
- *List<StreamOperatorWrapper<?, ?>> allOperatorWrappers,
- *boolean isHead) {
- *
- *         // now create the operator and give it the output collector to write its output to
- *Tuple2<OP, Optional<ProcessingTimeService>> chainedOperatorAndTimeService =
- *StreamOperatorFactoryUtil.createOperator(
- * operatorConfig.getStreamOperatorFactory(userCodeClassloader),
- *containingTask,
- *operatorConfig,
- *output,
- *operatorEventDispatcher);
- *
- *OP chainedOperator = chainedOperatorAndTimeService.f0;
- *allOperatorWrappers.add(
- * createOperatorWrapper(
- * chainedOperator,
- *containingTask,
- *operatorConfig,
- *chainedOperatorAndTimeService.f1,
- *isHead));
- *
- *chainedOperator
- *                 .getMetricGroup()
- *                 .gauge(
- * MetricNames.IO_CURRENT_OUTPUT_WATERMARK,
- *output.getWatermarkGauge()::getValue);
- *return chainedOperator;
- *}
- */
-
-
-    /**
-     *            // we create the chain of operators and grab the collector that leads into the chain
-     *             List<StreamOperatorWrapper<?, ?>> allOpWrappers =
-     *                     new ArrayList<>(chainedConfigs.size());
-     *             this.mainOperatorOutput =
-     *                     createOutputCollector(
-     *                             containingTask,
-     *                             configuration,
-     *                             chainedConfigs,
-     *                             userCodeClassloader,
-     *                             streamOutputMap,
-     *                             allOpWrappers,
-     *                             containingTask.getMailboxExecutorFactory());
-     */
-
-    /**
-     *
-     private <T> WatermarkGaugeExposingOutput<StreamRecord<T>> createOutputCollector(
-     StreamTask<?, ?> containingTask,
-     StreamConfig operatorConfig,
-     Map<Integer, StreamConfig> chainedConfigs,
-     ClassLoader userCodeClassloader,
-     Map<StreamEdge, RecordWriterOutput<?>> streamOutputs,
-     List<StreamOperatorWrapper<?, ?>> allOperatorWrappers,
-     MailboxExecutorFactory mailboxExecutorFactory) {
-     List<Tuple2<WatermarkGaugeExposingOutput<StreamRecord<T>>, StreamEdge>> allOutputs =
-     new ArrayList<>(4);
-
-     // create collectors for the network outputs
-     for (StreamEdge outputEdge : operatorConfig.getNonChainedOutputs(userCodeClassloader)) {
-    @SuppressWarnings("unchecked") RecordWriterOutput<T> output = (RecordWriterOutput<T>) streamOutputs.get(outputEdge);
-
-    allOutputs.add(new Tuple2<>(output, outputEdge));
-    }
-
-     // Create collectors for the chained outputs
-     for (StreamEdge outputEdge : operatorConfig.getChainedOutputs(userCodeClassloader)) {
-     int outputId = outputEdge.getTargetId();
-     StreamConfig chainedOpConfig = chainedConfigs.get(outputId);
-
-     WatermarkGaugeExposingOutput<StreamRecord<T>> output =
-     createOperatorChain(
-     containingTask,
-     chainedOpConfig,
-     chainedConfigs,
-     userCodeClassloader,
-     streamOutputs,
-     allOperatorWrappers,
-     outputEdge.getOutputTag(),
-     mailboxExecutorFactory);
-     allOutputs.add(new Tuple2<>(output, outputEdge));
-     }
-
-     if (allOutputs.size() == 1) {
-     return allOutputs.get(0).f0;
-     } else {
-     // send to N outputs. Note that this includes the special case
-     // of sending to zero outputs
-     @SuppressWarnings({"unchecked"}) Output<StreamRecord < T>>[] asArray = new Output[allOutputs.size()];
-     for (int i = 0; i < allOutputs.size(); i++) {
-     asArray[i] = allOutputs.get(i).f0;
-     }
-
-     // This is the inverse of creating the normal ChainingOutput.
-     // If the chaining output does not copy we need to copy in the broadcast output,
-     // otherwise multi-chaining would not work correctly.
-     if (containingTask.getExecutionConfig().isObjectReuseEnabled()) {
-     return closer.register(new CopyingBroadcastingOutputCollector<>(asArray));
-     } else {
-     return closer.register(new BroadcastingOutputCollector<>(asArray));
-     }
-     }
-     }
-
-     */
 
 }

@@ -14,9 +14,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.tools.RelBuilder;
@@ -35,8 +40,20 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.codegen.agg.AggsHandlerCodeGenerator;
 import org.apache.flink.table.planner.delegation.PlannerBase;
-import org.apache.flink.table.planner.plan.logical.*;
-import org.apache.flink.table.planner.plan.nodes.exec.*;
+import org.apache.flink.table.planner.plan.logical.CumulativeWindowSpec;
+import org.apache.flink.table.planner.plan.logical.HoppingWindowSpec;
+import org.apache.flink.table.planner.plan.logical.SliceAttachedWindowingStrategy;
+import org.apache.flink.table.planner.plan.logical.TimeAttributeWindowingStrategy;
+import org.apache.flink.table.planner.plan.logical.TumblingWindowSpec;
+import org.apache.flink.table.planner.plan.logical.WindowAttachedWindowingStrategy;
+import org.apache.flink.table.planner.plan.logical.WindowSpec;
+import org.apache.flink.table.planner.plan.logical.WindowingStrategy;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeMetadata;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.plan.utils.AggregateInfoList;
@@ -59,14 +76,17 @@ import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.ZoneId;
-import java.util.*;
-
-import static org.apache.flink.util.Preconditions.checkNotNull;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /** Stream {@link ExecNode} for window table-valued based global aggregate. */
 @ExecNodeMetadata(
@@ -158,12 +178,12 @@ public class StreamExecGlobalWindowAggregate extends StreamExecWindowAggregateBa
                 localAggInfoList, globalAggInfoList, globalAccTypes, globalAggValueTypes, inputTransform,
                 grouping, false);
 
-        WindowSpec windowSpec= windowing.getWindow();
-        getSliceAssignerInfo(windowing,shiftTimeZone,jsonMap);
-        //window info
+        WindowSpec windowSpec = windowing.getWindow();
+        getSliceAssignerInfo(windowing, shiftTimeZone, jsonMap);
+        // window info
         String typeName = DescriptionUtil.getFieldType(windowing.getTimeAttributeType());
         jsonMap.put("window", windowSpec.toString());
-        jsonMap.put("timeAttributeType",typeName);
+        jsonMap.put("timeAttributeType", typeName);
         String jsonString = "";
         try {
             jsonString = objectMapper.writeValueAsString(jsonMap);
@@ -174,18 +194,18 @@ public class StreamExecGlobalWindowAggregate extends StreamExecWindowAggregateBa
     }
 
     private void getSliceAssignerInfo(
-            WindowingStrategy windowingStrategy, ZoneId shiftTimeZone,Map<String, Object> jsonMap) {
+            WindowingStrategy windowingStrategy, ZoneId shiftTimeZone, Map<String, Object> jsonMap) {
         WindowSpec windowSpec = windowingStrategy.getWindow();
         if (windowingStrategy instanceof WindowAttachedWindowingStrategy) {
             int windowEndIndex =
                     ((WindowAttachedWindowingStrategy) windowingStrategy).getWindowEnd();
-            buildJsonMap(windowSpec, Integer.MAX_VALUE, shiftTimeZone,jsonMap);
-            jsonMap.put("windowEndIndex",windowEndIndex);
+            buildJsonMap(windowSpec, Integer.MAX_VALUE, shiftTimeZone, jsonMap);
+            jsonMap.put("windowEndIndex", windowEndIndex);
 
         } else if (windowingStrategy instanceof SliceAttachedWindowingStrategy) {
             int sliceEndIndex = ((SliceAttachedWindowingStrategy) windowingStrategy).getSliceEnd();
-            buildJsonMap(windowSpec, Integer.MAX_VALUE, shiftTimeZone,jsonMap);
-            jsonMap.put("sliceEndIndex",sliceEndIndex);
+            buildJsonMap(windowSpec, Integer.MAX_VALUE, shiftTimeZone, jsonMap);
+            jsonMap.put("sliceEndIndex", sliceEndIndex);
 
         } else if (windowingStrategy instanceof TimeAttributeWindowingStrategy) {
             final int timeAttributeIndex;
@@ -196,7 +216,7 @@ public class StreamExecGlobalWindowAggregate extends StreamExecWindowAggregateBa
             } else {
                 timeAttributeIndex = -1;
             }
-            buildJsonMap(windowSpec, timeAttributeIndex, shiftTimeZone,jsonMap);
+            buildJsonMap(windowSpec, timeAttributeIndex, shiftTimeZone, jsonMap);
 
         } else {
             throw new UnsupportedOperationException(windowingStrategy + " is not supported yet.");
@@ -204,16 +224,15 @@ public class StreamExecGlobalWindowAggregate extends StreamExecWindowAggregateBa
     }
 
     private void buildJsonMap(
-            WindowSpec windowSpec, int timeAttributeIndex, ZoneId shiftTimeZone,Map<String, Object> jsonMap) {
+            WindowSpec windowSpec, int timeAttributeIndex, ZoneId shiftTimeZone, Map<String, Object> jsonMap) {
         if (windowSpec instanceof TumblingWindowSpec) {
             Duration size = ((TumblingWindowSpec) windowSpec).getSize();
             Duration offset = ((TumblingWindowSpec) windowSpec).getOffset();
             if (offset != null) {
-                jsonMap.put("offset",offset.toMillis());
+                jsonMap.put("offset", offset.toMillis());
             }
-            jsonMap.put("timeAttributeIndex",timeAttributeIndex);
-//            jsonMap.put("shiftTimeZone",shiftTimeZone);
-            jsonMap.put("size",size.toMillis());
+            jsonMap.put("timeAttributeIndex", timeAttributeIndex);
+            jsonMap.put("size", size.toMillis());
         } else if (windowSpec instanceof HoppingWindowSpec) {
             Duration size = ((HoppingWindowSpec) windowSpec).getSize();
             Duration slide = ((HoppingWindowSpec) windowSpec).getSlide();
@@ -226,12 +245,11 @@ public class StreamExecGlobalWindowAggregate extends StreamExecWindowAggregateBa
             }
             Duration offset = ((HoppingWindowSpec) windowSpec).getOffset();
             if (offset != null) {
-                jsonMap.put("offset",offset.toMillis());
+                jsonMap.put("offset", offset.toMillis());
             }
-            jsonMap.put("timeAttributeIndex",timeAttributeIndex);
-//            jsonMap.put("shiftTimeZone",shiftTimeZone);
-            jsonMap.put("size",size.toMillis());
-            jsonMap.put("slide",slide.toMillis());
+            jsonMap.put("timeAttributeIndex", timeAttributeIndex);
+            jsonMap.put("size", size.toMillis());
+            jsonMap.put("slide", slide.toMillis());
         } else if (windowSpec instanceof CumulativeWindowSpec) {
             Duration maxSize = ((CumulativeWindowSpec) windowSpec).getMaxSize();
             Duration step = ((CumulativeWindowSpec) windowSpec).getStep();
@@ -244,12 +262,11 @@ public class StreamExecGlobalWindowAggregate extends StreamExecWindowAggregateBa
             }
             Duration offset = ((CumulativeWindowSpec) windowSpec).getOffset();
             if (offset != null) {
-                jsonMap.put("offset",offset.toMillis());
+                jsonMap.put("offset", offset.toMillis());
             }
-            jsonMap.put("timeAttributeIndex",timeAttributeIndex);
-//            jsonMap.put("shiftTimeZone",shiftTimeZone);
-            jsonMap.put("maxSize",maxSize.toMillis());
-            jsonMap.put("step",step.toMillis());
+            jsonMap.put("timeAttributeIndex", timeAttributeIndex);
+            jsonMap.put("maxSize", maxSize.toMillis());
+            jsonMap.put("step", step.toMillis());
         } else {
             throw new UnsupportedOperationException(windowSpec + " is not supported yet.");
         }
@@ -373,9 +390,9 @@ public class StreamExecGlobalWindowAggregate extends StreamExecWindowAggregateBa
         // set KeyType and Selector for state
         transform.setStateKeySelector(selector);
         transform.setStateKeyType(selector.getProducedType());
-        String oldDescription= transform.getDescription();
+        String oldDescription = transform.getDescription();
         transform.setDescription(getExtraDescription(oldDescription, localAggInfoList, globalAggInfoList,
-                globalAccTypes, globalAggValueTypes, inputTransform,shiftTimeZone));
+                globalAccTypes, globalAggValueTypes, inputTransform, shiftTimeZone));
 
         return transform;
     }

@@ -1,22 +1,3 @@
-/*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.huawei.omniruntime.flink.runtime.api.graph.json;
 
 import static org.apache.flink.util.Preconditions.checkState;
@@ -38,6 +19,9 @@ import java.util.Objects;
  */
 
 public class NonChainedOutputPOJO {
+
+    private boolean supportsUnalignedCheckpoints;
+
     /**
      * ID of the producer {@link StreamNode}.
      */
@@ -84,7 +68,8 @@ public class NonChainedOutputPOJO {
     public NonChainedOutputPOJO() {
     }
 
-    public NonChainedOutputPOJO(int sourceNodeId,
+    public NonChainedOutputPOJO(boolean supportsUnalignedCheckpoints,
+                                int sourceNodeId,
                                 int consumerParallelism,
                                 int consumerMaxParallelism,
                                 long bufferTimeout,
@@ -92,6 +77,7 @@ public class NonChainedOutputPOJO {
                                 boolean isPersistentDataSet,
                                 StreamPartitionerPOJO partitioner,
                                 int partitionType) {
+        this.supportsUnalignedCheckpoints = supportsUnalignedCheckpoints;
         this.sourceNodeId = sourceNodeId;
         this.consumerParallelism = consumerParallelism;
         this.consumerMaxParallelism = consumerMaxParallelism;
@@ -103,6 +89,7 @@ public class NonChainedOutputPOJO {
     }
 
     public NonChainedOutputPOJO(NonChainedOutput nonChainedOutput) {
+        this.supportsUnalignedCheckpoints = nonChainedOutput.supportsUnalignedCheckpoints();
         this.sourceNodeId = nonChainedOutput.getSourceNodeId();
         this.consumerParallelism = nonChainedOutput.getConsumerParallelism();
         this.consumerMaxParallelism = nonChainedOutput.getConsumerMaxParallelism();
@@ -110,6 +97,10 @@ public class NonChainedOutputPOJO {
         this.dataSetId = new IntermediateDataSetIDPOJO(nonChainedOutput.getDataSetId());
         this.partitioner = new StreamPartitionerPOJO(nonChainedOutput.getPartitioner());
         this.partitionType = ResultPartitionTypeConverter.encode(nonChainedOutput.getPartitionType());
+    }
+
+    public boolean getSupportsUnalignedCheckpoints() {
+        return supportsUnalignedCheckpoints;
     }
 
     public int getSourceNodeId() {
@@ -156,10 +147,6 @@ public class NonChainedOutputPOJO {
         return isPersistentDataSet;
     }
 
-    public void setIsPersistentDataSet(boolean isPersistentDataSet) {
-        isPersistentDataSet = isPersistentDataSet;
-    }
-
     public StreamPartitionerPOJO getPartitioner() {
         return partitioner;
     }
@@ -176,14 +163,18 @@ public class NonChainedOutputPOJO {
         this.partitionType = partitionType;
     }
 
-
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         checkState(o instanceof NonChainedOutputPOJO);
         NonChainedOutputPOJO that = (NonChainedOutputPOJO) o;
-        return sourceNodeId == that.sourceNodeId
+        return supportsUnalignedCheckpoints == that.supportsUnalignedCheckpoints
+                && sourceNodeId == that.sourceNodeId
                 && consumerParallelism == that.consumerParallelism
                 && consumerMaxParallelism == that.consumerMaxParallelism
                 && bufferTimeout == that.bufferTimeout
@@ -196,6 +187,7 @@ public class NonChainedOutputPOJO {
     @Override
     public int hashCode() {
         return Objects.hash(
+                supportsUnalignedCheckpoints,
                 sourceNodeId,
                 consumerParallelism,
                 consumerMaxParallelism,
@@ -209,7 +201,8 @@ public class NonChainedOutputPOJO {
     @Override
     public String toString() {
         return "NonChainedOutputPOJO{"
-                + "sourceNodeId=" + sourceNodeId
+                + "supportsUnalignedCheckpoints=" + supportsUnalignedCheckpoints
+                + ", sourceNodeId=" + sourceNodeId
                 + ", consumerParallelism=" + consumerParallelism
                 + ", consumerMaxParallelism=" + consumerMaxParallelism
                 + ", bufferTimeout=" + bufferTimeout

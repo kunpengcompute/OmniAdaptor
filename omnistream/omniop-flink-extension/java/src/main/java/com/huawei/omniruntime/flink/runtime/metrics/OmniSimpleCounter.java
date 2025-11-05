@@ -39,6 +39,7 @@ public class OmniSimpleCounter extends SimpleCounter implements MetricCloseable 
     /**
      * close the counter.
      */
+    @Override
     public void close() {
         // jni call to close the counter
         isClosed = true;

@@ -9,7 +9,9 @@ import org.apache.flink.streaming.api.graph.StreamEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * StreamConfigPOJO
@@ -40,8 +42,6 @@ public class StreamConfigPOJO {
 
     public StreamConfigPOJO() {
     }
-
-    ;
 
     public StreamConfigPOJO(StreamConfig streamConfig, ClassLoader cl) {
         buildOutEdgesInOrder(streamConfig, cl);

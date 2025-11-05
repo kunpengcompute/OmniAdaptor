@@ -124,6 +124,7 @@ public class OmniTimeGauge extends TimerGauge implements MetricCloseable {
     /**
      * close the timer.
      */
+    @Override
     public void close() {
         isClosed = true;
     }

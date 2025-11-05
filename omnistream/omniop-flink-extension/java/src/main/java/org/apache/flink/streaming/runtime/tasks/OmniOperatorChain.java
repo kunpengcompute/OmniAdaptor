@@ -1,8 +1,30 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ */
+
 package org.apache.flink.streaming.runtime.tasks;
 
 import com.huawei.omniruntime.flink.runtime.tasks.OmniDataTypesMap;
 import com.huawei.omniruntime.flink.table.types.logical.LogicalTypeDescriptor;
 import com.huawei.omniruntime.flink.utils.UdfUtil;
+
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.*;
@@ -16,6 +38,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.graph.StreamConfig;
+import org.apache.flink.streaming.runtime.tasks.StreamOperatorWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,8 +140,8 @@ public final class OmniOperatorChain {
         if (jsonObject.has("dataType")) {
             String dataTypeStr = jsonObject.getString("dataType");
             jsonObject.remove("dataType");
-            if (OmniDataTypesMap.dataTypeMap.containsKey(dataTypeStr)) {
-                jsonObject.put("dataTypeId", OmniDataTypesMap.dataTypeMap.get(dataTypeStr));
+            if (OmniDataTypesMap.DATA_TYPE_MAP.containsKey(dataTypeStr)) {
+                jsonObject.put("dataTypeId", OmniDataTypesMap.DATA_TYPE_MAP.get(dataTypeStr));
             } else {
                 LOG.debug("Cannot parse the datatype :{} ", dataTypeStr);
                 jsonObject.put("dataTypeId", -1);
@@ -126,8 +149,8 @@ public final class OmniOperatorChain {
         } else if (jsonObject.has("returnType")) {
             String dataTypeStr = jsonObject.getString("returnType");
             jsonObject.remove("returnType");
-            if (OmniDataTypesMap.dataTypeMap.containsKey(dataTypeStr)) {
-                jsonObject.put("returnTypeId", OmniDataTypesMap.dataTypeMap.get(dataTypeStr));
+            if (OmniDataTypesMap.DATA_TYPE_MAP.containsKey(dataTypeStr)) {
+                jsonObject.put("returnTypeId", OmniDataTypesMap.DATA_TYPE_MAP.get(dataTypeStr));
             } else {
                 LOG.debug("Cannot parse the datatype :{} ", dataTypeStr);
                 jsonObject.put("returnTypeId", -1);
@@ -194,7 +217,9 @@ public final class OmniOperatorChain {
                 throw new RuntimeException(e);
             }
         } else if (ts != null) {
-//            throw new RuntimeException("Cannot setup OmniOperatorChain because an unsupported serializer type was requested: " + ts.toString());
+            /*
+             * throw new RuntimeException("Cannot setup OmniOperatorChain because an unsupported serializer type was requested: " + ts.toString());
+             */
         }
 
         data.put("kind", kindStr);

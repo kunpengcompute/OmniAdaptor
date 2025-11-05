@@ -17,6 +17,9 @@ public class OperatorPOJO {
     private List<TypeDescriptionPOJO> inputs;
     private TypeDescriptionPOJO output;
     private String operatorId;
+    private int jobType; // such as NULL(0), SQL(1), STREAM(2), SQL_STREAM(3);
+    private int taskType; // such as NULL(0), SQL(1), STREAM(2), SQL_STREAM(3);
+    private int operatorType; // such as NULL(0), SQL(1), STREAM(2);
 
     // Useful for troubleshooting
     private int vertexID;
@@ -91,5 +94,29 @@ public class OperatorPOJO {
 
     public void setOperatorId(String operatorId) {
         this.operatorId = operatorId;
+    }
+
+    public int getJobType() {
+        return jobType;
+    }
+
+    public void setJobType(int jobType) {
+        this.jobType = jobType;
+    }
+
+    public int getTaskType() {
+        return taskType;
+    }
+
+    public void setTaskType(int taskType) {
+        this.taskType = taskType;
+    }
+
+    public int getOperatorType() {
+        return operatorType;
+    }
+
+    public void setOperatorType(int operatorType) {
+        this.operatorType = operatorType;
     }
 }

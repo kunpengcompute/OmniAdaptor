@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+
 package com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy;
 
 import org.apache.flink.util.CollectionUtil;
@@ -34,7 +45,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     @SuppressWarnings("unchecked")
     @Override
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {
-        //check input/output fields.
+        // check input/output fields.
         int inputSize = 0;
         if (operatorInfoMap.containsKey("inputTypes")) {
             List<String> inputTypes = (List<String>) operatorInfoMap.get("inputTypes");
@@ -56,7 +67,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             return false;
         }
 
-        //check indices
+        // check indices
         List<Map<String, Object>> indicesList = (List<Map<String, Object>>) operatorInfoMap.get("indices");
         if (CollectionUtil.isNullOrEmpty(indicesList)) {
             return false;
@@ -73,14 +84,14 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             }
         }
 
-        //check condition
+        // check condition
         if (operatorInfoMap.containsKey("condition")) {
             Map<String, Object> conditionMap = (Map<String, Object>) operatorInfoMap.get("condition");
             if ((conditionMap != null) && !validateCalcExpr(conditionMap, inputSize)) {
                 return false;
             }
         }
-        //check dataTypes
+        // check dataTypes
         return validateDataTypes(getDataTypes(operatorInfoMap, "inputTypes", "outputTypes"));
     }
 
@@ -88,7 +99,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
     private static boolean validateCalcExprMaps(int inputSize, String operatorType, Object... exprMaps) {
         for (Object exprMap : exprMaps) {
             if (exprMap instanceof Map) {
-                //recursive call validateCalcExpr
+                // recursive call validateCalcExpr
                 if (!validateCalcExpr((Map<String, Object>) exprMap, inputSize)) {
                     return false;
                 }
@@ -127,7 +138,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
 
                 Object leftExpr = exprMap.get("left");
                 if (leftExpr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) leftExpr, inputSize)) {
                         return false;
                     }
@@ -137,7 +148,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 }
                 Object rightExpr = exprMap.get("right");
                 if (rightExpr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) rightExpr, inputSize)) {
                         return false;
                     }
@@ -156,7 +167,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 }
                 Object expr = exprMap.get("expr");
                 if (expr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) expr, inputSize)) {
                         return false;
                     }
@@ -164,7 +175,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                     LOG.info("ERROR: Cannot parse expr in an unary expression: {}", unaryOperatorType);
                     return false;
                 }
-                //we currently only deal with a fake CAST
+                // we currently only deal with a fake CAST
 
                 LOG.info("WARNING: CAST/NEGATION might not be supported.");
                 return true;
@@ -203,7 +214,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 }
                 Object inputExpr = exprMap.get("input");
                 if (inputExpr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) inputExpr, inputSize)) {
                         return false;
                     }
@@ -213,7 +224,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 }
                 Object elseExpr = exprMap.get("else");
                 if (elseExpr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) elseExpr, inputSize)) {
                         return false;
                     }
@@ -276,7 +287,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
 
                 Object elseExpre = exprMap.get("else");
                 if (elseExpre instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) elseExpre, inputSize)) {
                         return false;
                     }
@@ -335,7 +346,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
 
                 Object valueExpr = exprMap.get("value");
                 if (valueExpr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) valueExpr, inputSize)) {
                         return false;
                     }
@@ -346,7 +357,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
 
                 Object lowerBoundExpr = exprMap.get("lower_bound");
                 if (lowerBoundExpr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) lowerBoundExpr, inputSize)) {
                         return false;
                     }
@@ -357,7 +368,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
 
                 Object upperBoundExpr = exprMap.get("upper_bound");
                 if (upperBoundExpr instanceof Map) {
-                    //recursive call validateCalcExpr
+                    // recursive call validateCalcExpr
                     if (!validateCalcExpr((Map<String, Object>) upperBoundExpr, inputSize)) {
                         return false;
                     }
@@ -398,7 +409,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
         }
         Object whenExpr = exprMap.get("when");
         if (whenExpr instanceof Map) {
-            //recursive call validateCalcExpr
+            // recursive call validateCalcExpr
             if (!validateCalcExpr((Map<String, Object>) whenExpr, inputSize)) {
                 return false;
             }
@@ -408,7 +419,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
         }
         Object resultExpr = exprMap.get("result");
         if (resultExpr instanceof Map) {
-            //recursive call validateCalcExpr
+            // recursive call validateCalcExpr
             if (!validateCalcExpr((Map<String, Object>) resultExpr, inputSize)) {
                 return false;
             }

@@ -15,9 +15,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * We modify this part of the code based on Apache Flink to implement native execution of Flink operators.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
+
+import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 import org.apache.calcite.rex.RexNode;
 import org.apache.flink.FlinkVersion;
@@ -32,7 +37,14 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMap
 import org.apache.flink.streaming.api.transformations.TwoInputTransformation;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.delegation.PlannerBase;
-import org.apache.flink.table.planner.plan.nodes.exec.*;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeMetadata;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
+import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.spec.JoinSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.util.RexNodeUtil;
@@ -55,9 +67,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.apache.flink.util.Preconditions.checkArgument;
-import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * {@link StreamExecNode} for regular Joins.
@@ -132,7 +141,7 @@ public class StreamExecJoin extends ExecNodeBase<RowData>
 
     private String getExtraDescription(String oldDescription, RowType leftType, RowType rightType, String leftInputSpec, String rightInputSpec) {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
-        //get inputType info
+        // get inputType info
         List<String> leftInputTypeList = new ArrayList<>();
         List<RowType.RowField> leftInputFields = leftType.getFields();
 
@@ -147,7 +156,7 @@ public class StreamExecJoin extends ExecNodeBase<RowData>
             LogicalType fieldType = field.getType();
             rightInputTypeList.add(DescriptionUtil.getFieldType(fieldType));
         }
-        //get outputTypes.
+        // get outputTypes.
 
         List<String> outputTypeList = new ArrayList<>();
         List<RowType.RowField> fields = ((RowType) getOutputType()).getFields();
@@ -156,9 +165,9 @@ public class StreamExecJoin extends ExecNodeBase<RowData>
             outputTypeList.add(DescriptionUtil.getFieldType(fieldType));
         }
 
-        //get join keys from both sides.
+        // get join keys from both sides.
 
-        //example: [0,1] vs ["0","1"]
+        // example: [0,1] vs ["0","1"]
         final int[] leftJoinKey = joinSpec.getLeftKeys();
         final int[] rightJoinKey = joinSpec.getRightKeys();
         FlinkJoinType joinType = joinSpec.getJoinType();
@@ -186,7 +195,7 @@ public class StreamExecJoin extends ExecNodeBase<RowData>
         try {
             jsonString = objectMapper.writeValueAsString(jsonMap);
         } catch (JsonProcessingException e) {
-            e.printStackTrace();  // Handle the exception or log it
+            e.printStackTrace(); // Handle the exception or log it
         }
 
         return jsonString;

@@ -617,13 +617,12 @@ public class StreamingJobGraphGenerator {
 
         boolean validateRes = true;
         for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
-            validateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos, this.chainedConfigs, this.vertexConfigs, jobType);
-            if (!validateRes && jobType.equals(JobType.SQL)) {
-                break;
+            boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos, this.chainedConfigs, this.vertexConfigs, jobType);
+            if (!vertexValidateRes && jobType.equals(JobType.SQL)) {
+                validateRes = false;
             }
         }
-
-        if (!validateRes && jobType.equals(JobType.SQL)) {
+        if (!validateRes && jobType.equals(JobType.SQL) && !OmniGraphOverride.isSupportTaskFallback()) {
             for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
                 StreamConfig vertexConfig = new StreamConfig(vertexEntry.getValue().getConfiguration());
                 vertexConfig.setUseOmniEnabled(false);

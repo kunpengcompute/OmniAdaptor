@@ -105,6 +105,8 @@ public final class OmniGraphOverride {
     private static List<TaskType> taskTypes = new LinkedList<>();
     private static List<Map<Integer, OperatorType>> operatorTypes = new LinkedList<>();
 
+    private static boolean supportTaskFallback = true;
+
 
     private static final Set<String> SUPPORT_OP_NAME = new HashSet<>();
     private static final Set<String> OP_NAME_OF_SQL = new HashSet<>();
@@ -426,6 +428,9 @@ public final class OmniGraphOverride {
                             vertexID, result);
                     return true;
                 }
+                if (supportTaskFallback && (!"ForwardPartitioner".equals(partitionName))) {
+                    supportTaskFallback = false;
+                }
             } else {
                 return true;
             }
@@ -450,6 +455,10 @@ public final class OmniGraphOverride {
 
     public static JobType getJobType() {
         return jobType;
+    }
+
+    public static boolean isSupportTaskFallback() {
+        return supportTaskFallback;
     }
 
     public static List<TaskType> getTaskTypes() {

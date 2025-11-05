@@ -629,6 +629,7 @@ public class StreamingJobGraphGenerator {
                 vertexConfig.setUseOmniEnabled(false);
             }
         }
+        OmniGraphOverride.clearTypeInfo();
     }
 
     private boolean validateFallBackForCheckpoint(JobType jobType){

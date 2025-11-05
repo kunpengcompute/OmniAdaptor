@@ -172,6 +172,22 @@ public final class OmniGraphOverride {
                 "StreamRecordTimestampInserter", "ConstraintEnforcer"));
     }
 
+    private static boolean isSourceSupportNative = true;
+
+    private static boolean isSinkSupportNative = true;
+    private static final Set<String> SOURCE_SINK_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
+            "BIGINT",
+            "INTEGER",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+            "VARCHAR(2147483647)",
+            "VARCHAR(2000)",
+            "VARCHAR(9)",
+            "STRING",
+            "TIMESTAMP_WITH_LOCAL_TIME_ZONE"));
+
     /**
      * setStateBackend
      *
@@ -444,6 +460,10 @@ public final class OmniGraphOverride {
         return operatorTypes;
     }
 
+    public static void clearTypeInfo() {
+        operatorTypes.clear();
+    }
+
     public static JobType getJobType(Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {
         JobType jobType = JobType.NULL;
         boolean onlySourceAndSink = true;
@@ -530,7 +550,29 @@ public final class OmniGraphOverride {
         } else {
             newJobType = jobType.getCombinationsJobType(JobType.STREAM);
         }
+        for (String type : inputTypeList) {
+            isSourceSupportNative = SOURCE_SINK_SUPPORT_DATA_TYPE.contains(type);
+            if (!isSourceSupportNative) {
+                break;
+            }
+        }
         return newJobType;
+    }
+
+    private static void getSinkInputTypes(StreamNode node) {
+        List<String> inputTypeList = new ArrayList<>();
+        TypeSerializer<?>[] typeSerializersIns = node.getTypeSerializersIn();
+        for (TypeSerializer<?> typeSerializersIn : typeSerializersIns) {
+            if (typeSerializersIn instanceof AbstractRowDataSerializer) {
+                buildInputTypes(inputTypeList, typeSerializersIn);
+            }
+        }
+        for (String type : inputTypeList) {
+            isSinkSupportNative = SOURCE_SINK_SUPPORT_DATA_TYPE.contains(type);
+            if (!isSinkSupportNative) {
+                break;
+            }
+        }
     }
 
     private static void buildInputTypes(List<String> inputTypeList, TypeSerializer<?> typeSerializerOut) {
@@ -595,6 +637,9 @@ public final class OmniGraphOverride {
     }
 
     private static boolean validateSink(String operatorName, StreamOperatorFactory operatorFactory) {
+        if (!isSinkSupportNative)  {
+            return false;
+        }
         if (performanceMode && (operatorName.contains("nexmark_q20") || operatorName.contains("nexmark_q9")
             || operatorName.contains("StreamingFileWriter"))) {
             return false;
@@ -613,6 +658,9 @@ public final class OmniGraphOverride {
     }
 
     private static boolean validateSource(String operatorDescription) {
+        if (!isSourceSupportNative) {
+            return false;
+        }
         if (!operatorDescription.contains("originDescription")) {
             return true;
         }
@@ -745,6 +793,7 @@ public final class OmniGraphOverride {
                 }
                 if (isSink(operatorName)) {
                     if (isSinkSql(node, operatorName)) {
+                        getSinkInputTypes(node);
                         continue;
                     } else {
                         return false;

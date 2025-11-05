@@ -105,6 +105,8 @@ public final class OmniGraphOverride {
     private static List<TaskType> taskTypes = new LinkedList<>();
     private static List<Map<Integer, OperatorType>> operatorTypes = new LinkedList<>();
 
+    private static boolean supportTaskFallback = true;
+
 
     private static final Set<String> SUPPORT_OP_NAME = new HashSet<>();
     private static final Set<String> OP_NAME_OF_SQL = new HashSet<>();
@@ -171,6 +173,39 @@ public final class OmniGraphOverride {
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",
                 "StreamRecordTimestampInserter", "ConstraintEnforcer"));
     }
+
+    private static boolean isSourceSupportNative = true;
+
+    private static boolean isSinkSupportNative = true;
+
+    private static boolean isConstraintEnforcerSupportNative = true;
+    private static final Set<String> SOURCE_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
+            "BIGINT",
+            "INTEGER",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+            "VARCHAR(2147483647)",
+            "VARCHAR(2000)",
+            "VARCHAR(9)",
+            "STRING",
+            "TIMESTAMP_WITH_LOCAL_TIME_ZONE"));
+
+    private static final Set<String> SINK_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
+            "BIGINT",
+            "INTEGER",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+            "VARCHAR(2147483647)",
+            "VARCHAR(2000)",
+            "VARCHAR(9)",
+            "STRING",
+            "DECIMAL64",
+            "DECIMAL128",
+            "TIMESTAMP_WITH_LOCAL_TIME_ZONE"));
 
     /**
      * setStateBackend
@@ -410,6 +445,9 @@ public final class OmniGraphOverride {
                             vertexID, result);
                     return true;
                 }
+                if (supportTaskFallback && (!"ForwardPartitioner".equals(partitionName))) {
+                    supportTaskFallback = false;
+                }
             } else {
                 return true;
             }
@@ -436,12 +474,20 @@ public final class OmniGraphOverride {
         return jobType;
     }
 
+    public static boolean isSupportTaskFallback() {
+        return supportTaskFallback;
+    }
+
     public static List<TaskType> getTaskTypes() {
         return taskTypes;
     }
 
     public static List<Map<Integer, OperatorType>> getOperatorTypes() {
         return operatorTypes;
+    }
+
+    public static void clearTypeInfo() {
+        operatorTypes.clear();
     }
 
     public static JobType getJobType(Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {
@@ -530,7 +576,63 @@ public final class OmniGraphOverride {
         } else {
             newJobType = jobType.getCombinationsJobType(JobType.STREAM);
         }
+        for (String type : inputTypeList) {
+            isSourceSupportNative = SOURCE_SUPPORT_DATA_TYPE.contains(type);
+            if (!isSourceSupportNative) {
+                break;
+            }
+        }
         return newJobType;
+    }
+
+    private static void getSinkInputTypes(StreamNode node) {
+        List<String> inputTypeList = new ArrayList<>();
+        TypeSerializer<?>[] typeSerializersIns = node.getTypeSerializersIn();
+        for (TypeSerializer<?> typeSerializersIn : typeSerializersIns) {
+            if (typeSerializersIn instanceof AbstractRowDataSerializer) {
+                buildInputTypes(inputTypeList, typeSerializersIn);
+            }
+        }
+        for (String type : inputTypeList) {
+            if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
+                type = "DECIMAL64";
+                LOG.info("converted to DECIMAL64");
+            }
+
+            if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
+                type = "DECIMAL128";
+                LOG.info("converted to DECIMAL128");
+            }
+            isSinkSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type);
+            if (!isSinkSupportNative) {
+                break;
+            }
+        }
+    }
+
+    private static void getConstraintEnforcerInputTypes(StreamNode node) {
+        List<String> inputTypeList = new ArrayList<>();
+        TypeSerializer<?>[] typeSerializersIns = node.getTypeSerializersIn();
+        for (TypeSerializer<?> typeSerializersIn : typeSerializersIns) {
+            if (typeSerializersIn instanceof AbstractRowDataSerializer) {
+                buildInputTypes(inputTypeList, typeSerializersIn);
+            }
+        }
+        for (String type : inputTypeList) {
+            if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
+                type = "DECIMAL64";
+                LOG.info("converted to DECIMAL64");
+            }
+
+            if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
+                type = "DECIMAL128";
+                LOG.info("converted to DECIMAL128");
+            }
+            isConstraintEnforcerSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type);
+            if (!isConstraintEnforcerSupportNative) {
+                break;
+            }
+        }
     }
 
     private static void buildInputTypes(List<String> inputTypeList, TypeSerializer<?> typeSerializerOut) {
@@ -572,6 +674,8 @@ public final class OmniGraphOverride {
             return validateSource(operatorDescription);
         } else if (isSink(operatorName)) {
             return validateSink(operatorName, operatorFactory);
+        } else if (isConstraintEnforcer(operatorName)) {
+            return validateConstraintEnforcer();
         } else if (operatorName.contains(": Committer")) {
             return true;
         } else if (isPartitionCommitter(operatorName)) {
@@ -594,7 +698,14 @@ public final class OmniGraphOverride {
         }
     }
 
+    private static boolean validateConstraintEnforcer() {
+        return isConstraintEnforcerSupportNative;
+    }
+
     private static boolean validateSink(String operatorName, StreamOperatorFactory operatorFactory) {
+        if (!isSinkSupportNative)  {
+            return false;
+        }
         if (performanceMode && (operatorName.contains("nexmark_q20") || operatorName.contains("nexmark_q9")
             || operatorName.contains("StreamingFileWriter"))) {
             return false;
@@ -613,6 +724,9 @@ public final class OmniGraphOverride {
     }
 
     private static boolean validateSource(String operatorDescription) {
+        if (!isSourceSupportNative) {
+            return false;
+        }
         if (!operatorDescription.contains("originDescription")) {
             return true;
         }
@@ -656,6 +770,10 @@ public final class OmniGraphOverride {
     private static boolean isSink(String operatorName) {
         Matcher matcher = SINK_REGEX.matcher(operatorName);
         return matcher.find();
+    }
+
+    private static boolean isConstraintEnforcer(String operatorName) {
+        return operatorName.contains("ConstraintEnforcer");
     }
 
     private static boolean isPartitionCommitter(String operatorName) {
@@ -745,10 +863,15 @@ public final class OmniGraphOverride {
                 }
                 if (isSink(operatorName)) {
                     if (isSinkSql(node, operatorName)) {
+                        getSinkInputTypes(node);
                         continue;
                     } else {
                         return false;
                     }
+                }
+                if (isConstraintEnforcer(operatorName)) {
+                    getConstraintEnforcerInputTypes(node);
+                    continue;
                 }
                 if (operatorName.contains(": Committer")) {
                     continue;

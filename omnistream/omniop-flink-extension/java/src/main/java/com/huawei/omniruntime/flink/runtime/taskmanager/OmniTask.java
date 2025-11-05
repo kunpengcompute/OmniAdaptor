@@ -632,6 +632,10 @@ public class OmniTask extends Task {
             && nameOfInvokableClass.equals("org.apache.flink.streaming.runtime.tasks.SourceOperatorStreamTask")) {
             cancelTask(nativeTaskRef);
         }
+        // for stream situation, we could not check which task is native or java
+        if (jobType != null && jobType.equals(JobType.STREAM)) {
+            cancelTask(nativeTaskRef);
+        }
     }
 
     private void throwableHandle(Throwable t, TaskInvokable invokable) {

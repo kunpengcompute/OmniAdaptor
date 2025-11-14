@@ -123,6 +123,9 @@ public class OmniLocalInputChannel extends LocalInputChannel {
                         }
                         return;
                     }
+                    if (heapArr.length >= 3 && heapArr[3] == 8) {
+                        getSubpartitionView().acknowledgeAllDataProcessed();
+                    }
                     byteBuffer.put(heapArr, memorySegmentOffset, length);
                     memorySegment = MemorySegmentFactory.wrapOffHeapMemory(byteBuffer);
                     segmentAddress = memorySegment.getAddress();

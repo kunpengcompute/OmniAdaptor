@@ -49,7 +49,7 @@ public class ValidateAggOPStrategy extends AbstractValidateOperatorStrategy {
         SUPPORT_AGG_FUNCTION_DATATYPE.put("last_string_value_without_retract", Collections.singletonList("VARCHAR(2147483647)"));
     }
 
-    private static final List<String> SUPPORT_GROUP_KEY_TYPES = Arrays.asList("BIGINT", "VARCHAR(2147483647)");
+    private static final List<String> SUPPORT_GROUP_KEY_TYPES = Arrays.asList("BIGINT", "INTEGER", "VARCHAR(2147483647)");
 
     @SuppressWarnings("unchecked")
     @Override

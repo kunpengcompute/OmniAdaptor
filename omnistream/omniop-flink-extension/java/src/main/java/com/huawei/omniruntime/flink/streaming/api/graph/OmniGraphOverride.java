@@ -175,6 +175,9 @@ public final class OmniGraphOverride {
     private static boolean isSinkSupportNative = true;
 
     private static boolean isConstraintEnforcerSupportNative = true;
+
+    private static boolean isStreamRecordTimestampInserterSupportNative = true;
+
     private static final Set<String> SOURCE_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
             "INTEGER",
@@ -581,7 +584,8 @@ public final class OmniGraphOverride {
         return newJobType;
     }
 
-    private static void getSinkInputTypes(StreamNode node) {
+    private static void getInputTypes(StreamNode node) {
+        String operatorName = node.getOperatorName();
         List<String> inputTypeList = new ArrayList<>();
         TypeSerializer<?>[] typeSerializersIns = node.getTypeSerializersIn();
         for (TypeSerializer<?> typeSerializersIn : typeSerializersIns) {
@@ -589,6 +593,7 @@ public final class OmniGraphOverride {
                 buildInputTypes(inputTypeList, typeSerializersIn);
             }
         }
+        boolean isSupportNative = false;
         for (String type : inputTypeList) {
             if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
                 type = "DECIMAL64";
@@ -599,35 +604,17 @@ public final class OmniGraphOverride {
                 type = "DECIMAL128";
                 LOG.info("converted to DECIMAL128");
             }
-            isSinkSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type);
-            if (!isSinkSupportNative) {
+            isSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type);
+            if (!isSupportNative) {
                 break;
             }
         }
-    }
-
-    private static void getConstraintEnforcerInputTypes(StreamNode node) {
-        List<String> inputTypeList = new ArrayList<>();
-        TypeSerializer<?>[] typeSerializersIns = node.getTypeSerializersIn();
-        for (TypeSerializer<?> typeSerializersIn : typeSerializersIns) {
-            if (typeSerializersIn instanceof AbstractRowDataSerializer) {
-                buildInputTypes(inputTypeList, typeSerializersIn);
-            }
-        }
-        for (String type : inputTypeList) {
-            if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
-                type = "DECIMAL64";
-                LOG.info("converted to DECIMAL64");
-            }
-
-            if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
-                type = "DECIMAL128";
-                LOG.info("converted to DECIMAL128");
-            }
-            isConstraintEnforcerSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type);
-            if (!isConstraintEnforcerSupportNative) {
-                break;
-            }
+        if (isSink(operatorName)) {
+            isSinkSupportNative = isSupportNative;
+        } else if (isConstraintEnforcer(operatorName)) {
+            isConstraintEnforcerSupportNative = isSupportNative;
+        } else if (isStreamRecordTimestampInserter(operatorName)) {
+            isStreamRecordTimestampInserterSupportNative = isSupportNative;
         }
     }
 
@@ -658,6 +645,8 @@ public final class OmniGraphOverride {
             return validateSink(operatorName, operatorFactory);
         } else if (isConstraintEnforcer(operatorName)) {
             return validateConstraintEnforcer();
+        } else if (isStreamRecordTimestampInserter(operatorName)) {
+            return validateStreamRecordTimestampInserter();
         } else if (operatorName.contains(": Committer")) {
             return true;
         } else if (isPartitionCommitter(operatorName)) {
@@ -682,6 +671,10 @@ public final class OmniGraphOverride {
 
     private static boolean validateConstraintEnforcer() {
         return isConstraintEnforcerSupportNative;
+    }
+
+    private static boolean validateStreamRecordTimestampInserter() {
+        return isStreamRecordTimestampInserterSupportNative;
     }
 
     private static boolean validateSink(String operatorName, StreamOperatorFactory operatorFactory) {
@@ -755,6 +748,10 @@ public final class OmniGraphOverride {
 
     private static boolean isConstraintEnforcer(String operatorName) {
         return operatorName.contains("ConstraintEnforcer");
+    }
+
+    private static boolean isStreamRecordTimestampInserter(String operatorName) {
+        return operatorName.contains("StreamRecordTimestampInserter");
     }
 
     private static boolean isPartitionCommitter(String operatorName) {
@@ -844,14 +841,14 @@ public final class OmniGraphOverride {
                 }
                 if (isSink(operatorName)) {
                     if (isSinkSql(node, operatorName)) {
-                        getSinkInputTypes(node);
+                        getInputTypes(node);
                         continue;
                     } else {
                         return false;
                     }
                 }
-                if (isConstraintEnforcer(operatorName)) {
-                    getConstraintEnforcerInputTypes(node);
+                if (isConstraintEnforcer(operatorName) || isStreamRecordTimestampInserter(operatorName)) {
+                    getInputTypes(node);
                     continue;
                 }
                 if (operatorName.contains(": Committer")) {

@@ -19,11 +19,6 @@
 package org.apache.spark.sql.execution.vectorized;
 
 import junit.framework.TestCase;
-import nova.hetu.omniruntime.vector.*;
-import org.apache.orc.Reader.Options;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.spark.sql.execution.datasources.orc.OrcColumnarNativeReader;
-import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.junit.After;
 import org.junit.Before;
@@ -31,13 +26,15 @@ import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-import javax.validation.constraints.AssertTrue;
-
 import static org.junit.Assert.*;
 
+/**
+ *  OmniColumnVector Test
+ *
+ *  @since 2025-09-15
+ */
 @FixMethodOrder(value = MethodSorters.NAME_ASCENDING)
 public class OmniColumnVectorTest extends TestCase {
-
     @Before
     public void setUp() throws Exception {
     }

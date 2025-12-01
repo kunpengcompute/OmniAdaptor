@@ -284,7 +284,9 @@ public final class OmniGraphOverride {
             }
             return true;
         }
-        return SUPPORT_STREAM_TRANSFER_SERIALIZER.contains(typeSerializer.getClass().getSimpleName());
+        return SUPPORT_STREAM_TRANSFER_SERIALIZER.contains(typeSerializer.getClass().getSimpleName())
+                || typeSerializer.getClass().getName().contains(
+                        "org.apache.flink.streaming.api.connector.sink2.CommittableMessageTypeInfo");
     }
 
     private static boolean validateVertexChainInfoForOmniTask(Integer vertexID,

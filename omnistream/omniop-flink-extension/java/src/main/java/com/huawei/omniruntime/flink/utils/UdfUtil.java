@@ -47,9 +47,10 @@ final public class UdfUtil {
                 if (!entryName.startsWith(UDF_PATH)) {
                     continue;
                 }
-
+                if (!isSecurePath(entryName)) {
+                    throw new IOException("path is not secure!");
+                }
                 File destFile = new File(destDir, entryName);
-
                 if (entry.isDirectory()) {
                     // 创建目录
                     destFile.mkdirs();
@@ -79,5 +80,21 @@ final public class UdfUtil {
 
     public static String getJobJarPath(JobID jobId) {
         return JobList.getOrDefault(jobId, "");
+    }
+
+    /**
+     * 校验是否为安全路径, 避免跨路径攻击
+     *
+     * @param path path
+     * @return 是否为安全路径
+     */
+    private static boolean isSecurePath(String path) {
+        if (path == null || path.isEmpty()) {
+            return false;
+        }
+        if (path.contains("..") || path.startsWith("/") || path.startsWith("\\") || path.startsWith("$")) {
+            return false;
+        }
+        return true;
     }
 }

@@ -1162,7 +1162,7 @@ public class OmniTask extends Task {
         return consumers;
     }
     
-    private void deleteParentTaskInSlotTable() {
+    private synchronized void deleteParentTaskInSlotTable() {
         for (IndexedInputGate inputGate : this.inputGates) {
             int numOfChannel = inputGate.getNumberOfInputChannels();
             for (int i = 0; i < numOfChannel; i++) {

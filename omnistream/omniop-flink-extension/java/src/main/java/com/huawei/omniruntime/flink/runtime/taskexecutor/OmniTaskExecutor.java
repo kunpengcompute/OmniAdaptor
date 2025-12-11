@@ -106,6 +106,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
@@ -121,7 +122,7 @@ public class OmniTaskExecutor extends TaskExecutor {
 
     private OmniShuffleEnvironment omniShuffleEnvironment;
     private OmniTaskManagerServices omniTaskManagerServices;
-    private Map<ExecutionAttemptID, OmniTaskReferenceCounter> taskMap = new HashMap<>();
+    private Map<ExecutionAttemptID, OmniTaskReferenceCounter> taskMap = new ConcurrentHashMap<>();
 
     public OmniTaskExecutor(RpcService rpcService,
                             TaskManagerConfiguration taskManagerConfiguration,
@@ -248,8 +249,10 @@ public class OmniTaskExecutor extends TaskExecutor {
 
             try {
                 taskAdded = taskSlotTable.addTask(task);
-                deleteLeftTaskInTaskMap(executionAttemptID);
-                taskMap.put(task.getExecutionId(), new OmniTaskReferenceCounter(task));
+                synchronized (this) {
+                    deleteLeftTaskInTaskMap(executionAttemptID);
+                    taskMap.put(task.getExecutionId(), new OmniTaskReferenceCounter(task));
+                }
             } catch (SlotNotFoundException | SlotNotActiveException e) {
                 throw new TaskSubmissionException("Could not submit task.", e);
             }
@@ -535,7 +538,7 @@ public class OmniTaskExecutor extends TaskExecutor {
         return jobManagerConnection;
     }
     
-    private void deleteLeftTaskInTaskMap(ExecutionAttemptID executionAttemptID) {
+    private synchronized void deleteLeftTaskInTaskMap(ExecutionAttemptID executionAttemptID) {
         if (!taskMap.isEmpty()) {
             ExecutionAttemptID existId = taskMap.keySet().toArray(new ExecutionAttemptID[0])[0];
             Object existGraphId = getFieldByReflection(ExecutionAttemptID.class, existId, "executionGraphId");

@@ -214,7 +214,7 @@ public final class OmniGraphOverride {
             SUPPORT_OP_NAME.clear();
             SUPPORT_OP_NAME.addAll(
                     Arrays.asList("Calc", "WatermarkAssigner", "StreamRecordTimestampInserter",
-                            "ConstraintEnforcer", "GroupAggregate"));
+                            "ConstraintEnforcer"));
         }
     }
 

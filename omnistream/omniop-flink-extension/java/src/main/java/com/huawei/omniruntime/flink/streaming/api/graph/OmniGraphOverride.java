@@ -93,8 +93,7 @@ public final class OmniGraphOverride {
         "StringSerializer",
         "DoubleSerializer",
         "LongSerializer",
-        "BigIntSerializer",
-        "IntSerializer"));
+        "BigIntSerializer"));
 
 
     private static JobType jobType = JobType.NULL;

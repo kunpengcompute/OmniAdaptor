@@ -78,6 +78,7 @@ import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.checkpoint.WithMasterCheckpointHook;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
+import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamGroupedReduceOperator;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
@@ -615,6 +616,13 @@ public class StreamingJobGraphGenerator {
             return;
         }
 
+        boolean dataStreamBatchMode = isDataStreamBatchMode(jobType);
+        OmniGraphOverride.setDatastreamBatchMode(dataStreamBatchMode);
+        boolean enableBatchMode =
+                streamGraph.getConfiguration().get(ConfigOptions.key("omni.batch").booleanType().defaultValue(false));
+        if (dataStreamBatchMode && enableBatchMode) {
+            return;
+        }
         boolean validateRes = true;
         for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
             boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos, this.chainedConfigs, this.vertexConfigs, jobType);
@@ -629,6 +637,29 @@ public class StreamingJobGraphGenerator {
             }
         }
         OmniGraphOverride.clearTypeInfo();
+    }
+
+    private boolean isDataStreamBatchMode(JobType jobType) {
+        if (jobType.equals(JobType.SQL)) {
+            return false;
+        }
+        for (OperatorChainInfo chainInfo : chainInfos.values()) {
+            List<StreamNode> allChainedNodes = chainInfo.getAllChainedNodes();
+            for (StreamNode chainedNode : allChainedNodes) {
+                String operatorName = chainedNode.getOperatorName();
+                if (OmniGraphOverride.isSource(operatorName) || OmniGraphOverride.isSink(operatorName)) {
+                    continue;
+                }
+                if (chainedNode.getOperatorFactory() instanceof SimpleOperatorFactory) {
+                    operatorName = chainedNode.getOperator().getClass().getSimpleName();
+                    if (operatorName.equals("StreamMap") || operatorName.equals("StreamGroupedReduceOperator")) {
+                        continue;
+                    }
+                }
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean validateFallBackForCheckpoint(JobType jobType){
@@ -1463,6 +1494,8 @@ public class StreamingJobGraphGenerator {
             ExecutionCheckpointConfigPOJO executionCheckpointConfigPOJO =
                 new ExecutionCheckpointConfigPOJO(checkpointCfg, configuration);
             config.setExecutionCheckpointConf(mapper.writeValueAsString(executionCheckpointConfigPOJO));
+            config.setOmniBatchMode(
+                configuration.get(ConfigOptions.key("omni.batch").booleanType().defaultValue(false)));
         } catch (Exception e) {
             LOG.warn("get OmniConf or CheckpointConf failed!", e);
         }

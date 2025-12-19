@@ -120,6 +120,8 @@ public final class OmniGraphOverride {
 
     private static boolean performanceMode = true;
 
+    private static boolean DATASTREAM_BATCH_MODE = false;
+
     static {
         try {
             Map<String, String> envMap = System.getenv();
@@ -391,6 +393,9 @@ public final class OmniGraphOverride {
                 break;
             case STREAM:
                 StreamConfig streamConfig = vertexConfigs.get(node.getId());
+                if (!DATASTREAM_BATCH_MODE) {
+                    streamConfig.setOmniBatchMode(false);
+                }
                 boolean result;
                 try {
                     result = validateWatermark(node) && StreamNodeOptimized.getInstance().setExtraDescription(
@@ -735,12 +740,12 @@ public final class OmniGraphOverride {
         return jsonMap;
     }
 
-    private static boolean isSource(String operatorName) {
+    public static boolean isSource(String operatorName) {
         Matcher matcher = SOURCE_REGEX.matcher(operatorName);
         return matcher.find();
     }
 
-    private static boolean isSink(String operatorName) {
+    public static boolean isSink(String operatorName) {
         Matcher matcher = SINK_REGEX.matcher(operatorName);
         return matcher.find();
     }
@@ -1157,5 +1162,9 @@ public final class OmniGraphOverride {
             taskTypes.add(taskType);
             jobType = jobType.getCombinationsTaskType(taskType);
         }
+    }
+
+    public static void setDatastreamBatchMode(boolean isBatchMode) {
+        DATASTREAM_BATCH_MODE = isBatchMode;
     }
 }

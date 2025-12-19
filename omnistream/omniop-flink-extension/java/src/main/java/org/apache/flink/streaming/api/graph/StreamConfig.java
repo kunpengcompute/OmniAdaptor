@@ -134,6 +134,8 @@ public class StreamConfig implements Serializable {
 
     private static final String OMNI_CONF = "omniconf";
 
+    private static final String OMNI_BATCH_MODE = "OmniBatchMode";
+
     private static final String CHECKPOINT_CONF = "checkpointConf";
 
     private static final String EXECUTION_CHECKPOINT_CONF = "executionCheckpointConf";
@@ -613,6 +615,14 @@ public class StreamConfig implements Serializable {
 
     public String getOmniConf() {
         return config.getString(OMNI_CONF, "0");
+    }
+
+    public void setOmniBatchMode(boolean omniBatchMode) {
+        config.setBoolean(OMNI_BATCH_MODE, omniBatchMode);
+    }
+
+    public boolean getOmniBatchMode() {
+        return config.getBoolean(OMNI_BATCH_MODE, false);
     }
 
     public void setCheckpointConf(String checkpointConf) {

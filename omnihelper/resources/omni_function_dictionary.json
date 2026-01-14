@@ -1,0 +1,3429 @@
+[
+    {
+        "func_name": "array",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_append",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_compact",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_contains",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_distinct",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_except",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_insert",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_intersect",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_join",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_max",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_min",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_position",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_prepend",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_remove",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_repeat",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_union",
+        "is_support_func": false
+    },
+    {
+        "func_name": "arrays_overlap",
+        "is_support_func": false
+    },
+    {
+        "func_name": "arrays_zip",
+        "is_support_func": false
+    },
+    {
+        "func_name": "flatten",
+        "is_support_func": false
+    },
+    {
+        "func_name": "get",
+        "is_support_func": false
+    },
+    {
+        "func_name": "sequence",
+        "is_support_func": false
+    },
+    {
+        "func_name": "shuffle",
+        "is_support_func": false
+    },
+    {
+        "func_name": "slice",
+        "is_support_func": false
+    },
+    {
+        "func_name": "sort_array",
+        "is_support_func": false
+    },
+    {
+        "func_name": "&",
+        "is_support_func": false
+    },
+    {
+        "func_name": "^",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bit_count",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bit_get",
+        "is_support_func": false
+    },
+    {
+        "func_name": "getbit",
+        "is_support_func": false
+    },
+    {
+        "func_name": "shiftright",
+        "is_support_func": false
+    },
+    {
+        "func_name": "shiftrightunsigned",
+        "is_support_func": false
+    },
+    {
+        "func_name": "|",
+        "is_support_func": false
+    },
+    {
+        "func_name": "~",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_size",
+        "is_support_func": false
+    },
+    {
+        "func_name": "cardinality",
+        "is_support_func": false
+    },
+    {
+        "func_name": "concat",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "reverse",
+        "is_support_func": false
+    },
+    {
+        "func_name": "size",
+        "is_support_func": false
+    },
+    {
+        "func_name": "coalesce",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "if",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "ifnull",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "nanvl",
+        "is_support_func": false
+    },
+    {
+        "func_name": "nullif",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "nvl",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "nvl2",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "when",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "bigint",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "binary",
+        "is_support_func": false
+    },
+    {
+        "func_name": "boolean",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "cast",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "nan",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "date",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "decimal",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "double",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "float",
+        "is_support_func": false
+    },
+    {
+        "func_name": "int",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "smallint",
+        "is_support_func": false
+    },
+    {
+        "func_name": "string",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "timestamp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "tinyint",
+        "is_support_func": false
+    },
+    {
+        "func_name": "from_csv",
+        "is_support_func": false
+    },
+    {
+        "func_name": "schema_of_csv",
+        "is_support_func": false
+    },
+    {
+        "func_name": "to_csv",
+        "is_support_func": false
+    },
+    {
+        "func_name": "add_months",
+        "is_support_func": false
+    },
+    {
+        "func_name": "convert_timezone",
+        "is_support_func": false
+    },
+    {
+        "func_name": "curdate",
+        "is_support_func": false
+    },
+    {
+        "func_name": "current_date",
+        "is_support_func": false
+    },
+    {
+        "func_name": "current_timestamp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "current_timezone",
+        "is_support_func": false
+    },
+    {
+        "func_name": "date_add",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "date_diff",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "date_format",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "date_from_unix_date",
+        "is_support_func": false
+    },
+    {
+        "func_name": "date_part",
+        "is_support_func": false
+    },
+    {
+        "func_name": "date_sub",
+        "is_support_func": false
+    },
+    {
+        "func_name": "date_trunc",
+        "is_support_func": false
+    },
+    {
+        "func_name": "dateadd",
+        "is_support_func": false
+    },
+    {
+        "func_name": "datediff",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "datepart",
+        "is_support_func": false
+    },
+    {
+        "func_name": "day",
+        "is_support_func": false
+    },
+    {
+        "func_name": "dayofmonth",
+        "is_support_func": false
+    },
+    {
+        "func_name": "dayofweek",
+        "is_support_func": false
+    },
+    {
+        "func_name": "dayofyear",
+        "is_support_func": false
+    },
+    {
+        "func_name": "extract",
+        "is_support_func": false
+    },
+    {
+        "func_name": "from_unixtime",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "from_utc_timestamp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "hour",
+        "is_support_func": false
+    },
+    {
+        "func_name": "last_day",
+        "is_support_func": false
+    },
+    {
+        "func_name": "localtimestamp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "make_date",
+        "is_support_func": false
+    },
+    {
+        "func_name": "make_dt_interval",
+        "is_support_func": false
+    },
+    {
+        "func_name": "make_interval",
+        "is_support_func": false
+    },
+    {
+        "func_name": "make_timestamp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "make_timestamp_ltz",
+        "is_support_func": false
+    },
+    {
+        "func_name": "make_timestamp_ntz",
+        "is_support_func": false
+    },
+    {
+        "func_name": "make_ym_interval",
+        "is_support_func": false
+    },
+    {
+        "func_name": "minute",
+        "is_support_func": false
+    },
+    {
+        "func_name": "month",
+        "is_support_func": false
+    },
+    {
+        "func_name": "months_between",
+        "is_support_func": false
+    },
+    {
+        "func_name": "next_day",
+        "is_support_func": false
+    },
+    {
+        "func_name": "now",
+        "is_support_func": false
+    },
+    {
+        "func_name": "quarter",
+        "is_support_func": false
+    },
+    {
+        "func_name": "second",
+        "is_support_func": false
+    },
+    {
+        "func_name": "session_window",
+        "is_support_func": false
+    },
+    {
+        "func_name": "timestamp_micros",
+        "is_support_func": false
+    },
+    {
+        "func_name": "timestamp_millis",
+        "is_support_func": false
+    },
+    {
+        "func_name": "timestamp_seconds",
+        "is_support_func": false
+    },
+    {
+        "func_name": "to_date",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "to_timestamp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "to_timestamp_ltz",
+        "is_support_func": false
+    },
+    {
+        "func_name": "to_timestamp_ntz",
+        "is_support_func": false
+    },
+    {
+        "func_name": "to_unix_timestamp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "to_utc_timestamp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "trunc",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "try_to_timestamp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "unix_date",
+        "is_support_func": false
+    },
+    {
+        "func_name": "unix_micros",
+        "is_support_func": false
+    },
+    {
+        "func_name": "unix_millis",
+        "is_support_func": false
+    },
+    {
+        "func_name": "unix_seconds",
+        "is_support_func": false
+    },
+    {
+        "func_name": "unix_timestamp",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "weekday",
+        "is_support_func": false
+    },
+    {
+        "func_name": "weekofyear",
+        "is_support_func": false
+    },
+    {
+        "func_name": "window",
+        "is_support_func": false
+    },
+    {
+        "func_name": "window_time",
+        "is_support_func": false
+    },
+    {
+        "func_name": "year",
+        "is_support_func": false
+    },
+    {
+        "func_name": "crc32",
+        "is_support_func": false
+    },
+    {
+        "func_name": "hash",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "md5",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "sha",
+        "is_support_func": false
+    },
+    {
+        "func_name": "sha1",
+        "is_support_func": false
+    },
+    {
+        "func_name": "sha2",
+        "is_support_func": false
+    },
+    {
+        "func_name": "xxhash64",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "from_json",
+        "is_support_func": false
+    },
+    {
+        "func_name": "get_json_object",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "json_array_length",
+        "is_support_func": false
+    },
+    {
+        "func_name": "json_object_keys",
+        "is_support_func": false
+    },
+    {
+        "func_name": "json_tuple",
+        "is_support_func": false
+    },
+    {
+        "func_name": "schema_of_json",
+        "is_support_func": false
+    },
+    {
+        "func_name": "to_json",
+        "is_support_func": false
+    },
+    {
+        "func_name": "aggregate",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_sort",
+        "is_support_func": false
+    },
+    {
+        "func_name": "exists",
+        "is_support_func": false
+    },
+    {
+        "func_name": "filter",
+        "is_support_func": false
+    },
+    {
+        "func_name": "forall",
+        "is_support_func": false
+    },
+    {
+        "func_name": "map_filter",
+        "is_support_func": false
+    },
+    {
+        "func_name": "map_zip_with",
+        "is_support_func": false
+    },
+    {
+        "func_name": "reduce",
+        "is_support_func": false
+    },
+    {
+        "func_name": "transform",
+        "is_support_func": false
+    },
+    {
+        "func_name": "transform_keys",
+        "is_support_func": false
+    },
+    {
+        "func_name": "transform_values",
+        "is_support_func": false
+    },
+    {
+        "func_name": "zip_with",
+        "is_support_func": false
+    },
+    {
+        "func_name": "element_at",
+        "is_support_func": false
+    },
+    {
+        "func_name": "map",
+        "is_support_func": false
+    },
+    {
+        "func_name": "map_concat",
+        "is_support_func": false
+    },
+    {
+        "func_name": "map_contains_key",
+        "is_support_func": false
+    },
+    {
+        "func_name": "map_entries",
+        "is_support_func": false
+    },
+    {
+        "func_name": "map_from_arrays",
+        "is_support_func": false
+    },
+    {
+        "func_name": "map_from_entries",
+        "is_support_func": false
+    },
+    {
+        "func_name": "map_keys",
+        "is_support_func": false
+    },
+    {
+        "func_name": "map_values",
+        "is_support_func": false
+    },
+    {
+        "func_name": "str_to_map",
+        "is_support_func": false
+    },
+    {
+        "func_name": "try_element_at",
+        "is_support_func": false
+    },
+    {
+        "func_name": "%",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "*",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "+",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "-",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "/",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "abs",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "acos",
+        "is_support_func": false
+    },
+    {
+        "func_name": "acosh",
+        "is_support_func": false
+    },
+    {
+        "func_name": "asin",
+        "is_support_func": false
+    },
+    {
+        "func_name": "asinh",
+        "is_support_func": false
+    },
+    {
+        "func_name": "atan",
+        "is_support_func": false
+    },
+    {
+        "func_name": "atan2",
+        "is_support_func": false
+    },
+    {
+        "func_name": "atanh",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bin",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bround",
+        "is_support_func": false
+    },
+    {
+        "func_name": "cbrt",
+        "is_support_func": false
+    },
+    {
+        "func_name": "ceil",
+        "is_support_func": false
+    },
+    {
+        "func_name": "ceiling",
+        "is_support_func": false
+    },
+    {
+        "func_name": "conv",
+        "is_support_func": false
+    },
+    {
+        "func_name": "cos",
+        "is_support_func": false
+    },
+    {
+        "func_name": "cosh",
+        "is_support_func": false
+    },
+    {
+        "func_name": "cot",
+        "is_support_func": false
+    },
+    {
+        "func_name": "csc",
+        "is_support_func": false
+    },
+    {
+        "func_name": "degrees",
+        "is_support_func": false
+    },
+    {
+        "func_name": "div",
+        "is_support_func": false
+    },
+    {
+        "func_name": "e",
+        "is_support_func": false
+    },
+    {
+        "func_name": "exp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "expm1",
+        "is_support_func": false
+    },
+    {
+        "func_name": "factorial",
+        "is_support_func": false
+    },
+    {
+        "func_name": "floor",
+        "is_support_func": false
+    },
+    {
+        "func_name": "greatest",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "hex",
+        "is_support_func": false
+    },
+    {
+        "func_name": "hypot",
+        "is_support_func": false
+    },
+    {
+        "func_name": "least",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "ln",
+        "is_support_func": false
+    },
+    {
+        "func_name": "log",
+        "is_support_func": false
+    },
+    {
+        "func_name": "log10",
+        "is_support_func": false
+    },
+    {
+        "func_name": "log1p",
+        "is_support_func": false
+    },
+    {
+        "func_name": "log2",
+        "is_support_func": false
+    },
+    {
+        "func_name": "mod",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "negative",
+        "is_support_func": false
+    },
+    {
+        "func_name": "pi",
+        "is_support_func": false
+    },
+    {
+        "func_name": "pmod",
+        "is_support_func": false
+    },
+    {
+        "func_name": "positive",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "pow",
+        "is_support_func": false
+    },
+    {
+        "func_name": "power",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "radians",
+        "is_support_func": false
+    },
+    {
+        "func_name": "rand",
+        "is_support_func": false
+    },
+    {
+        "func_name": "randn",
+        "is_support_func": false
+    },
+    {
+        "func_name": "random",
+        "is_support_func": false
+    },
+    {
+        "func_name": "rint",
+        "is_support_func": false
+    },
+    {
+        "func_name": "round",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "sec",
+        "is_support_func": false
+    },
+    {
+        "func_name": "shiftleft",
+        "is_support_func": false
+    },
+    {
+        "func_name": "sign",
+        "is_support_func": false
+    },
+    {
+        "func_name": "signum",
+        "is_support_func": false
+    },
+    {
+        "func_name": "sin",
+        "is_support_func": false
+    },
+    {
+        "func_name": "sinh",
+        "is_support_func": false
+    },
+    {
+        "func_name": "sqrt",
+        "is_support_func": false
+    },
+    {
+        "func_name": "tan",
+        "is_support_func": false
+    },
+    {
+        "func_name": "tanh",
+        "is_support_func": false
+    },
+    {
+        "func_name": "try_add",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "try_divide",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "try_multiply",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "try_subtract",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "unhex",
+        "is_support_func": false
+    },
+    {
+        "func_name": "width_bucket",
+        "is_support_func": false
+    },
+    {
+        "func_name": "aes_decrypt",
+        "is_support_func": false
+    },
+    {
+        "func_name": "aes_encrypt",
+        "is_support_func": false
+    },
+    {
+        "func_name": "assert_true",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bitmap_bit_position",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bitmap_bucket_number",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bitmap_count",
+        "is_support_func": false
+    },
+    {
+        "func_name": "current_catalog",
+        "is_support_func": false
+    },
+    {
+        "func_name": "current_database",
+        "is_support_func": false
+    },
+    {
+        "func_name": "current_schema",
+        "is_support_func": false
+    },
+    {
+        "func_name": "current_user",
+        "is_support_func": false
+    },
+    {
+        "func_name": "equal_null",
+        "is_support_func": false
+    },
+    {
+        "func_name": "hll_sketch_estimate",
+        "is_support_func": false
+    },
+    {
+        "func_name": "hll_union",
+        "is_support_func": false
+    },
+    {
+        "func_name": "input_file_block_length",
+        "is_support_func": false
+    },
+    {
+        "func_name": "input_file_block_start",
+        "is_support_func": false
+    },
+    {
+        "func_name": "input_file_name",
+        "is_support_func": false
+    },
+    {
+        "func_name": "java_method",
+        "is_support_func": false
+    },
+    {
+        "func_name": "monotonically_increasing_id",
+        "is_support_func": false
+    },
+    {
+        "func_name": "reflect",
+        "is_support_func": false
+    },
+    {
+        "func_name": "spark_partition_id",
+        "is_support_func": false
+    },
+    {
+        "func_name": "try_aes_decrypt",
+        "is_support_func": false
+    },
+    {
+        "func_name": "typeof",
+        "is_support_func": false
+    },
+    {
+        "func_name": "user",
+        "is_support_func": false
+    },
+    {
+        "func_name": "uuid",
+        "is_support_func": false
+    },
+    {
+        "func_name": "version",
+        "is_support_func": false
+    },
+    {
+        "func_name": "||",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "!",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "!=",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "<",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "<=",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "<=>",
+        "is_support_func": false
+    },
+    {
+        "func_name": "<>",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "=",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "==",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": ">",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": ">=",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "and",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "between",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "case",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "ilike",
+        "is_support_func": false
+    },
+    {
+        "func_name": "in",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "isnan",
+        "is_support_func": false
+    },
+    {
+        "func_name": "isnotnull",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "isnull",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "like",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "not",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "or",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "regexp",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "regexp_like",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "rlike",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "ascii",
+        "is_support_func": false
+    },
+    {
+        "func_name": "base64",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bit_length",
+        "is_support_func": false
+    },
+    {
+        "func_name": "btrim",
+        "is_support_func": false
+    },
+    {
+        "func_name": "char",
+        "is_support_func": false
+    },
+    {
+        "func_name": "char_length",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "character_length",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "chr",
+        "is_support_func": false
+    },
+    {
+        "func_name": "concat_ws",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "contains",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "decode",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "elt",
+        "is_support_func": false
+    },
+    {
+        "func_name": "encode",
+        "is_support_func": false
+    },
+    {
+        "func_name": "endswith",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "find_in_set",
+        "is_support_func": false
+    },
+    {
+        "func_name": "format_number",
+        "is_support_func": false
+    },
+    {
+        "func_name": "format_string",
+        "is_support_func": false
+    },
+    {
+        "func_name": "initcap",
+        "is_support_func": false
+    },
+    {
+        "func_name": "instr",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "lcase",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "left",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "len",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "length",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "levenshtein",
+        "is_support_func": false
+    },
+    {
+        "func_name": "locate",
+        "is_support_func": false
+    },
+    {
+        "func_name": "lower",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "lpad",
+        "is_support_func": false
+    },
+    {
+        "func_name": "ltrim",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "luhn_check",
+        "is_support_func": false
+    },
+    {
+        "func_name": "mask",
+        "is_support_func": false
+    },
+    {
+        "func_name": "octet_length",
+        "is_support_func": false
+    },
+    {
+        "func_name": "overlay",
+        "is_support_func": false
+    },
+    {
+        "func_name": "position",
+        "is_support_func": false
+    },
+    {
+        "func_name": "printf",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regexp_count",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regexp_extract",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "regexp_extract_all",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regexp_instr",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regexp_replace",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "regexp_substr",
+        "is_support_func": false
+    },
+    {
+        "func_name": "repeat",
+        "is_support_func": false
+    },
+    {
+        "func_name": "replace",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "right",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "rpad",
+        "is_support_func": false
+    },
+    {
+        "func_name": "rtrim",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "sentences",
+        "is_support_func": false
+    },
+    {
+        "func_name": "soundex",
+        "is_support_func": false
+    },
+    {
+        "func_name": "space",
+        "is_support_func": false
+    },
+    {
+        "func_name": "split",
+        "is_support_func": false
+    },
+    {
+        "func_name": "split_part",
+        "is_support_func": false
+    },
+    {
+        "func_name": "startswith",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "substr",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "substring",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "substring_index",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "to_binary",
+        "is_support_func": false
+    },
+    {
+        "func_name": "to_char",
+        "is_support_func": false
+    },
+    {
+        "func_name": "to_number",
+        "is_support_func": false
+    },
+    {
+        "func_name": "to_varchar",
+        "is_support_func": false
+    },
+    {
+        "func_name": "translate",
+        "is_support_func": false
+    },
+    {
+        "func_name": "trim",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "try_to_binary",
+        "is_support_func": false
+    },
+    {
+        "func_name": "try_to_number",
+        "is_support_func": false
+    },
+    {
+        "func_name": "ucase",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "unbase64",
+        "is_support_func": false
+    },
+    {
+        "func_name": "upper",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "named_struct",
+        "is_support_func": false
+    },
+    {
+        "func_name": "struct",
+        "is_support_func": false
+    },
+    {
+        "func_name": "parse_url",
+        "is_support_func": false
+    },
+    {
+        "func_name": "url_decode",
+        "is_support_func": false
+    },
+    {
+        "func_name": "url_encode",
+        "is_support_func": false
+    },
+    {
+        "func_name": "xpath",
+        "is_support_func": false
+    },
+    {
+        "func_name": "xpath_boolean",
+        "is_support_func": false
+    },
+    {
+        "func_name": "xpath_double",
+        "is_support_func": false
+    },
+    {
+        "func_name": "xpath_float",
+        "is_support_func": false
+    },
+    {
+        "func_name": "xpath_int",
+        "is_support_func": false
+    },
+    {
+        "func_name": "xpath_long",
+        "is_support_func": false
+    },
+    {
+        "func_name": "xpath_number",
+        "is_support_func": false
+    },
+    {
+        "func_name": "xpath_short",
+        "is_support_func": false
+    },
+    {
+        "func_name": "xpath_string",
+        "is_support_func": false
+    },
+    {
+        "func_name": "any",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "any_value",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "approx_count_distinct",
+        "is_support_func": false
+    },
+    {
+        "func_name": "approx_percentile",
+        "is_support_func": false
+    },
+    {
+        "func_name": "array_agg",
+        "is_support_func": false
+    },
+    {
+        "func_name": "avg",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "bit_and",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bit_or",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bit_xor",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bitmap_construct_agg",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bitmap_or_agg",
+        "is_support_func": false
+    },
+    {
+        "func_name": "bool_and",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "bool_or",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "collect_list",
+        "is_support_func": false
+    },
+    {
+        "func_name": "collect_set",
+        "is_support_func": false
+    },
+    {
+        "func_name": "corr",
+        "is_support_func": false
+    },
+    {
+        "func_name": "count",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "count_if",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "count_min_sketch",
+        "is_support_func": false
+    },
+    {
+        "func_name": "covar_pop",
+        "is_support_func": false
+    },
+    {
+        "func_name": "covar_samp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "every",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "first",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "first_value",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "grouping",
+        "is_support_func": false
+    },
+    {
+        "func_name": "grouping_id",
+        "is_support_func": false
+    },
+    {
+        "func_name": "histogram_numeric",
+        "is_support_func": false
+    },
+    {
+        "func_name": "hll_sketch_agg",
+        "is_support_func": false
+    },
+    {
+        "func_name": "hll_union_agg",
+        "is_support_func": false
+    },
+    {
+        "func_name": "kurtosis",
+        "is_support_func": false
+    },
+    {
+        "func_name": "last",
+        "is_support_func": false
+    },
+    {
+        "func_name": "last_value",
+        "is_support_func": false
+    },
+    {
+        "func_name": "max",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "max_by",
+        "is_support_func": false
+    },
+    {
+        "func_name": "mean",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "median",
+        "is_support_func": false
+    },
+    {
+        "func_name": "min",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "min_by",
+        "is_support_func": false
+    },
+    {
+        "func_name": "mode",
+        "is_support_func": false
+    },
+    {
+        "func_name": "percentile",
+        "is_support_func": false
+    },
+    {
+        "func_name": "percentile_approx",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regr_avgx",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "regr_avgy",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "regr_count",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regr_intercept",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regr_r2",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regr_slope",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regr_sxx",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regr_sxy",
+        "is_support_func": false
+    },
+    {
+        "func_name": "regr_syy",
+        "is_support_func": false
+    },
+    {
+        "func_name": "skewness",
+        "is_support_func": false
+    },
+    {
+        "func_name": "some",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "std",
+        "is_support_func": false
+    },
+    {
+        "func_name": "stddev",
+        "is_support_func": false
+    },
+    {
+        "func_name": "stddev_pop",
+        "is_support_func": false
+    },
+    {
+        "func_name": "stddev_samp",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "sum",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "try_avg",
+        "is_support_func": false
+    },
+    {
+        "func_name": "try_sum",
+        "is_support_func": false
+    },
+    {
+        "func_name": "var_pop",
+        "is_support_func": false
+    },
+    {
+        "func_name": "var_samp",
+        "is_support_func": false
+    },
+    {
+        "func_name": "variance",
+        "is_support_func": false
+    },
+    {
+        "func_name": "cume_dist",
+        "is_support_func": false
+    },
+    {
+        "func_name": "dense_rank",
+        "is_support_func": false
+    },
+    {
+        "func_name": "lag",
+        "is_support_func": false
+    },
+    {
+        "func_name": "lead",
+        "is_support_func": false
+    },
+    {
+        "func_name": "nth_value",
+        "is_support_func": false
+    },
+    {
+        "func_name": "ntile",
+        "is_support_func": false
+    },
+    {
+        "func_name": "percent_rank",
+        "is_support_func": false
+    },
+    {
+        "func_name": "rank",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "nan",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "row_number",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "SHORT",
+            "INT",
+            "LONG",
+            "FLOAT",
+            "DOUBLE",
+            "STRING",
+            "CHAR",
+            "VARCHAR",
+            "nan",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL64",
+            "DECIMAL128",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ]
+    },
+    {
+        "func_name": "explode",
+        "is_support_func": false
+    },
+    {
+        "func_name": "explode_outer",
+        "is_support_func": false
+    },
+    {
+        "func_name": "inline",
+        "is_support_func": false
+    },
+    {
+        "func_name": "inline_outer",
+        "is_support_func": false
+    },
+    {
+        "func_name": "posexplode",
+        "is_support_func": false
+    },
+    {
+        "func_name": "posexplode_outer",
+        "is_support_func": false
+    },
+    {
+        "func_name": "stack",
+        "is_support_func": false
+    },
+    {
+        "func_name": "partial_avg",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "avg"
+    },
+    {
+        "func_name": "merge_avg",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "avg"
+    },
+    {
+        "func_name": "partial_sum",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "sum"
+    },
+    {
+        "func_name": "merge_sum",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "sum"
+    },
+    {
+        "func_name": "partial_try_avg",
+        "is_support_func": false,
+        "hash_agg_func": "try_avg"
+    },
+    {
+        "func_name": "merge_try_avg",
+        "is_support_func": false,
+        "hash_agg_func": "try_avg"
+    },
+    {
+        "func_name": "partial_try_sum",
+        "is_support_func": false,
+        "hash_agg_func": "try_sum"
+    },
+    {
+        "func_name": "merge_try_sum",
+        "is_support_func": false,
+        "hash_agg_func": "try_sum"
+    },
+    {
+        "func_name": "partial_max",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "max"
+    },
+    {
+        "func_name": "merge_max",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "max"
+    },
+    {
+        "func_name": "partial_min",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "min"
+    },
+    {
+        "func_name": "merge_min",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "min"
+    },
+    {
+        "func_name": "partial_first",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "first"
+    },
+    {
+        "func_name": "merge_first",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "nan",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "first"
+    },
+    {
+        "func_name": "partial_last",
+        "is_support_func": false,
+        "hash_agg_func": "last"
+    },
+    {
+        "func_name": "merge_last",
+        "is_support_func": false,
+        "hash_agg_func": "last"
+    },
+    {
+        "func_name": "partial_count",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "count"
+    },
+    {
+        "func_name": "merge_count",
+        "is_support_func": true,
+        "no_support_type": [
+            "BYTE",
+            "FLOAT",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "count"
+    },
+    {
+        "func_name": "partial_bit_and",
+        "is_support_func": false,
+        "hash_agg_func": "bit_and"
+    },
+    {
+        "func_name": "merge_bit_and",
+        "is_support_func": false,
+        "hash_agg_func": "bit_and"
+    },
+    {
+        "func_name": "partial_bit_or",
+        "is_support_func": false,
+        "hash_agg_func": "bit_or"
+    },
+    {
+        "func_name": "merge_bit_or",
+        "is_support_func": false,
+        "hash_agg_func": "bit_or"
+    },
+    {
+        "func_name": "partial_bit_xor",
+        "is_support_func": false,
+        "hash_agg_func": "bit_xor"
+    },
+    {
+        "func_name": "merge_bit_xor",
+        "is_support_func": false,
+        "hash_agg_func": "bit_xor"
+    },
+    {
+        "func_name": "partial_corr",
+        "is_support_func": false,
+        "hash_agg_func": "corr"
+    },
+    {
+        "func_name": "merge_corr",
+        "is_support_func": false,
+        "hash_agg_func": "corr"
+    },
+    {
+        "func_name": "partial_covar_pop",
+        "is_support_func": false,
+        "hash_agg_func": "covar_pop"
+    },
+    {
+        "func_name": "merge_covar_pop",
+        "is_support_func": false,
+        "hash_agg_func": "covar_pop"
+    },
+    {
+        "func_name": "partial_covar_samp",
+        "is_support_func": false,
+        "hash_agg_func": "covar_samp"
+    },
+    {
+        "func_name": "merge_covar_samp",
+        "is_support_func": false,
+        "hash_agg_func": "covar_samp"
+    },
+    {
+        "func_name": "partial_stddev_samp",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "stddev_samp"
+    },
+    {
+        "func_name": "merge_stddev_samp",
+        "is_support_func": true,
+        "no_support_type": [
+            "BOOLEAN",
+            "BYTE",
+            "FLOAT",
+            "DATE",
+            "TIMESTAMP",
+            "BINARY",
+            "ARRAY",
+            "MAP",
+            "STRUCT(ROW)"
+        ],
+        "hash_agg_func": "stddev_samp"
+    },
+    {
+        "func_name": "partial_stddev_pop",
+        "is_support_func": false,
+        "hash_agg_func": "stddev_pop"
+    },
+    {
+        "func_name": "merge_stddev_pop",
+        "is_support_func": false,
+        "hash_agg_func": "stddev_pop"
+    },
+    {
+        "func_name": "partial_var_pop",
+        "is_support_func": false,
+        "hash_agg_func": "var_pop"
+    },
+    {
+        "func_name": "merge_var_pop",
+        "is_support_func": false,
+        "hash_agg_func": "var_pop"
+    },
+    {
+        "func_name": "partial_var_samp",
+        "is_support_func": false,
+        "hash_agg_func": "var_samp"
+    },
+    {
+        "func_name": "merge_var_samp",
+        "is_support_func": false,
+        "hash_agg_func": "var_samp"
+    },
+    {
+        "func_name": "partial_skewness",
+        "is_support_func": false,
+        "hash_agg_func": "skewness"
+    },
+    {
+        "func_name": "merge_skewness",
+        "is_support_func": false,
+        "hash_agg_func": "skewness"
+    },
+    {
+        "func_name": "partial_kurtosis",
+        "is_support_func": false,
+        "hash_agg_func": "kurtosis"
+    },
+    {
+        "func_name": "merge_kurtosis",
+        "is_support_func": false,
+        "hash_agg_func": "kurtosis"
+    },
+    {
+        "func_name": "partial_regr_count",
+        "is_support_func": false,
+        "hash_agg_func": "regr_count"
+    },
+    {
+        "func_name": "merge_regr_count",
+        "is_support_func": false,
+        "hash_agg_func": "regr_count"
+    },
+    {
+        "func_name": "partial_regr_r2",
+        "is_support_func": false,
+        "hash_agg_func": "regr_r2"
+    },
+    {
+        "func_name": "merge_regr_r2",
+        "is_support_func": false,
+        "hash_agg_func": "regr_r2"
+    },
+    {
+        "func_name": "partial_approx_count_distinct",
+        "is_support_func": false,
+        "hash_agg_func": "approx_count_distinct"
+    },
+    {
+        "func_name": "partial_approx_percentile",
+        "is_support_func": false,
+        "hash_agg_func": "approx_percentile"
+    },
+    {
+        "func_name": "partial_percentile",
+        "is_support_func": false,
+        "hash_agg_func": "percentile"
+    },
+    {
+        "func_name": "partial_collect_list",
+        "is_support_func": false,
+        "hash_agg_func": "collect_list"
+    },
+    {
+        "func_name": "merge_collect_list",
+        "is_support_func": false,
+        "hash_agg_func": "collect_list"
+    },
+    {
+        "func_name": "partial_collect_set",
+        "is_support_func": false,
+        "hash_agg_func": "collect_set"
+    },
+    {
+        "func_name": "merge_collect_set",
+        "is_support_func": false,
+        "hash_agg_func": "collect_set"
+    }
+]

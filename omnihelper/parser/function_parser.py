@@ -13,6 +13,7 @@ import os
 import re
 import hashlib
 from collections import defaultdict
+
 from omnihelper.util.common_util import CommonUtil
 
 DEFAULT_TYPE = "PARTITION"
@@ -153,12 +154,13 @@ class FunctionParser:
 
     def match_expr_pattern(self, physical_plan):
         func_pair = []
-        for match in self.func_pattern.finditer(physical_plan):
-            func = match.group(1)
-            params = self.handle_special_param(match.group(2).split(","))
-            if not func in self.omni_functions:
-                continue
-            func_pair.append({"func": func, "params": params})
+        if self.func_pattern.search(physical_plan):
+            for call in self.extract_function_calls(physical_plan):
+                func = self.extract_func_name(call)
+                params = self.handle_special_param(self.extract_func_args(call))
+                if not func in self.omni_functions:
+                    continue
+                func_pair.append({"func": func, "params": params})
 
         for match in self.expr_pattern.finditer(physical_plan):
             func = match.group(2)
@@ -170,6 +172,83 @@ class FunctionParser:
             func_pair.append({"func": func, "params": params})
 
         return func_pair
+
+    def extract_function_calls(self, s):
+        """
+        提取行内的所有函数调用
+        :return:
+        """
+        results = []
+        i = 0
+        n = len(s)
+
+        while i < n:
+            m = re.match(r'[a-zA-Z_]\w*', s[i:])
+            if not m:
+                i += 1
+                continue
+
+            func = m.group()
+            j = i + len(func)
+
+            if j >= n or s[j] != "(":
+                i += 1
+                continue
+
+            # 括号配平
+            depth = 0
+            k = j
+            while k < n:
+                if s[k] == "(":
+                    depth += 1
+                elif s[k] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        results.append(s[i:k + 1])
+                        i = k + 1
+                        break
+                k += 1
+            else:
+                i += 1
+        return results
+
+    def extract_func_name(self, call):
+        """
+        提取函数调用的函数名
+        :return: 函数名
+        """
+        m = re.match(r'\s*([a-zA-Z_]\w*)\s*\(', call)
+        return m.group(1) if m else ""
+
+    def extract_func_args(self, call):
+        """
+        提取函数调用的参数值
+        :return: 参数列表
+        """
+        l = call.find("(")
+        r = call.rfind(")")
+        if l == -1 or r == -1 or r<= l:
+            return []
+
+        args_str = call[l + 1:r]
+        args = []
+        buf = []
+        depth = 0
+        for ch in args_str:
+            if ch == "(":
+                depth += 1
+                buf.append(ch)
+            elif ch == ")":
+                depth -= 1
+                buf.append(ch)
+            elif ch == "," and depth == 0:
+                args.append("".join(buf).strip())
+                buf = []
+            else:
+                buf.append(ch)
+        if buf:
+            args.append("".join(buf).strip())
+        return args
 
     def extract_left_param(self, physical_plan, func):
         """
@@ -228,7 +307,7 @@ class FunctionParser:
         process_params = []
         for param in params:
             if "#" in param and not self.func_pattern.match(param):
-                param = param.split("#")[0]
+                param = re.sub(r"#\d+", "", param)
             process_params.append(param.strip())
         return process_params
 

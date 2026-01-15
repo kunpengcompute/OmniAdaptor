@@ -17,6 +17,9 @@ from omnihelper.util.common_util import CommonUtil
 
 DEFAULT_TYPE = "PARTITION"
 NESTED_FUNCTIONS = "NESTED FUNCTIONS"
+STRING = "STRING"
+INT = "INT"
+MAP = "MAP"
 DECIMAL64 = "DECIMAL64"
 DECIMAL128 = "DECIMAL128"
 DECIMAL64_PRECISION = [1, 18]
@@ -25,7 +28,6 @@ DECIMAL128_PRECISION = [19, 38]
 class FunctionParser:
 
     DICTIONARY_PATH = os.path.join(CommonUtil.get_execute_path(), "resources", "omni_function_dictionary.json")
-    FUNC_PATTERN = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)\)')
 
     def __init__(self, app_data_path):
         self.app_data_path = app_data_path
@@ -36,7 +38,7 @@ class FunctionParser:
     def parse_event_log(self):
         print("Start parsing expr and function...")
         self.load_func_list()
-        if not self.load_func_list:
+        if not self.function_list:
             return []
         json_files = self.filter_json_files()
         evaluate_result = []
@@ -59,8 +61,8 @@ class FunctionParser:
             print("Failed to load the functions list: " + str(e))
             return
         self.omni_functions = [func.get("func_name") for func in self.function_list]
-        pattern = "(.+?)\\s+({})\\s+(.+)".format("|".join(map(re.escape, self.omni_functions)))
-        self.expr_pattern = re.compile(pattern)
+        self.func_pattern = re.compile("({})\\((.*)".format("|".join(map(re.escape, self.omni_functions))))
+        self.expr_pattern = re.compile("(.+?)\\s+({})\\s+(.+)".format("|".join(map(re.escape, self.omni_functions))))
         for func in self.function_list:
             if func.get("hash_agg_func"):
                 self.partial_func_mapping[func["func_name"]] = func["hash_agg_func"]
@@ -113,14 +115,17 @@ class FunctionParser:
         physical_plan = event.get("physical plan")
         if not physical_plan:
             return ""
-        func_pair = self.match_expr_pattern(physical_plan)
-        if not func_pair:
+        update_physical_plan = self.preprocess_physical_plan(physical_plan)
+        func_pairs = []
+        for line in update_physical_plan:
+            func_pairs.extend(self.match_expr_pattern(line))
+        if not func_pairs:
             return ""
 
-        for pair in func_pair:
+        for pair in func_pairs:
             func_name = pair.get("func")
             params = pair.get("params")
-            param_type_mapping = self.get_param_type_mapping(event.get("node_metrics"), physical_plan)
+            param_type_mapping = self.get_param_type_mapping(event.get("node_metrics"), "".join(update_physical_plan))
             input_type = self.get_input_type(params, param_type_mapping)
             if not input_type:
                 continue
@@ -132,42 +137,100 @@ class FunctionParser:
             analysis_result.append(not_supported_func)
         return analysis_result
 
+    def preprocess_physical_plan(self, physical_plan):
+        preprocess_res = []
+        start_analyze = False
+        for line in physical_plan.split("\n")[2:]:
+            if not start_analyze:
+                if line.startswith("(1)"):
+                    start_analyze = True
+                else:
+                    continue
+            if not line:
+                continue
+            preprocess_res.append(line)
+        return preprocess_res
+
     def match_expr_pattern(self, physical_plan):
         func_pair = []
-        for match in self.FUNC_PATTERN.finditer(physical_plan):
+        for match in self.func_pattern.finditer(physical_plan):
             func = match.group(1)
             params = self.handle_special_param(match.group(2).split(","))
             if not func in self.omni_functions:
-                continue
-            if any(not self.is_valid_param(param) for param in params):
                 continue
             func_pair.append({"func": func, "params": params})
 
         for match in self.expr_pattern.finditer(physical_plan):
             func = match.group(2)
-            params = self.handle_special_param([match.group(1), match.group(3)])
+            left_param = self.extract_left_param(physical_plan, func)
+            right_param = self.extract_right_param(physical_plan, func)
+            params = self.handle_special_param([left_param, right_param])
             if not func in self.omni_functions:
-                continue
-            if any(not self.is_valid_param(param) for param in params):
                 continue
             func_pair.append({"func": func, "params": params})
 
         return func_pair
 
+    def extract_left_param(self, physical_plan, func):
+        """
+        返回表达式左边最靠近的参数或函数
+        :return: 左边参数
+        """
+        lt_index = physical_plan.find(func)
+        if lt_index == -1:
+            return None
+
+        depth = 0
+        end = lt_index
+        for i in range(lt_index - 1, -1, -1):
+            ch = physical_plan[i]
+            if ch == ")":
+                depth += 1
+            elif ch == "(":
+                depth -= 1
+            if depth < 0:
+                return physical_plan[i + 1:end].strip()
+        left = physical_plan[:lt_index].rstrip()
+        return left.split()[-1]
+
+    def extract_right_param(self, physical_plan, func):
+        """
+        返回表达式右边最靠近的参数或函数
+        :return: 右边参数
+        """
+        lt_index = physical_plan.find(func)
+        if lt_index == -1:
+            return None
+
+        physical_plan = physical_plan[lt_index + 1:]
+        depth = 0
+        buf = []
+        for i, ch in enumerate(physical_plan):
+            if ch == "(":
+                depth += 1
+                buf.append(ch)
+            elif ch == ")":
+                depth -= 1
+                buf.append(ch)
+                if depth == 0:
+                    break
+            elif ch.isspace() and depth == 0:
+                break
+            else:
+                buf.append(ch)
+
+        if not buf:
+            tokens = physical_plan.strip().split()
+            return tokens[0] if tokens else None
+        return "".join(buf).strip()
+
     def handle_special_param(self, params):
         process_params = []
         for param in params:
-            if "#" in param:
+            if "#" in param and not self.func_pattern.match(param):
                 param = param.split("#")[0]
             process_params.append(param.strip())
         return process_params
-
-    def is_valid_param(self, param):
-        param_pattern = re.compile(
-            r"^('[^']*'|\"[^\"]*\"|-?\d+(\.\d+)?|[A-Za-z_][A-Za-z0-9_#$@]*)$"
-        )
-        match = param_pattern.match(param)
-        return match is not None
 
     def get_param_type_mapping(self, node_metrics, physical_plan):
         node_type = {}
@@ -229,6 +292,18 @@ class FunctionParser:
     def get_input_type(self, params, param_type_mapping):
         input_type = []
         for param in params:
+            if param.startswith("\"") and param.endswith("\""):
+                input_type.append(STRING)
+                continue
+            if param.startswith("'") and param.endswith("'"):
+                input_type.append(STRING)
+                continue
+            if re.match(r"^\d+$", param):
+                input_type.append(INT)
+                continue
+            if param.upper().startswith(MAP):
+                input_type.append(MAP)
+                continue
             if param_type_mapping.get(param):
                 input_type.append(param_type_mapping[param])
                 continue
@@ -239,10 +314,8 @@ class FunctionParser:
         return input_type
 
     def is_nested_function(self, param):
-        param = param.replace(" ", "")
-        nested_function_pattern = r'^([a-zA-Z_]\w*)\(([a-zA-Z_]\w*)\(([^)]+)\)\)$'
-        match = re.fullmatch(nested_function_pattern, param)
-        return match is not None
+        param = param.strip()
+        return bool(re.match(r'^[a-zA-Z_]\w*\s*\(', param))
 
     def build_not_supported_func(self, func_name, event, input_type):
         func_name = self.partial_func_mapping[func_name] if func_name in self.partial_func_mapping else func_name

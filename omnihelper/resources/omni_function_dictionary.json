@@ -164,6 +164,7 @@
     {
         "func_name": "coalesce",
         "is_support_func": true,
+        "param_count": 2,
         "no_support_type": [
             "BYTE",
             "FLOAT",
@@ -306,7 +307,7 @@
             "STRING",
             "CHAR",
             "VARCHAR",
-            "nan",
+            "NULL",
             "DATE",
             "TIMESTAMP",
             "DECIMAL64",
@@ -681,6 +682,7 @@
     {
         "func_name": "to_date",
         "is_support_func": true,
+        "param_count": 1,
         "no_support_type": [
             "BOOLEAN",
             "BYTE",
@@ -803,7 +805,7 @@
             "BYTE",
             "SHORT",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -849,7 +851,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -1176,6 +1178,7 @@
     {
         "func_name": "greatest",
         "is_support_func": true,
+        "param_count": 2,
         "no_support_type": [
             "BYTE",
             "SHORT",
@@ -1199,6 +1202,7 @@
     {
         "func_name": "least",
         "is_support_func": true,
+        "param_count": 2,
         "no_support_type": [
             "BYTE",
             "SHORT",
@@ -2655,7 +2659,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -2668,7 +2672,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -2713,7 +2717,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -2749,7 +2753,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -2950,6 +2954,7 @@
     {
         "func_name": "rank",
         "is_support_func": true,
+        "param_count": 0,
         "no_support_type": [
             "BOOLEAN",
             "BYTE",
@@ -2961,7 +2966,7 @@
             "STRING",
             "CHAR",
             "VARCHAR",
-            "nan",
+            "NULL",
             "DATE",
             "TIMESTAMP",
             "DECIMAL64",
@@ -2975,6 +2980,7 @@
     {
         "func_name": "row_number",
         "is_support_func": true,
+        "param_count": 0,
         "no_support_type": [
             "BOOLEAN",
             "BYTE",
@@ -2986,7 +2992,7 @@
             "STRING",
             "CHAR",
             "VARCHAR",
-            "nan",
+            "NULL",
             "DATE",
             "TIMESTAMP",
             "DECIMAL64",
@@ -3115,7 +3121,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -3129,7 +3135,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -3143,7 +3149,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -3157,7 +3163,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -3171,7 +3177,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",
@@ -3185,7 +3191,7 @@
         "no_support_type": [
             "BYTE",
             "FLOAT",
-            "nan",
+            "NULL",
             "BINARY",
             "ARRAY",
             "MAP",

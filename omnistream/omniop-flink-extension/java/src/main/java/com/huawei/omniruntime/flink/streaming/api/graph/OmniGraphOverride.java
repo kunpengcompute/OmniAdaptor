@@ -23,6 +23,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.ListSerializer;
 import org.apache.flink.api.common.typeutils.base.MapSerializer;
 import org.apache.flink.api.connector.sink2.Sink;
+import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.api.java.typeutils.runtime.PojoSerializer;
 import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
 import org.apache.flink.runtime.jobgraph.JobVertex;
@@ -37,6 +38,7 @@ import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamNode;
 import org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
+import org.apache.flink.streaming.api.operators.SourceOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.runtime.operators.sink.SinkWriterOperatorFactory;
@@ -301,6 +303,20 @@ public final class OmniGraphOverride {
         List<StreamNode> chainedNode = chainInfo.getAllChainedNodes();
         for (StreamNode node : chainedNode) {
             if (validateNodeForOmniTask(vertexID, vertexConfigs, jobType, streamGraph, node)) {
+                return false;
+            }
+        }
+
+        StreamNode lastNode = chainedNode.get(0);
+        StreamNode firstNode = chainedNode.get(chainedNode.size() - 1);
+
+        if (jobType == JobType.STREAM
+                && "Map".equals(lastNode.getOperatorName())
+                && firstNode.getOperatorFactory() instanceof SourceOperatorFactory) {
+            SourceOperatorFactory<?> sourceOperatorFactory = (SourceOperatorFactory<?>) firstNode.getOperatorFactory();
+            Source source = ReflectionUtils.retrievePrivateField(sourceOperatorFactory, "source");
+            if ("KafkaSource".equals(source.getClass().getSimpleName())) {
+                LOG.info("unsupported operators kafkaSource and map for this job in native, roll back.");
                 return false;
             }
         }

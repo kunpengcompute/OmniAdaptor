@@ -9,7 +9,11 @@
    See the Mulan PSL v2 for more details.
 """
 import os
+import re
+import sys
+import json
 import time
+import hashlib
 import pandas as pd
 import argparse
 import subprocess
@@ -17,39 +21,66 @@ from tqdm import tqdm
 from pathlib import Path
 from datetime import datetime
 from omnihelper.parser.function_parser import FunctionParser
+from omnihelper.parser.op_parser import OpParser
 from omnihelper.util.common_util import CommonUtil
+from omnihelper.util.excel_util import ExcelWriterWithStyle
+
+
+def check_and_get_architecture():
+    """
+    检查并获取系统架构，如果不支持则退出程序
+
+    Returns:
+    --------
+    str: 系统架构 ('x86' 或 'arm')
+    """
+    success, arch = CommonUtil.get_architecture()
+
+    if not success:
+        print(f"[ERROR] Unsupported CPU architecture: {arch}")
+        print("[ERROR] Currently only x86 (x86_64/amd64) and ARM (aarch64/arm64) architectures are supported")
+        sys.exit(1)
+
+    return arch
 
 
 class LogParser:
 
+    ARCHITECTURE = check_and_get_architecture()
     EXECUTE_PATH = CommonUtil.get_execute_path()
     TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
     TMP_PATH = os.path.join(EXECUTE_PATH, "tmp", TIMESTAMP)
+    FILE_PATTERN = re.compile(r".*(application_|local-)[0-9]+(_[0-9])*.*(\\.lz4|\\.zstd)?$")
 
     def __init__(self):
-        self.parser = None
-        self.args = None
-        self.compressed_files = []
+        self.parser = None  # 存储ArgumentParser
+        self.args = None  # 存储命令行参数
+        self.op_parser = None
+        self.expr_parser = None
+        self.compressed_files = []  # 存储待处理的压缩文件
         self.input_is_file = False  # 标记输入是否为文件
         self.input_file_path = None  # 如果是文件，存储文件路径
+        self.excel_writer = ExcelWriterWithStyle()  # 用于表格写
+        self.json_files = []  # 存储生成的json文件
+        self.analysis_result = []  # 存储最终的分析结果，用于表格写入
 
-        self._create_parser()
-        self._get_arguments()
-        self.print_arguments()
+        self._create_parser()  # 初始化命令行解析
+        self._get_arguments()  # 解析命令行
+        self.print_arguments()  # 打印初始化页面及参数
 
     def _create_parser(self):
         self.parser = argparse.ArgumentParser(
             description='Big Data Operator Scanning Command Line Tool',
             formatter_class=argparse.RawDescriptionHelpFormatter,
-            epilog="""
+            epilog=f"""
 Usage Examples:
-  ./omnihelper -i ./input_data -o ./output_dir 
+  ./omnihelper_{self.ARCHITECTURE} -i ./input_data -o ./output_dir 
     --java-path /path/to/java/bin/java 
     --class-path /path/to/boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar:\
 /path/to/boostkit-omnimv-spark-3.4.3-1.2.0-aarch64.jar:\
 /path/to/spark-3.4.3-bin-hadoop3/jars/*
 
-  ./omnihelper -i ./input_data/eventlog.lz4 -o ./output_dir
+  ./omnihelper_{self.ARCHITECTURE} -i ./input_data/eventlog.lz4 -o ./output_dir
     --java-path /path/to/java/bin/java 
     --class-path /path/to/boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar:\
 /path/to/boostkit-omnimv-spark-3.4.3-1.2.0-aarch64.jar:\
@@ -103,10 +134,10 @@ Usage Examples:
 
             # 检查文件扩展名
             filename_lower = os.path.basename(self.args.input_data).lower()
-            if not (filename_lower.endswith('.lz4') or filename_lower.endswith('.zstd')):
+
+            if not self.FILE_PATTERN.match(filename_lower):
                 self.parser.error(
-                    f"Input file must be a .lz4 or .zstd file. "
-                    f"Provided file: {os.path.basename(self.args.input_data)}"
+                    f"Provided file invalid: {os.path.basename(self.args.input_data)}"
                 )
         elif os.path.isdir(self.args.input_data):
             self.input_is_file = False
@@ -154,6 +185,54 @@ Usage Examples:
         except Exception as e:
             return False, "", str(e)
 
+    def parse_json_file(self, file_path: str, application_id):
+        try:
+            with open(file_path, "r") as f:
+                app_data = json.load(f)
+        except Exception as e:
+            return False, f"Failed to load json file: {file_path}, ex: {e}"
+
+        try:
+            for event in app_data:
+                # 获取sql_hash和app_id信息
+                sql_hash = hashlib.sha256(event.get("original query").encode("utf-8")).hexdigest()[-6:]
+                app_id = application_id + "_" + event.get("executionId")
+                op_event_result = self.op_parser.parse_event(event)
+                expr_event_result = self.expr_parser.parse_event(event)
+                if not expr_event_result and not op_event_result:
+                    continue
+                max_list_length = max(len(op_event_result), len(expr_event_result))
+                for i in range(max_list_length):
+                    func_name = expr_event_result[i].get('func_name', '') if i < len(expr_event_result) else ''
+                    func_inputs = expr_event_result[i].get('input', []) if i < len(expr_event_result) else []
+                    func_times = expr_event_result[i].get('times', 0) if i < len(expr_event_result) else ''
+
+                    op_name = op_event_result[i].get('op_name', '') if i < len(op_event_result) else ''
+                    op_inputs = op_event_result[i].get('input_list', []) if i < len(op_event_result) else []
+                    op_outputs = op_event_result[i].get('output_list', []) if i < len(op_event_result) else []
+                    op_times = op_event_result[i].get('times', 0) if i < len(op_event_result) else ''
+
+                    self.analysis_result.append(
+                        {
+                            'ApplicationID+SQL ID': app_id,
+                            'SQL Hash': sql_hash,
+                            'Omni不支持的算子名称': op_name,
+                            'Omni不支持的算子Input': ",".join(op_inputs),
+                            'Omni不支持的算子Output': ",".join(op_outputs),
+                            'Omni不支持的算子出现频次': op_times,
+                            'Omni不支持的算子运行时间': '',
+                            'Omni不支持的算子Output rows': '',
+                            'Omni不支持的表达式/内置函数名称': CommonUtil.safe_excel_value(func_name),
+                            'Omni不支持的表达式/内置函数Input': ",".join(func_inputs),
+                            'Omni不支持的表达式/内置函数出现频次': func_times,
+                            'Spark版本': '',  # 原始数据中没有Spark版本信息
+                            '异常信息/备注': ''  # 添加函数名作为备注
+                        }
+                    )
+        except Exception as e:
+            return False, f"Failed to parse json file: {file_path}, ex: {e}"
+        return True, ""
+
     def find_compressed_files(self):
         """查找目录/文件中的所有.lz4和.zstd文件"""
         if self.input_is_file:
@@ -171,7 +250,7 @@ Usage Examples:
             # 处理目录
             for root, _, files in os.walk(self.args.input_data):
                 for filename in files:
-                    if filename.lower().endswith(('.lz4', '.zstd')):
+                    if self.FILE_PATTERN.match(filename.lower()):
                         input_file_path = Path(root)
                         output_file_path = self.TMP_PATH / Path(root).relative_to(self.args.input_data)
                         self.compressed_files.append({
@@ -194,204 +273,55 @@ Usage Examples:
                 success, stdout, stderr = self.parse_single_file(input_file_path, output_file_path, filename)
                 if not success:
                     failed_files.append((os.path.join(input_file_path, filename), stderr))
+                else:
+                    self.json_files.append(os.path.join(output_file_path, filename + ".json"))
                 pbar.update(1)
+            pbar.close()  # 确保关闭
 
-        # 统一展示失败结果
-        if failed_files:
-            print(f"Processing completed with {len(failed_files)} failed files:")
-            for i, (filepath, error) in enumerate(failed_files, 1):
-                print(f"{i}. [File]: {filepath}")
-                print(f"   [Error]: {error}")
-            print(f"\nSummary: {len(self.compressed_files) - len(failed_files)} succeeded, {len(failed_files)} failed")
-        else:
-            print(f"\nAll {len(self.compressed_files)} files processed successfully!")
-        print("-" * 60)
+        CommonUtil.print_failed_files(failed_files, len(self.compressed_files))
+
+        return len(self.compressed_files) == len(failed_files)
 
     def parse_event_log(self):
+        failed_json_files = []  # 存储失败的文件信息
+        print("Start parsing expr and op...")
+
         try:
-            records = []
-            expr_parser = FunctionParser(self.TMP_PATH)
-            start_time = time.time()
-            res = expr_parser.parse_event_log()
-            print("Cost time: " + str(time.time() - start_time))
-            for item in res:
-                for app_id, app_info_list in item.items():
-                    for app_info in app_info_list:
-                        # 提取基本信息
-                        func_name = app_info.get('func_name', '')
-                        sql_hash = app_info.get('sql_hash', '')
-                        inputs = app_info.get('input', [])
-                        times = app_info.get('times', 0)
-                        record = {
-                            'ApplicationID+SQL ID': app_id,
-                            'SQL Hash': sql_hash,
-                            'Omni不支持的算子名称': '',
-                            'Omni不支持的算子Input': '',
-                            'Omni不支持的算子Output': '',
-                            'Omni不支持的算子出现频次': '',
-                            'Omni不支持的算子Output rows': '',
-                            'Omni不支持的表达式/内置函数名称': func_name,
-                            'Omni不支持的表达式/内置函数Input': ",".join(inputs),
-                            'Omni不支持的表达式/内置函数出现频次': times,
-                            'Spark版本': '',  # 原始数据中没有Spark版本信息
-                            '异常信息/备注': ''  # 添加函数名作为备注
-                        }
-                        records.append(record)
-            df = pd.DataFrame(records)
-            output_excel_path = os.path.join(self.args.output_dir, f"Omni_Analysis_Report_{self.TIMESTAMP}.xlsx")
-            # 使用ExcelWriter来添加格式
-            with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
-                # 先写入数据
-                df.to_excel(writer, index=False, header=False ,startrow=2)
-
-                # 获取工作簿和工作表
-                workbook = writer.book
-                worksheet = writer.sheets['Sheet1']
-
-                # 添加两行标题
-                # 第一行标题
-                worksheet.cell(row=1, column=1, value='ApplicationID+SQL ID')
-                worksheet.cell(row=1, column=2, value='SQL Hash')
-                worksheet.cell(row=1, column=3, value='Omni不支持的算子')
-                worksheet.cell(row=1, column=8, value='Omni不支持的表达式/内置函数')
-                worksheet.cell(row=1, column=11, value='Spark版本')
-                worksheet.cell(row=1, column=12, value='异常信息/备注')
-
-                # 第二行标题（子标题）
-                column_titles = [
-                    'ApplicationID+SQL ID', 'SQL Hash',
-                    '名称', 'Input', 'Output', '出现频次', 'Output rows',
-                    '名称', 'Input', '出现频次',
-                    'Spark版本', '异常信息/备注'
-                ]
-
-                for col_idx, title in enumerate(column_titles, 1):
-                    worksheet.cell(row=2, column=col_idx, value=title)
-
-                # 合并单元格
-                # 第1列：第1-2行合并
-                worksheet.merge_cells(start_row=1, start_column=1, end_row=2, end_column=1)
-                # 第2列：第1-2行合并
-                worksheet.merge_cells(start_row=1, start_column=2, end_row=2, end_column=2)
-                # 第3-7列：第1行合并（Omni不支持的算子）
-                worksheet.merge_cells(start_row=1, start_column=3, end_row=1, end_column=7)
-                # 第8-10列：第1行合并（Omni不支持的表达式/内置函数）
-                worksheet.merge_cells(start_row=1, start_column=8, end_row=1, end_column=10)
-                # 第11列：第1-2行合并
-                worksheet.merge_cells(start_row=1, start_column=11, end_row=2, end_column=11)
-                # 第12列：第1-2行合并
-                worksheet.merge_cells(start_row=1, start_column=12, end_row=2, end_column=12)
-
-                # 导入样式
-                from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
-
-                # 定义样式
-                center_alignment = Alignment(horizontal='center', vertical='center')
-                bold_font = Font(bold=True)
-                header_fill = PatternFill(start_color="EBEFF6", end_color="EBEFF6", fill_type="solid")
-
-                # 定义边框样式
-                thin_border = Border(
-                    left=Side(style='thin'),
-                    right=Side(style='thin'),
-                    top=Side(style='thin'),
-                    bottom=Side(style='thin')
-                )
-
-                # 计算总行数和列数
-                total_rows = len(df) + 2  # 数据行数 + 标题行
-                total_cols = len(column_titles)
-
-                # 先为所有单元格应用样式（包括合并单元格）
-                for row in range(1, total_rows + 1):
-                    for col in range(1, total_cols + 1):
-                        cell = worksheet.cell(row=row, column=col)
-
-                        # 所有单元格应用边框
-                        cell.border = thin_border
-
-                        # 前两行（标题行）应用特殊样式
-                        if row <= 2:
-                            cell.font = bold_font
-                            cell.fill = header_fill
-                            cell.alignment = center_alignment
-                        else:
-                            # 数据行应用居中对齐
-                            cell.alignment = center_alignment
-
-                # 使用固定的列宽设置
-                from openpyxl.utils import get_column_letter
-
-                column_widths = [35, 10, 20, 35, 35, 10, 10, 20, 35, 10, 15, 30]
-
-                # 为每列设置固定的宽度
-                for col_idx, width in enumerate(column_widths, 1):
-                    column_letter = get_column_letter(col_idx)
-                    worksheet.column_dimensions[column_letter].width = width
-
-                # 对于第1,2列值相同的行，合并单元格
-                # 数据从第3行开始
-                start_data_row = 3
-                current_start_row = start_data_row
-
-                # 遍历所有数据行
-                for current_row in range(start_data_row, total_rows + 1):
-                    # 获取当前行的第1列和第2列值
-                    current_col1_value = worksheet.cell(row=current_row, column=1).value
-                    current_col2_value = worksheet.cell(row=current_row, column=2).value
-
-                    # 获取下一行的第1列和第2列值（如果存在）
-                    if current_row < total_rows:
-                        next_col1_value = worksheet.cell(row=current_row + 1, column=1).value
-                        next_col2_value = worksheet.cell(row=current_row + 1, column=2).value
-                    else:
-                        next_col1_value = None
-                        next_col2_value = None
-
-                    # 检查当前行是否与下一行的第1、2列值相同
-                    same_values = (current_col1_value == next_col1_value and
-                                   current_col2_value == next_col2_value)
-
-                    # 如果值不相同或者已经到最后一行，则合并之前相同的行
-                    if not same_values:
-                        # 如果有多行相同的值，合并它们
-                        if current_start_row < current_row:
-                            # 合并第1列
-                            worksheet.merge_cells(
-                                start_row=current_start_row,
-                                start_column=1,
-                                end_row=current_row,
-                                end_column=1
-                            )
-                            # 合并第2列
-                            worksheet.merge_cells(
-                                start_row=current_start_row,
-                                start_column=2,
-                                end_row=current_row,
-                                end_column=2
-                            )
-
-                            # 设置合并后的单元格样式
-                            for col in [1, 2]:
-                                merged_cell = worksheet.cell(row=current_start_row, column=col)
-                                merged_cell.alignment = center_alignment
-                                merged_cell.border = thin_border
-
-                        # 更新起始行为下一行
-                        current_start_row = current_row + 1
-
-            print(f"[SUCCESS] Analysis report has been saved to: {output_excel_path}")
-
+            self.op_parser = OpParser()
+            self.expr_parser = FunctionParser()
         except Exception as e:
-            print(f"[ERROR] ：{e}")
-        print("-" * 60)
+            print(f"Failed to initial parser caused by: \n\t{e}")
+            return
+
+        sys.stdout.flush()  # 强制刷新缓冲区
+        time.sleep(0.1)  # 短暂延迟
+        with tqdm(total=len(self.json_files), desc="Processing2 ") as pbar:
+            for file_path in self.json_files:
+                filename = os.path.basename(file_path)
+                application_id = filename.split(".")[0]
+                pbar.set_description(f"Processing: {filename[:40]}{'...' if len(filename) > 40 else ''}")
+
+                success, stdout = self.parse_json_file(file_path, application_id)
+                if not success:
+                    failed_json_files.append((file_path, stdout))
+                pbar.update(1)
+            pbar.close()  # 确保关闭
+
+        CommonUtil.print_failed_files(failed_json_files, len(self.json_files))
+
+        df = pd.DataFrame(self.analysis_result)
+        output_excel_path = os.path.join(self.args.output_dir, f"Omni_Analysis_All_Report_{self.TIMESTAMP}.xlsx")
+        self.excel_writer.write_to_excel(df, output_excel_path)
 
 
 def main():
     logparser = LogParser()
     logparser.find_compressed_files()
-    logparser.get_execution_plan()
+    is_all_failed = logparser.get_execution_plan()
+    if is_all_failed:
+        return
     logparser.parse_event_log()
+    print("-" * 60)
 
 
 if __name__ == "__main__":

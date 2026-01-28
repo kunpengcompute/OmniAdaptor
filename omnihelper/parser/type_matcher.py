@@ -22,6 +22,7 @@ class TypeEnum(Enum):
     DOUBLE = "DOUBLE"
     MAP = "MAP"
     DATE = "DATE"
+    BOOLEAN = "BOOLEAN"
     TIMESTAMP = "TIMESTAMP"
     NESTED_FUNCTIONS = "NESTED_FUNCTIONS"
     DECIMAL64 = "DECIMAL64"
@@ -36,7 +37,8 @@ TYPE_PATTERNS = [
     (re.compile(r".*#\d+L"), TypeEnum.LONG.value),
     (re.compile(r"\d{4}-\d{2}-\d{2}"), TypeEnum.DATE.value),
     (re.compile(r"NULL", re.I), TypeEnum.INT.value),
-    (re.compile(r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d{1,3})?$"), TypeEnum.TIMESTAMP.value)
+    (re.compile(r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d{1,3})?$"), TypeEnum.TIMESTAMP.value),
+    (re.compile(r"TRUE|FALSE", re.I), TypeEnum.BOOLEAN.value)
 ]
 
 class TypeMatcher:

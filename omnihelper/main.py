@@ -26,27 +26,8 @@ from omnihelper.util.common_util import CommonUtil
 from omnihelper.util.excel_util import ExcelWriterWithStyle
 
 
-def check_and_get_architecture():
-    """
-    检查并获取系统架构，如果不支持则退出程序
-
-    Returns:
-    --------
-    str: 系统架构 ('x86' 或 'arm')
-    """
-    success, arch = CommonUtil.get_architecture()
-
-    if not success:
-        print(f"[ERROR] Unsupported CPU architecture: {arch}")
-        print("[ERROR] Currently only x86 (x86_64/amd64) and ARM (aarch64/arm64) architectures are supported")
-        sys.exit(1)
-
-    return arch
-
-
 class LogParser:
 
-    ARCHITECTURE = check_and_get_architecture()
     EXECUTE_PATH = CommonUtil.get_execute_path()
     TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
     TMP_PATH = os.path.join(EXECUTE_PATH, "tmp", TIMESTAMP)
@@ -72,15 +53,15 @@ class LogParser:
         self.parser = argparse.ArgumentParser(
             description='Big Data Operator Scanning Command Line Tool',
             formatter_class=argparse.RawDescriptionHelpFormatter,
-            epilog=f"""
+            epilog="""
 Usage Examples:
-  ./omnihelper_{self.ARCHITECTURE} -i ./input_data -o ./output_dir 
+  ./omnihelper -i ./input_data -o ./output_dir 
     --java-path /path/to/java/bin/java 
     --class-path /path/to/boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar:\
 /path/to/boostkit-omnimv-spark-3.4.3-1.2.0-aarch64.jar:\
 /path/to/spark-3.4.3-bin-hadoop3/jars/*
 
-  ./omnihelper_{self.ARCHITECTURE} -i ./input_data/eventlog.lz4 -o ./output_dir
+  ./omnihelper -i ./input_data/eventlog.lz4 -o ./output_dir
     --java-path /path/to/java/bin/java 
     --class-path /path/to/boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar:\
 /path/to/boostkit-omnimv-spark-3.4.3-1.2.0-aarch64.jar:\
@@ -222,7 +203,7 @@ Usage Examples:
                             'Omni不支持的算子出现频次': op_times,
                             'Omni不支持的算子运行时间': '',
                             'Omni不支持的算子Output rows': '',
-                            'Omni不支持的表达式/内置函数名称': CommonUtil.safe_excel_value(func_name),
+                            'Omni不支持的表达式/内置函数名称': func_name,
                             'Omni不支持的表达式/内置函数Input': ",".join(func_inputs),
                             'Omni不支持的表达式/内置函数出现频次': func_times,
                             'Spark版本': '',  # 原始数据中没有Spark版本信息

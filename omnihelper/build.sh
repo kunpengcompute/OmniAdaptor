@@ -40,7 +40,7 @@ ARCH=$(get_architecture)
 
 # 使用绝对路径
 pyinstaller --onefile \
-            --name "omnihelper_${ARCH}" \
+            --name "omnihelper" \
             --distpath "${SCRIPT_DIR}/dist" \
             --workpath "${SCRIPT_DIR}/build" \
             --specpath "${SCRIPT_DIR}" \

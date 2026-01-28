@@ -37,9 +37,3 @@ class CommonUtil:
         else:
             print(f"All {all_files_length} file{'s' if all_files_length != 1 else ''} processed successfully!")
         print("-" * 60)
-
-    @staticmethod
-    def safe_excel_value(value):
-        if isinstance(value, str) and value and value[0] in ('=', '+', '-', '@'):
-            return f"'{value}"
-        return value

@@ -203,7 +203,7 @@ Usage Examples:
                             'Omni不支持的算子出现频次': op_times,
                             'Omni不支持的算子运行时间': '',
                             'Omni不支持的算子Output rows': '',
-                            'Omni不支持的表达式/内置函数名称': CommonUtil.safe_excel_value(func_name),
+                            'Omni不支持的表达式/内置函数名称': func_name,
                             'Omni不支持的表达式/内置函数Input': ",".join(func_inputs),
                             'Omni不支持的表达式/内置函数出现频次': func_times,
                             'Spark版本': '',  # 原始数据中没有Spark版本信息

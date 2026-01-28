@@ -79,11 +79,11 @@ class ExcelWriterWithStyle:
                 # 设置标题
                 self._write_headers(worksheet)
 
-                # 合并单元格
-                self._merge_cells(worksheet, df)
-
                 # 应用样式
                 self._apply_styles(worksheet, df)
+
+                # 合并单元格
+                self._merge_cells(worksheet, df)
 
                 # 设置列宽
                 self._set_column_widths(worksheet)
@@ -133,6 +133,17 @@ class ExcelWriterWithStyle:
         for row in range(1, total_rows + 1):
             for col in range(1, total_cols + 1):
                 cell = worksheet.cell(row=row, column=col)
+
+                # 设置单元格的数据类型为字符串
+                cell.data_type = 's'  # 's' 表示 string
+                # 设置单元格格式为文本
+                cell.number_format = '@'
+
+                # 如果单元格有值，确保它是字符串
+                if cell.value is not None:
+                    # 将值转换为字符串，保留原始内容
+                    if not isinstance(cell.value, str):
+                        cell.value = str(cell.value)
 
                 # 所有单元格应用边框
                 cell.border = self.thin_border

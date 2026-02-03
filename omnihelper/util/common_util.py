@@ -9,6 +9,7 @@
    See the Mulan PSL v2 for more details.
 """
 import os
+import re
 import sys
 import platform
 
@@ -37,3 +38,177 @@ class CommonUtil:
         else:
             print(f"All {all_files_length} file{'s' if all_files_length != 1 else ''} processed successfully!")
         print("-" * 60)
+
+    @staticmethod
+    def parse_time_to_seconds(time_str):
+        """
+        将时间字符串转换为秒
+        支持的格式:
+        - "[total:6.3 m, ...]" -> 提取total部分
+        - "631 ms" -> 直接转换
+        - "2.2 m" -> 分钟转秒
+        """
+        try:
+            # 如果是列表格式 [total:6.3 m, ...]
+            if time_str.startswith('['):
+                # 提取total部分
+                total_match = re.search(r'total:\s*([^,]+)', time_str)
+                if total_match:
+                    time_str = total_match.group(1)
+
+            # 去除可能的空格和特殊字符
+            time_str = time_str.strip()
+
+            # 处理小时
+            if 'h' in time_str.lower():
+                # 提取数字部分
+                match = re.search(r'([\d\.]+)\s*h', time_str, re.IGNORECASE)
+                if match:
+                    hours = float(match.group(1))
+                    return round(hours * 3600, 3)
+
+            # 处理分钟
+            elif 'm' in time_str.lower() and 'ms' not in time_str.lower():
+                # 提取数字部分
+                match = re.search(r'([\d\.]+)\s*m', time_str, re.IGNORECASE)
+                if match:
+                    minutes = float(match.group(1))
+                    return round(minutes * 60, 3)
+
+            # 处理秒
+            elif 's' in time_str.lower() and 'ms' not in time_str.lower():
+                # 提取数字部分
+                match = re.search(r'([\d\.]+)\s*s', time_str, re.IGNORECASE)
+                if match:
+                    seconds = float(match.group(1))
+                    return round(seconds, 3)
+
+            # 处理毫秒
+            elif 'ms' in time_str.lower():
+                # 提取数字部分
+                match = re.search(r'([\d\.]+)\s*ms', time_str, re.IGNORECASE)
+                if match:
+                    ms = float(match.group(1))
+                    return round(ms / 1000, 6)
+            else:
+                return 0
+        except Exception as e:
+            print(f"Error parsing time '{time_str}': {e}")
+            return 0
+
+    @staticmethod
+    def parse_size_to_mb(size_str):
+        """
+        将大小字符串转换为MB
+        支持的格式:
+        - "[total:822.5 MiB, ...]" -> 提取total部分
+        - "2.3 GiB" -> GB转MB
+        - "1026.9 KiB" -> KB转MB
+        - "512 B" -> 字节转MB
+        """
+        try:
+            # 如果是列表格式 [total:822.5 MiB, ...]
+            if size_str.startswith('['):
+                # 提取total部分
+                total_match = re.search(r'total:\s*([^,]+)', size_str)
+                if total_match:
+                    size_str = total_match.group(1)
+
+            size_str = size_str.strip()
+
+            # 处理GB
+            if 'GiB' in size_str:
+                gb = float(size_str.replace('GiB', '').strip())
+                return round(gb * 1024, 3)  # 1GB = 1024MB
+
+            # 处理MB
+            elif 'MiB' in size_str:
+                mb = float(size_str.replace('MiB', '').strip())
+                return round(mb, 3)
+
+            # 处理KB
+            elif 'KiB' in size_str:
+                kb = float(size_str.replace('KiB', '').strip())
+                return round(kb / 1024, 6)  # 1MB = 1024KB
+
+            # 处理B
+            elif 'B' in size_str:
+                b = float(size_str.replace('B', '').strip())
+                return round(b / (1024 * 1024), 9)  # 1MB = 1024*1024B
+
+            else:
+                return 0
+        except Exception as e:
+            print(f"Error parsing size '{size_str}': {e}")
+            return 0
+
+    @staticmethod
+    def build_result_item(
+            show_op_details,
+            app_id='',
+            sql_hash='',
+            op_name='',
+            op_inputs='',
+            op_outputs='',
+            op_times='',
+            op_running_time='',
+            op_output_sizes='',
+            op_output_rows='',
+            func_name='',
+            func_inputs='',
+            func_times='',
+            spark_version='',
+            error_info='',
+    ) -> dict:
+        """
+        构建结果项字典
+
+        参数:
+            show_op_details: 是否显示详细信息
+            app_id: 应用ID
+            sql_hash: SQL哈希值
+            op_name: 算子名称
+            op_inputs: 算子输入列表
+            op_outputs: 算子输出列表
+            op_times: 算子出现次数
+            op_running_time: 算子运行时间
+            op_output_sizes: 算子输出文件大小
+            op_output_rows: 算子输出行数
+            func_name: 函数名称
+            func_inputs: 函数输入列表
+            func_times: 函数出现次数
+
+        返回:
+            构建好的结果字典
+        """
+        if op_inputs is None:
+            op_inputs = []
+        if op_outputs is None:
+            op_outputs = []
+        if func_inputs is None:
+            func_inputs = []
+
+        result_item = {
+            'ApplicationID+SQL ID': app_id,
+            'SQL Hash': sql_hash,
+            'Omni不支持的算子名称': op_name,
+            'Omni不支持的算子Input': ",".join(op_inputs),
+            'Omni不支持的算子Output': ",".join(op_outputs),
+            'Omni不支持的算子出现频次': op_times,
+            'Omni不支持的算子运行时间': op_running_time,
+        }
+
+        # 仅在show_op_details为True时添加这两个字段
+        if show_op_details:
+            result_item['Omni不支持的算子文件大小'] = op_output_sizes
+            result_item['Omni不支持的算子Output rows'] = op_output_rows
+
+        result_item.update({
+            'Omni不支持的表达式/内置函数名称': func_name,
+            'Omni不支持的表达式/内置函数Input': ",".join(func_inputs),
+            'Omni不支持的表达式/内置函数出现频次': func_times,
+            'Spark版本': spark_version,
+            '异常信息/备注': error_info
+        })
+
+        return result_item

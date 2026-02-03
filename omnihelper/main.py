@@ -27,7 +27,6 @@ from omnihelper.util.excel_util import ExcelWriterWithStyle
 
 
 class LogParser:
-
     EXECUTE_PATH = CommonUtil.get_execute_path()
     TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
     TMP_PATH = os.path.join(EXECUTE_PATH, "tmp", TIMESTAMP)
@@ -84,6 +83,13 @@ Usage Examples:
             type=str,
             default=None,
             help='Output directory path (default: ./output)'
+        )
+
+        # 可选参数，无需显式传值
+        self.parser.add_argument(
+            '--show-op-details', '-s',
+            action='store_false',  # 默认为 True，传参时设为 False
+            help='Disable displaying op file sizes and output rows (default: enabled)'
         )
 
         # Java相关参数组
@@ -145,6 +151,7 @@ Usage Examples:
 
         print(f"Output Directory: {os.path.realpath(self.args.output_dir)}")
         print(f"Temporary Directory: {os.path.realpath(self.TMP_PATH)}")
+        print(f"Show Op Details: {self.args.show_op_details}")
         print(f"Java Path: {self.args.java_path}")
         print(f"Java Class Path: {self.args.class_path}")
         print("-" * 60)
@@ -165,54 +172,6 @@ Usage Examples:
             return process.returncode == 0, stdout, stderr
         except Exception as e:
             return False, "", str(e)
-
-    def parse_json_file(self, file_path: str, application_id):
-        try:
-            with open(file_path, "r") as f:
-                app_data = json.load(f)
-        except Exception as e:
-            return False, f"Failed to load json file: {file_path}, ex: {e}"
-
-        try:
-            for event in app_data:
-                # 获取sql_hash和app_id信息
-                sql_hash = hashlib.sha256(event.get("original query").encode("utf-8")).hexdigest()[-6:]
-                app_id = application_id + "_" + event.get("executionId")
-                op_event_result = self.op_parser.parse_event(event)
-                expr_event_result = self.expr_parser.parse_event(event)
-                if not expr_event_result and not op_event_result:
-                    continue
-                max_list_length = max(len(op_event_result), len(expr_event_result))
-                for i in range(max_list_length):
-                    func_name = expr_event_result[i].get('func_name', '') if i < len(expr_event_result) else ''
-                    func_inputs = expr_event_result[i].get('input', []) if i < len(expr_event_result) else []
-                    func_times = expr_event_result[i].get('times', 0) if i < len(expr_event_result) else ''
-
-                    op_name = op_event_result[i].get('op_name', '') if i < len(op_event_result) else ''
-                    op_inputs = op_event_result[i].get('input_list', []) if i < len(op_event_result) else []
-                    op_outputs = op_event_result[i].get('output_list', []) if i < len(op_event_result) else []
-                    op_times = op_event_result[i].get('times', 0) if i < len(op_event_result) else ''
-
-                    self.analysis_result.append(
-                        {
-                            'ApplicationID+SQL ID': app_id,
-                            'SQL Hash': sql_hash,
-                            'Omni不支持的算子名称': op_name,
-                            'Omni不支持的算子Input': ",".join(op_inputs),
-                            'Omni不支持的算子Output': ",".join(op_outputs),
-                            'Omni不支持的算子出现频次': op_times,
-                            'Omni不支持的算子运行时间': '',
-                            'Omni不支持的算子Output rows': '',
-                            'Omni不支持的表达式/内置函数名称': func_name,
-                            'Omni不支持的表达式/内置函数Input': ",".join(func_inputs),
-                            'Omni不支持的表达式/内置函数出现频次': func_times,
-                            'Spark版本': '',  # 原始数据中没有Spark版本信息
-                            '异常信息/备注': ''  # 添加函数名作为备注
-                        }
-                    )
-        except Exception as e:
-            return False, f"Failed to parse json file: {file_path}, ex: {e}"
-        return True, ""
 
     def find_compressed_files(self):
         """查找目录/文件中的所有.lz4和.zstd文件"""
@@ -263,6 +222,53 @@ Usage Examples:
 
         return len(self.compressed_files) == len(failed_files)
 
+    def parse_json_file(self, file_path: str, application_id):
+        try:
+            with open(file_path, "r") as f:
+                app_data = json.load(f)
+        except Exception as e:
+            return False, f"Failed to load json file: {file_path}, ex: {e}"
+
+        try:
+            analysis_result = []
+            for event in app_data:
+                # 获取sql_hash和app_id信息
+                sql_hash = hashlib.sha256(event.get("original query").encode("utf-8")).hexdigest()[-6:]
+                app_id = application_id + "_" + event.get("executionId")
+                contain_omni_op, op_event_result = self.op_parser.parse_event(event)
+                if contain_omni_op:
+                    result_item = CommonUtil.build_result_item(self.args.show_op_details, application_id,
+                                                               error_info=f"Json file contains omni op")
+                    self.analysis_result.append(result_item)
+                    return True, f"Json file contains omni op: {file_path}"
+                expr_event_result = self.expr_parser.parse_event(event)
+                if not expr_event_result and not op_event_result:
+                    continue
+                max_list_length = max(len(op_event_result), len(expr_event_result))
+                for i in range(max_list_length):
+                    func_name = expr_event_result[i].get('func_name', '') if i < len(expr_event_result) else ''
+                    func_inputs = expr_event_result[i].get('input', []) if i < len(expr_event_result) else []
+                    func_times = expr_event_result[i].get('times', 0) if i < len(expr_event_result) else ''
+
+                    op_name = op_event_result[i].get('op_name', '') if i < len(op_event_result) else ''
+                    op_inputs = op_event_result[i].get('input_list', []) if i < len(op_event_result) else []
+                    op_outputs = op_event_result[i].get('output_list', []) if i < len(op_event_result) else []
+                    op_times = op_event_result[i].get('times', 0) if i < len(op_event_result) else ''
+                    op_running_time = op_event_result[i].get('running_time', '') if i < len(op_event_result) else ''
+                    op_output_rows = op_event_result[i].get('output_rows', 0) if i < len(op_event_result) else ''
+                    op_output_sizes = op_event_result[i].get('output_sizes', 0) if i < len(op_event_result) else ''
+
+                    result_item = CommonUtil.build_result_item(self.args.show_op_details, app_id, sql_hash,
+                                                               op_name, op_inputs, op_outputs, op_times,
+                                                               op_running_time, op_output_sizes, op_output_rows,
+                                                               func_name, func_inputs, func_times)
+                    analysis_result.append(result_item)
+
+            self.analysis_result.extend(analysis_result)
+        except Exception as e:
+            return False, f"Failed to parse json file: {file_path}, ex: {e}"
+        return True, ""
+
     def parse_event_log(self):
         failed_json_files = []  # 存储失败的文件信息
         print("Start parsing expr and op...")
@@ -290,9 +296,13 @@ Usage Examples:
 
         CommonUtil.print_failed_files(failed_json_files, len(self.json_files))
 
+        if not self.analysis_result:
+            print("Result is empty, No data to display.")
+            return
+
         df = pd.DataFrame(self.analysis_result)
         output_excel_path = os.path.join(self.args.output_dir, f"Omni_Analysis_All_Report_{self.TIMESTAMP}.xlsx")
-        self.excel_writer.write_to_excel(df, output_excel_path)
+        self.excel_writer.write_to_excel(df, output_excel_path, self.args.show_op_details)
 
 
 def main():

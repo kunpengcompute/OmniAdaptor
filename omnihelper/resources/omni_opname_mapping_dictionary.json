@@ -7,6 +7,17 @@
     "filterexec": "FilterExec",
     "filter": "FilterExec",
     "filterexectransformer": "FilterExec",
+    "omni_op_list": [
+        "omnifilterexectransformer",
+        "omnihashaggregateexectransformer",
+        "omnibroadcasthashjoinexectransformer",
+        "omnishuffledhashjoinexectransformer",
+        "omnisortmergejoinexectransformer",
+        "omnicolumnarwritefiles",
+        "omnibroadcastnestedloopjoinexectransformer",
+        "omnicolumnarshuffleexchangeexec",
+        "omnibroadcastnestedloopjoinexectransformer"
+    ],
     "projectexec": "ProjectExec",
     "project": "ProjectExec",
     "projectexectransformer": "ProjectExec",

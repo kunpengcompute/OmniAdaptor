@@ -9,26 +9,19 @@
    See the Mulan PSL v2 for more details.
 """
 import re
-from enum import Enum
+
+from omnihelper.enum.function_enum import FunctionEnum
+from omnihelper.enum.type_enum import TypeEnum
+from omnihelper.util.func_util import extract_cast_param
 
 DECIMAL64_PRECISION = [1, 18]
 DECIMAL128_PRECISION = [19, 38]
 
-class TypeEnum(Enum):
-    STRING = "STRING"
-    INT = "INT"
-    BYTE = "BYTE"
-    LONG = "LONG"
-    DOUBLE = "DOUBLE"
-    MAP = "MAP"
-    DATE = "DATE"
-    BOOLEAN = "BOOLEAN"
-    TIMESTAMP = "TIMESTAMP"
-    NESTED_FUNCTIONS = "NESTED_FUNCTIONS"
-    DECIMAL64 = "DECIMAL64"
-    DECIMAL128 = "DECIMAL128"
-    PARTITION = "PARTITION"
+NOT_SUPPORTED_TYPE = [TypeEnum.PARTITION.value, TypeEnum.NESTED_FUNCTIONS.value]
 
+PREDICATE_EXPR = ["<", "<=", "<>", "=", "==", ">", ">="]
+
+DATE_LITERAL = ["yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss"]
 
 TYPE_PATTERNS = [
     (re.compile(r"^-?\d+$"), TypeEnum.INT.value),
@@ -36,7 +29,7 @@ TYPE_PATTERNS = [
     (re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)[eE][+-]?\d+"), TypeEnum.DOUBLE.value),
     (re.compile(r".*#\d+L"), TypeEnum.LONG.value),
     (re.compile(r"\d{4}-\d{2}-\d{2}"), TypeEnum.DATE.value),
-    (re.compile(r"NULL", re.I), TypeEnum.INT.value),
+    (re.compile(r"NULL", re.I), TypeEnum.NULL.value),
     (re.compile(r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d{1,3})?$"), TypeEnum.TIMESTAMP.value),
     (re.compile(r"TRUE|FALSE", re.I), TypeEnum.BOOLEAN.value)
 ]
@@ -45,7 +38,7 @@ class TypeMatcher:
 
     @staticmethod
     def extract_param_type(input_data, param_type_mapping):
-        read_schema_pattern = re.compile(r'ReadSchema: struct<(.*?)>')
+        read_schema_pattern = re.compile(r'ReadSchema: struct<(.*)>')
         # 分割键值对并解析成字典
         for schema_match in read_schema_pattern.finditer(input_data):
             inner_content = schema_match.group(1).strip()
@@ -60,13 +53,12 @@ class TypeMatcher:
                 if len(param_spilt) != 2:
                     continue
                 name, par_type = param_spilt
-                spark_type = TypeMatcher.change_to_spark_type(par_type)
+                spark_type = TypeMatcher.switch_param_type(par_type)
                 param_type_mapping[name] = spark_type
 
     @staticmethod
     def judge_param_type(param, param_type_mapping):
-        if (param.startswith('"') and param.endswith('"')) or \
-            (param.startswith("'") and param.endswith("'")):
+        if TypeMatcher.is_string_literal(param):
             return TypeEnum.STRING.value
         for pattern, param_type in TYPE_PATTERNS:
             if pattern.fullmatch(param):
@@ -79,26 +71,74 @@ class TypeMatcher:
         return TypeEnum.PARTITION.value
 
     @staticmethod
-    def get_input_type(params, param_type_mapping):
+    def get_input_type(params, param_type_mapping, ori_sql, pair):
         input_type = []
+        extract_type = pair.get("extract_type")
+        func_name = pair.get("func")
         for param in params:
-            input_type.append(TypeMatcher.judge_param_type(param, param_type_mapping))
+            param_type = TypeMatcher.judge_param_type(param, param_type_mapping)
+
+            if not param_type in NOT_SUPPORTED_TYPE:
+                input_type.append(param_type)
+                continue
+
+            if extract_type == "func" and TypeMatcher.is_string_in_ori_sql(param, ori_sql):
+                # 判断是否在原SQL中为字符串，physical plan中将其优化
+                input_type.append(TypeEnum.STRING.value)
+                continue
+
+            if param_type == TypeEnum.NESTED_FUNCTIONS.value and TypeMatcher.is_pure_cast(param):
+                # 判断参数是否为cast嵌套函数，如果是，参数类型可以判断为as后的类型
+                cast_params = extract_cast_param(param)
+                if cast_params:
+                    param_type = TypeMatcher.switch_param_type(cast_params[1])
+
+            input_type.append(param_type)
+
+        if extract_type == "expr" and func_name in PREDICATE_EXPR:
+            # 判断参数是否为比较表达式，如果是且有一侧类型不确定，则将类型判断为确定的类型
+            input_type = TypeMatcher.replace_predicate_partition(input_type)
+
+        if func_name == FunctionEnum.CAST.value and len(params) == 2:
+            # 如果函数本身为嵌套函数，则第二个参数的类型是它本身
+            input_type[1] = TypeMatcher.switch_param_type(params[1])
+
         return input_type
+
+    @staticmethod
+    def is_string_literal(param):
+        return (param.startswith('"') and param.endswith('"')) or \
+            (param.startswith("'") and param.endswith("'"))
+
+    @staticmethod
+    def is_string_in_ori_sql(param, ori_sql):
+        spark_param = "'" + param.replace("\\", "\\\\") + "'"
+        return spark_param in ori_sql
+
+    @staticmethod
+    def is_date_literal(param):
+        return param in DATE_LITERAL
 
     @staticmethod
     def is_nested_function(param):
         param = param.strip()
         # 判断是否为嵌套函数，字母下划线紧跟(
-        return bool(re.match(r'^[a-zA-Z_]\w*\s*\(', param))
+        return bool(re.match(r'^[a-zA-Z_]\w*\s*\((.*)\)$', param))
 
     @staticmethod
-    def change_to_spark_type(par_type):
+    def switch_param_type(par_type):
+        if par_type.upper().startswith("ARRAY"):
+            return TypeEnum.ARRAY.value
         if par_type.upper().startswith("MAP"):
             return TypeEnum.MAP.value
         if par_type.upper() == "TINYINT":
             return TypeEnum.BYTE.value
+        if par_type.upper() == "SMALLINT":
+            return TypeEnum.SHORT.value
         if par_type.upper() == "BIGINT":
             return TypeEnum.LONG.value
+        if par_type.upper() == "TIMESTAMP_NTZ":
+            return TypeEnum.TIMESTAMP.value
         if par_type.upper().startswith("DECIMAL"):
             return TypeMatcher.handle_decimal_type(par_type.upper())
         return par_type.upper()
@@ -119,3 +159,31 @@ class TypeMatcher:
         if DECIMAL128_PRECISION[1] >= precision >= DECIMAL128_PRECISION[0]:
             return TypeEnum.DECIMAL128.value
         return TypeEnum.PARTITION.value
+
+    @staticmethod
+    def replace_predicate_partition(args):
+        left, right = args
+        if left in NOT_SUPPORTED_TYPE and right in NOT_SUPPORTED_TYPE:
+            return args
+        if left in NOT_SUPPORTED_TYPE:
+            return [right, right]
+        if right in NOT_SUPPORTED_TYPE:
+            return [left, left]
+        return args
+
+    @staticmethod
+    def is_pure_cast(expr):
+        expr = expr.strip()
+        if not expr.lower().startswith("cast("):
+            return False
+
+        depth = 0
+        for i, ch in enumerate(expr[4:], start=4):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    tail = expr[i + 1:].strip()
+                    return tail == ""
+        return False

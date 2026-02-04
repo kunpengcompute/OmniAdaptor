@@ -196,7 +196,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
                 if (nativeCreditBasedSequenceNumberingViewReaderRef != -1) {
                     if (!flushed && (numCreditsAvailable - bufferInfos.size()) > 0) {
                         int res = checkIfDataAvailableAndNotifyNetty();
-                        LOG.info("nativeCreditBasedSequenceNumberingViewReaderRef can flush: " + "{} ## {},"
+                        LOG.debug("nativeCreditBasedSequenceNumberingViewReaderRef can flush: " + "{} ## {},"
                                 + " got " + "data" + " size = {} and numCreditsAvailable = {},native ref = "
                                 + "{}", taskName.substring(0, 15), subPartitionIndex, res,
                                 numCreditsAvailable, nativeCreditBasedSequenceNumberingViewReaderRef);
@@ -206,7 +206,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
                     } else {
                         count++;
                         if (count % 500 == 0) {
-                            LOG.info("nativeCreditBasedSequenceNumberingViewReaderRef can not flush: {} "
+                            LOG.debug("nativeCreditBasedSequenceNumberingViewReaderRef can not flush: {} "
                                     + "##{}, numCreditsAvailable = {}, bufferInfos size = {} and "
                                     + "flushed= {} and native " + "ref = {}", taskName.substring(0,
                                     15), subPartitionIndex, numCreditsAvailable, bufferInfos.size(),
@@ -354,7 +354,6 @@ public class OmniCreditBasedSequenceNumberingViewReader
     private InputChannel.BufferAndAvailability doGetNextBuffer() throws IOException {
         if (bufferInfos.size() > 0) {
             flushed = false;
-            numCreditsAvailable--;
             BufferInfo bufferInfo = bufferInfos.remove(0);
             Buffer.DataType nextDataType = bufferInfos.size() > 0 ? Buffer.DataType.DATA_BUFFER : Buffer.DataType.NONE;
 
@@ -523,7 +522,6 @@ public class OmniCreditBasedSequenceNumberingViewReader
             numCreditsAvailable = 0;
         }
         resumeConsumption(nativeCreditBasedSequenceNumberingViewReaderRef);
-        super.resumeConsumption();
     }
 
     /**

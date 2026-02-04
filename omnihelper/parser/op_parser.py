@@ -223,7 +223,7 @@ class OpParser:
                     "input_list": input_list,
                     "output_list": output_list,
                     "output_rows": output_rows,
-                    "output_sizes": output_sizes,
+                    "output_sizes": round(output_sizes, 9),
                     "running_time": "\n".join(time_str_parts),
                 }
             )
@@ -247,7 +247,7 @@ class OpParser:
                 return False
             return True
 
-        if all(item in op_supported_list for item in input_list):
+        if all(item in op_supported_list.get("supported_list", []) for item in input_list):
             return True
         return False
 
@@ -255,11 +255,18 @@ class OpParser:
         counter = defaultdict(int)
 
         for item in event_result:
-            key = (item["op_name"], item["sql_hash"], tuple(item["input_list"]), tuple(item["output_list"]), item["running_time"], item["output_rows"])
+            key = (item["op_name"],
+                   item["sql_hash"],
+                   tuple(item["input_list"]),
+                   tuple(item["output_list"]),
+                   item["running_time"],
+                   item["output_rows"],
+                   item["output_sizes"])
             counter[key] += 1
 
         update_event_result = []
-        for (op_name, sql_hash, input_list, output_list, running_time, output_rows), times in counter.items():
+        for (op_name, sql_hash, input_list, output_list, running_time, output_rows, output_sizes), times \
+                in counter.items():
             update_event_result.append({
                 "op_name": op_name,
                 "sql_hash": sql_hash,
@@ -267,6 +274,7 @@ class OpParser:
                 "output_list": output_list,
                 "running_time": running_time,
                 "output_rows": output_rows,
+                "output_sizes": output_sizes,
                 "times": times
             })
         return sorted(update_event_result, key=lambda x: x["op_name"])

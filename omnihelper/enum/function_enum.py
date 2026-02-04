@@ -17,3 +17,4 @@ class FunctionEnum(Enum):
     CAST = "cast"
     IF = "if"
     CASE = "case"
+    FILTER = "filter"

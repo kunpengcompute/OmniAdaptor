@@ -141,6 +141,8 @@ class FunctionParser:
             left, op, right = expr
             if not op.lower() in self.omni_functions or op.lower() in SPECIAL_FUNCTION:
                 continue
+            if op.lower() in [FunctionEnum.FILTER.value]:
+                continue
             left_param = self.extract_left_param(left)
             right_param = self.extract_right_param(right)
             params = [self.strip_outer_parens(left_param), self.strip_outer_parens(right_param)]

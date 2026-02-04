@@ -1,6 +1,7 @@
 {
     "filesourcescanexec": "FileSourceScanExec",
     "filescan": "FileSourceScanExec",
+    "scan": "FileSourceScanExec",
     "filesourcescanexectransformer": "FileSourceScanExec",
     "batchscanexec": "BatchScanExec",
     "batchscan": "BatchScanExec",

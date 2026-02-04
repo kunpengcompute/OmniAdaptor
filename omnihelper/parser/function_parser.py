@@ -93,8 +93,23 @@ class FunctionParser:
                 condition_match = re.match(r"Condition\s*:\s*\((.*)\)\s*", line)
                 if condition_match:
                     line = condition_match.group(1)
-            preprocess_phy_plan.append(line)
+            processed_line = self.extract_bracket_content(line)
+            preprocess_phy_plan.append(processed_line)
         return preprocess_phy_plan
+
+    def extract_bracket_content(self, line):
+        """
+        去除算子参数的名称字段，例如Input、Keys、Output等字段，只取值
+        例如：Input [12]: [sum#167]，仅保留sum#167
+        """
+        line = line.strip()
+
+        # pattern: 任意前缀 + 数字 + : + [内容]，非贪婪匹配最外层方括号内容
+        m = re.search(r"\[[^\[\]]*\]\s*:\s*\[(.*)\]$", line)
+        if m:
+            return m.group(1).strip()
+
+        return line
 
     def search_func_expr_pairs(self, line):
         func_expr_pairs = []
@@ -424,7 +439,7 @@ class FunctionParser:
     def split_by_ops(self, expr):
         results = []
         pattern = r"\s+(%s)\s+" % "|".join(map(re.escape, self.omni_functions))
-        for m in re.finditer(pattern, expr):
+        for m in re.finditer(pattern, expr, re.I):
             results.append((
                 expr[:m.start(1)].strip(),
                 m.group(1),
@@ -464,7 +479,7 @@ class FunctionParser:
                 depth -= 1
             if depth < 0:
                 return right_part[:i].strip()
-        right = right_part.rstrip()
+        right = self.clean_spark_suffix(right_part)
         return right
 
     def strip_outer_parens(self, expr):

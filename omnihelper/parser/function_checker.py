@@ -67,7 +67,6 @@ class FunctionChecker:
         target_type = input_type[1]
         not_support_type = self.current_rule.get("cast_no_support_type")
         if not not_support_type:
-            print("Failed to load cast support list.")
             return False
         if source_type in NOT_SUPPORTED_TYPE or target_type in not_support_type.get(source_type, []) + NOT_SUPPORTED_TYPE:
             return True
@@ -86,7 +85,6 @@ class FunctionChecker:
         for key, value in self.current_rule["param_type_limit"].items():
             idx = int(key)
             if idx >= len(input_type):
-                print("The number of parameters is less than required. Rule: " + str(self.current_rule["func_name"]))
                 return False
             if value == TypeLimitEnum.NO_SUPPORT_TYPE.value:
                 if self.is_not_supported_type(input_type[idx]):

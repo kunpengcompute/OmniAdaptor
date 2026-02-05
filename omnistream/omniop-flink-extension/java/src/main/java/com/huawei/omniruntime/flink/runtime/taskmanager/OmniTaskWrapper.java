@@ -10,6 +10,12 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.TaskStateSnapshotDese
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
+import com.esotericsoftware.minlog.Log;
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.state.LocalRecoveryConfig;
+import org.apache.flink.runtime.state.LocalRecoveryDirectoryProvider;
+import org.apache.flink.runtime.state.LocalRecoveryDirectoryProviderImpl;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
 import org.apache.flink.runtime.state.DirectoryStateHandle;
 import org.apache.flink.runtime.state.KeyGroupRange;
@@ -27,6 +33,7 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeRefe
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -95,10 +102,27 @@ public class OmniTaskWrapper {
         return new RuntimeException(msg);
     }
 
-    public SnapshotResult<StreamStateHandle> materializeMetaData(long checkpointId, String stateMetaInfoSnapshotsJson) throws IOException {
+    public SnapshotResult<StreamStateHandle> materializeMetaData(long checkpointId, String stateMetaInfoSnapshotsJson, String localRecoveryConfigStr) throws IOException {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
         List<Map<String, Object>> stateMetaInfoMaps =
                 objectMapper.readValue(stateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {});
+
+        Map<String,Object> configMap = objectMapper.readValue(localRecoveryConfigStr, new TypeReference<Map<String,Object>>(){});
+        List<String> dirs = (List<String>)configMap.get("allocationBaseDirs");
+        File[] files = new File[dirs.size()];
+        for (int i = 0; i < dirs.size(); i++) {
+            files[i] = new File(dirs.get(i));
+        }
+        
+        String jobIdHexStr = (String) configMap.get("jobID");
+        String jobVertexIdHexStr = (String) configMap.get("jobVertexID");
+
+        JobID jobID = JobID.fromHexString(jobIdHexStr);
+        JobVertexID jobVertexID = JobVertexID.fromHexString(jobVertexIdHexStr);
+        int subtaskIndex = (Integer) configMap.get("subtaskIndex");
+        LocalRecoveryDirectoryProvider provider = new LocalRecoveryDirectoryProviderImpl(files, jobID, jobVertexID,
+                subtaskIndex);
+        LocalRecoveryConfig recoveryConfig = new LocalRecoveryConfig(provider);
 
         List<StateMetaInfoSnapshot> stateMetaInfoSnapshots = new ArrayList<>(stateMetaInfoMaps.size());
         for (Map<String, Object> metaInfo : stateMetaInfoMaps) {
@@ -115,7 +139,7 @@ public class OmniTaskWrapper {
         }
 
         try {
-            return omniTask.materializeMetaData(checkpointId, stateMetaInfoSnapshots);
+            return omniTask.materializeMetaData(checkpointId, stateMetaInfoSnapshots, recoveryConfig);
         } catch (Exception e) {
             throw new IOException("Failed to materialize metadata", e);
         }

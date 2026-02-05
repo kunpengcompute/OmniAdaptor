@@ -102,6 +102,7 @@ import org.apache.flink.runtime.state.CheckpointedStateScope;
 import org.apache.flink.runtime.state.IncrementalKeyedStateHandle.HandleAndLocalPath;
 import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
 import org.apache.flink.runtime.state.StateUtil;
+import org.apache.flink.runtime.state.LocalRecoveryConfig;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.TaskStateManager;
@@ -968,7 +969,7 @@ public class OmniTask extends Task {
 
     public SnapshotResult<StreamStateHandle> materializeMetaData(
             final long checkpointId,
-            final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots)
+            final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots, final LocalRecoveryConfig localRecoveryConfig)
             throws Exception {
         
         if (this.checkpointOptions == null) {
@@ -983,7 +984,14 @@ public class OmniTask extends Task {
         this.checkpointStreamFactory = checkpointAccess.resolveCheckpointStorageLocation(checkpointId, this.checkpointOptions.getTargetLocation());
 
         CheckpointStreamWithResultProvider streamWithResultProvider =
-                CheckpointStreamWithResultProvider.createSimpleStream(
+                localRecoveryConfig.isLocalRecoveryEnabled()
+                ? CheckpointStreamWithResultProvider.createDuplicatingStream(
+                        checkpointId,
+                        CheckpointedStateScope.EXCLUSIVE,
+                        checkpointStreamFactory,
+                        localRecoveryConfig.getLocalStateDirectoryProvider()
+                                .orElseThrow(LocalRecoveryConfig.localRecoveryNotEnabled()))
+                :CheckpointStreamWithResultProvider.createSimpleStream(
                         CheckpointedStateScope.EXCLUSIVE, checkpointStreamFactory);
 
         snapshotCloseableRegistry.registerCloseable(streamWithResultProvider);

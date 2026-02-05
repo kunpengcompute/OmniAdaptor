@@ -32,9 +32,14 @@ import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.filesystem.FileStateHandle;
 import org.apache.flink.runtime.state.filesystem.RelativeFileStateHandle;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
+import org.apache.flink.runtime.state.DirectoryKeyedStateHandle;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.SerializationFeature;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ArrayNode;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.StringUtils;
 
@@ -49,6 +54,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.Objects;
+import java.util.Set;
+import java.io.IOException;
 
 /**
  * TaskStateSnapshotDeser
@@ -262,5 +269,263 @@ public class TaskStateSnapshotDeser {
                 sharedState
         );
         return flinkHandle;
+    }
+
+    public static String serializeTaskStateSnapshot(TaskStateSnapshot snapshot) throws IOException {
+        if (snapshot == null) {
+            return "";
+        }
+        ObjectMapper mapper = new ObjectMapper();
+
+        // 配置ObjectMapper避免循环引用
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        mapper.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, false);
+
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ObjectNode rootNode = factory.objectNode();
+
+        // 1. 序列化基本字段
+        rootNode.put("isTaskDeployedAsFinished", snapshot.isTaskDeployedAsFinished());
+        rootNode.put("isTaskFinished", snapshot.isTaskFinished());
+
+        // 2. 序列化subtaskStatesByOperatorID
+        Set<Map.Entry<OperatorID, OperatorSubtaskState>> subtaskStates = snapshot.getSubtaskStateMappings();
+        ObjectNode subtaskStatesNode = factory.objectNode();
+
+        for (Map.Entry<OperatorID, OperatorSubtaskState> entry : subtaskStates) {
+            OperatorID operatorID = entry.getKey();
+            OperatorSubtaskState operatorSubtaskState = entry.getValue();
+
+            // 将OperatorID转换为十六进制字符串作为key
+            String operatorIdHex = StringUtils.byteToHexString(operatorID.getBytes());
+            ObjectNode operatorStateNode = serializeOperatorSubtaskState(operatorSubtaskState);
+
+            subtaskStatesNode.set(operatorIdHex, operatorStateNode);
+        }
+
+        rootNode.set("subtaskStatesByOperatorID", subtaskStatesNode);
+
+        return mapper.writeValueAsString(rootNode);
+    }
+
+    private static ObjectNode serializeOperatorSubtaskState(OperatorSubtaskState state) {
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ObjectNode operatorStateNode = factory.objectNode();
+
+        // 序列化managedKeyedState
+        StateObjectCollection<KeyedStateHandle> managedKeyedState = state.getManagedKeyedState();
+        ArrayNode managedKeyedStateNode = serializeStateObjectCollection(managedKeyedState);
+        operatorStateNode.set("managedKeyedState", managedKeyedStateNode);
+
+        return operatorStateNode;
+    }
+
+    private static ArrayNode serializeStateObjectCollection(StateObjectCollection<KeyedStateHandle> collection) {
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ArrayNode arrayNode = factory.arrayNode();
+        arrayNode.add("org.apache.flink.runtime.checkpoint.StateObjectCollection");
+        ArrayNode stateObjectsArray = factory.arrayNode();
+        for (Object stateHandle : collection) {
+            if (stateHandle instanceof KeyedStateHandle) {
+                ObjectNode handleNode = serializeKeyedStateHandle((KeyedStateHandle) stateHandle);
+                stateObjectsArray.add(handleNode);
+            }
+        }
+        arrayNode.add(stateObjectsArray);
+        return arrayNode;
+    }
+
+    private static ObjectNode serializeKeyedStateHandle(KeyedStateHandle keyedStateHandle) {
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ObjectNode handleNode = factory.objectNode();
+
+        if (keyedStateHandle instanceof IncrementalLocalKeyedStateHandle) {
+            serializeIncrementalLocalKeyedStateHandle((IncrementalLocalKeyedStateHandle) keyedStateHandle, handleNode);
+        } else if (keyedStateHandle instanceof IncrementalRemoteKeyedStateHandle) {
+            serializeIncrementalRemoteKeyedStateHandle((IncrementalRemoteKeyedStateHandle) keyedStateHandle, handleNode);
+        } else if (keyedStateHandle instanceof DirectoryKeyedStateHandle){
+            // 处理其他类型的KeyedStateHandle
+            serializeDirectoryKeyedStateHandle((DirectoryKeyedStateHandle) keyedStateHandle, handleNode);
+        }
+
+        return handleNode;
+    }
+
+    public static void serializeDirectoryKeyedStateHandle(DirectoryKeyedStateHandle handle, ObjectNode handleNode) {
+        // 1. 序列化directoryStateHandle
+        DirectoryStateHandle directoryStateHandle = handle.getDirectoryStateHandle();
+        handleNode.put("directoryStateHandle", directoryStateHandle.getDirectory().toString());
+
+        // 2. 序列化keyGroupRange
+        KeyGroupRange keyGroupRange = handle.getKeyGroupRange();
+        handleNode.set("keyGroupRange", serializeKeyGroupRange(keyGroupRange));
+    }
+
+    private static void serializeIncrementalRemoteKeyedStateHandle(
+            IncrementalRemoteKeyedStateHandle handle, ObjectNode handleNode) {
+        handleNode.put("@class","IncrementalRemoteKeyedStateHandle");
+        handleNode.put("stateHandleName", "IncrementalRemoteKeyedStateHandle");
+        handleNode.put("backendIdentifier", handle.getBackendIdentifier().toString());
+        handleNode.put("checkpointId", handle.getCheckpointId());
+        handleNode.put("persistedSizeOfThisCheckpoint", handle.getCheckpointedSize());
+
+        // 序列化KeyGroupRange
+        KeyGroupRange keyGroupRange = handle.getKeyGroupRange();
+        handleNode.set("keyGroupRange", serializeKeyGroupRange(keyGroupRange));
+
+        // 序列化StateHandleID
+        StateHandleID stateHandleId = handle.getStateHandleId();
+        ObjectNode stateHandleIdNode = JsonNodeFactory.instance.objectNode();
+        stateHandleIdNode.put("keyString", stateHandleId.getKeyString());
+        handleNode.set("stateHandleId", stateHandleIdNode);
+
+        // 序列化metaStateHandle
+        StreamStateHandle metaStateHandle = handle.getMetaStateHandle();
+        if (metaStateHandle != null) {
+            handleNode.set("metaStateHandle", serializeStreamStateHandle(metaStateHandle));
+        }
+
+        // 序列化privateState和sharedState
+        List<IncrementalKeyedStateHandle.HandleAndLocalPath> privateState = handle.getPrivateState();
+        if (privateState != null && !privateState.isEmpty()) {
+            JsonNodeFactory factory = JsonNodeFactory.instance;
+            ArrayNode arrayNode = factory.arrayNode();
+            for (IncrementalKeyedStateHandle.HandleAndLocalPath handleAndLocalPath : privateState) {
+                ObjectNode node = serializeHandleAndLocalPath(handleAndLocalPath);
+                arrayNode.add(node);
+            }
+            handleNode.set("privateState", arrayNode);
+        }
+
+        List<IncrementalKeyedStateHandle.HandleAndLocalPath> sharedState = handle.getSharedState();
+        if (sharedState != null && !sharedState.isEmpty()) {
+            JsonNodeFactory factory = JsonNodeFactory.instance;
+            ArrayNode arrayNode = factory.arrayNode();
+            for (IncrementalKeyedStateHandle.HandleAndLocalPath handleAndLocalPath : sharedState) {
+                ObjectNode node = serializeHandleAndLocalPath(handleAndLocalPath);
+                arrayNode.add(node);
+            }
+            handleNode.set("sharedState", arrayNode);
+        }
+    }
+
+    private static ObjectNode serializeKeyGroupRange(KeyGroupRange keyGroupRange) {
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ObjectNode jsonNode = factory.objectNode();
+
+        jsonNode.put("startKeyGroup", keyGroupRange.getStartKeyGroup());
+        jsonNode.put("endKeyGroup", keyGroupRange.getEndKeyGroup());
+
+        return jsonNode;
+    }
+
+    private static void serializeIncrementalLocalKeyedStateHandle(
+            IncrementalLocalKeyedStateHandle handle, ObjectNode handleNode) {
+        handleNode.put("@class","IncrementalLocalKeyedStateHandle");
+        handleNode.put("stateHandleName", "IncrementalLocalKeyedStateHandle");
+        handleNode.put("backendIdentifier", handle.getBackendIdentifier().toString());
+        handleNode.put("checkpointId", handle.getCheckpointId());
+
+        // 序列化KeyGroupRange
+        KeyGroupRange keyGroupRange = handle.getKeyGroupRange();
+        handleNode.set("keyGroupRange", serializeKeyGroupRange(keyGroupRange));
+
+        // 序列化DirectoryStateHandle
+        DirectoryStateHandle directoryStateHandle = handle.getDirectoryStateHandle();
+        ObjectNode directoryNode = JsonNodeFactory.instance.objectNode();
+        directoryNode.put("directoryString", directoryStateHandle.getDirectory().toString());
+        directoryNode.put("stateSize", directoryStateHandle.getStateSize());
+        handleNode.set("directoryStateHandle", directoryNode);
+
+        // 序列化metaDataState
+        StreamStateHandle metaDataState = handle.getMetaDataState();
+        if (metaDataState != null) {
+            handleNode.set("metaDataState", serializeStreamStateHandle(metaDataState));
+        }
+
+        // 序列化sharedState
+        List<IncrementalKeyedStateHandle.HandleAndLocalPath> sharedState = handle.getSharedStateHandles();
+        if (sharedState != null && !sharedState.isEmpty()) {
+            JsonNodeFactory factory = JsonNodeFactory.instance;
+            ArrayNode arrayNode = factory.arrayNode();
+            for (IncrementalKeyedStateHandle.HandleAndLocalPath handleAndLocalPath : sharedState) {
+                ObjectNode node = serializeHandleAndLocalPath(handleAndLocalPath);
+                arrayNode.add(node);
+            }
+            handleNode.set("sharedState", arrayNode);
+        }
+    }
+
+    public static ObjectNode serializeHandleAndLocalPath(IncrementalKeyedStateHandle.HandleAndLocalPath handleAndPath) {
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ObjectNode jsonNode = factory.objectNode();
+
+        if (handleAndPath == null) {
+            return jsonNode;
+        }
+
+        // 序列化handle字段
+        StreamStateHandle handle =  handleAndPath.getHandle();
+        if (handle != null) {
+            ObjectNode handleNode = serializeStreamStateHandle(handle);
+            jsonNode.set("handle", handleNode);
+        } else {
+            jsonNode.set("handle", factory.nullNode());
+        }
+
+        // 序列化localPath字段
+        String localPath = handleAndPath.getLocalPath();
+        jsonNode.put("localPath", localPath != null ? localPath : "");
+        jsonNode.put("stateSize:",handleAndPath.getStateSize());
+
+        return jsonNode;
+    }
+
+    private static ObjectNode serializeStreamStateHandle(StreamStateHandle streamStateHandle) {
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ObjectNode handleNode = factory.objectNode();
+
+        if (streamStateHandle instanceof RelativeFileStateHandle) {
+            RelativeFileStateHandle relativeFileStateHandle = (RelativeFileStateHandle)streamStateHandle;
+            handleNode.put("@class","RelativeFileStateHandle");
+            PhysicalStateHandleID stateHandleId = relativeFileStateHandle.getStreamStateHandleID();
+            ObjectNode stateHandleIdNode = factory.objectNode();
+            stateHandleIdNode.put("keyString", stateHandleId.getKeyString());
+            handleNode.set("streamStateHandleID", stateHandleIdNode);
+            handleNode.put("stateSize", relativeFileStateHandle.getStateSize());
+            String relativePath = relativeFileStateHandle.getRelativePath();
+            handleNode.put("relativePath", relativePath);
+        } else if (streamStateHandle instanceof FileStateHandle) {
+            FileStateHandle fileStateHandle = (FileStateHandle)streamStateHandle;
+            handleNode.put("@class","FileStateHandle");
+            PhysicalStateHandleID stateHandleId = fileStateHandle.getStreamStateHandleID();
+            ObjectNode stateHandleIdNode = factory.objectNode();
+            stateHandleIdNode.put("keyString", stateHandleId.getKeyString());
+            handleNode.set("streamStateHandleID", stateHandleIdNode);
+            handleNode.put("stateSize", fileStateHandle.getStateSize());
+            Path filePath = fileStateHandle.getFilePath();
+            handleNode.put("filePath", filePath.toString());
+        } else if (streamStateHandle instanceof ByteStreamStateHandle) {
+            ByteStreamStateHandle byteStreamStateHandle = (ByteStreamStateHandle)streamStateHandle;
+            handleNode.put("@class","ByteStreamStateHandle");
+            handleNode.put("handleName", byteStreamStateHandle.getHandleName());
+            byte[] data = byteStreamStateHandle.getData();
+            if (data != null) {
+                String encodedData = Base64.getEncoder().encodeToString(data);
+                handleNode.put("data", encodedData);
+            }
+        } else if (streamStateHandle instanceof PlaceholderStreamStateHandle) {
+            PlaceholderStreamStateHandle placeholderStreamStateHandle
+                    = (PlaceholderStreamStateHandle) streamStateHandle;
+            handleNode.put("@class", "PlaceholderStreamStateHandle");
+            handleNode.put("stateSize", placeholderStreamStateHandle.getStateSize());
+            ObjectNode innerNode = factory.objectNode();
+            innerNode.put("keyString", placeholderStreamStateHandle.getStreamStateHandleID().getKeyString());
+            handleNode.set("physicalID", innerNode);
+        } else {
+            throw new GeneralRuntimeException("get unsupported stream type");
+        }
+
+        return handleNode;
     }
 }

@@ -17,6 +17,7 @@ import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeExce
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
+import org.apache.flink.runtime.state.TaskLocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
@@ -26,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 
 /**
  * TaskStateManagerWrapper
@@ -133,6 +135,33 @@ public class TaskStateManagerWrapper {
     private void notifyCheckpointComplete(String checkpointidStr) throws Exception {
         long checkpointId = Long.parseLong(checkpointidStr);
         taskStateManager.notifyCheckpointComplete(checkpointId);
+    }
+
+    public String retrieveLocalState(long restoreCheckpointId){
+        String snapshotStr = "";
+        LOG.info("retrieveLocalState adaptor, checkpointId:{}",restoreCheckpointId);
+        try {
+            Class clazz = taskStateManager.getClass();
+            Field field = clazz.getDeclaredField("localStateStore");
+            field.setAccessible(true);
+            TaskLocalStateStore localStateStore = (TaskLocalStateStore) field.get(taskStateManager);
+            TaskStateSnapshot taskStateSnapshot = null;
+
+            taskStateSnapshot = localStateStore.retrieveLocalState(restoreCheckpointId);
+
+            if(taskStateSnapshot == null){
+                LOG.error("get snapshot failed");
+                return "NULL";
+            }
+            
+            snapshotStr = TaskStateSnapshotDeser.serializeTaskStateSnapshot(taskStateSnapshot);
+            LOG.info("Successfully retrieved snapshot for checkpointId: {}, snapshot size: {},snapshot str:{}",
+                    restoreCheckpointId, snapshotStr.length(), snapshotStr);
+        }catch (Exception e){
+            LOG.error("Failed to get local snapshot!", e);
+            return "ERROR";
+        }
+        return snapshotStr;
     }
 
 }

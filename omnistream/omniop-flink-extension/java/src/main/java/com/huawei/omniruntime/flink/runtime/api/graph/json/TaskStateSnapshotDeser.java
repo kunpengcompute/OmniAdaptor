@@ -42,6 +42,9 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.Json
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -63,6 +66,19 @@ import java.io.IOException;
  * @since 2025-08-08
  */
 public class TaskStateSnapshotDeser {
+
+    private static final Logger LOG = LoggerFactory.getLogger(TaskStateManagerWrapper.class);
+
+    private static final  ObjectMapper MAPPER = new ObjectMapper();
+
+    static{
+        // 配置ObjectMapper避免循环引用
+        MAPPER.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        MAPPER.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, false);
+    }
+
+       
+
     private static KeyGroupRange parseKeyGroupRange(JsonNode keyGroupNode) {
         int start = keyGroupNode.get("startKeyGroup").asInt();
         int end = keyGroupNode.get("endKeyGroup").asInt();
@@ -273,13 +289,10 @@ public class TaskStateSnapshotDeser {
 
     public static String serializeTaskStateSnapshot(TaskStateSnapshot snapshot) throws IOException {
         if (snapshot == null) {
+            LOG.warn("snapshot is null!");
             return "";
         }
-        ObjectMapper mapper = new ObjectMapper();
-
-        // 配置ObjectMapper避免循环引用
-        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-        mapper.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, false);
+ 
 
         JsonNodeFactory factory = JsonNodeFactory.instance;
         ObjectNode rootNode = factory.objectNode();
@@ -305,7 +318,7 @@ public class TaskStateSnapshotDeser {
 
         rootNode.set("subtaskStatesByOperatorID", subtaskStatesNode);
 
-        return mapper.writeValueAsString(rootNode);
+        return MAPPER.writeValueAsString(rootNode);
     }
 
     private static ObjectNode serializeOperatorSubtaskState(OperatorSubtaskState state) {
@@ -461,6 +474,7 @@ public class TaskStateSnapshotDeser {
         ObjectNode jsonNode = factory.objectNode();
 
         if (handleAndPath == null) {
+            LOG.warn("handleAndPath is null!");
             return jsonNode;
         }
 

@@ -1229,6 +1229,47 @@ public class OmniTask extends Task {
         return result;
     }
 
+    public CheckpointStreamWithResultProvider acquireSavepointOutputStream(long checkpointId) throws Exception {
+        if (this.checkpointOptions == null) {
+            LOG.info("checkpointOptions not initialized, using default location");
+            this.checkpointOptions = CheckpointOptions.forCheckpointWithDefaultLocation();
+        }
+        final CheckpointStorageAccess checkpointAccess = ((StreamTask<?, ?>) this.invokable).getEnvironment().getCheckpointStorageAccess();
+        this.checkpointStreamFactory = checkpointAccess.resolveCheckpointStorageLocation(checkpointId, this.checkpointOptions.getTargetLocation());
+        return CheckpointStreamWithResultProvider.createSimpleStream(
+                CheckpointedStateScope.EXCLUSIVE, checkpointStreamFactory);
+    }
+
+    public void writeSavepointOutputStream(CheckpointStreamWithResultProvider provider, byte[] chunk) throws Exception {
+        provider.getCheckpointOutputStream().write(chunk);
+    }
+
+    public void writeSavepointMetadata(
+            CheckpointStreamWithResultProvider provider,
+            final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots)
+            throws Exception {
+        final TypeSerializer<?> keySerializer =
+            BasicTypeInfo.LONG_TYPE_INFO.createSerializer(((StreamTask<?, ?>) this.invokable).getExecutionConfig());
+        
+        KeyedBackendSerializationProxy<?> serializationProxy =
+                new KeyedBackendSerializationProxy<>(keySerializer, stateMetaInfoSnapshots, false);
+        final DataOutputView out =
+                new DataOutputViewStreamWrapper(provider.getCheckpointOutputStream());
+        serializationProxy.write(out);
+    }
+
+    public long getSavepointOutputStreamPos(CheckpointStreamWithResultProvider provider) throws Exception {
+        return provider.getCheckpointOutputStream().getPos();
+    }
+
+    public SnapshotResult<StreamStateHandle> closeSavepointOutputStream(CheckpointStreamWithResultProvider provider)
+        throws Exception {
+        StreamStateHandle handle = (StreamStateHandle)provider
+            .closeAndFinalizeCheckpointStreamResult()
+            .getJobManagerOwnedSnapshot();
+        return SnapshotResult.of(handle);
+    }
+
     // return nativeAddressOfStreamTask
     private native long setupStreamTaskBeforeInvoke(long nativeTaskRef, String StreamTaskClassName /* possible other
      parameter*/);

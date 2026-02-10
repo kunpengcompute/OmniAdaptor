@@ -20,6 +20,8 @@ import org.apache.flink.runtime.checkpoint.StateObjectCollection;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.state.DirectoryStateHandle;
+import org.apache.flink.runtime.state.KeyGroupRangeOffsets;
+import org.apache.flink.runtime.state.KeyGroupsSavepointStateHandle;
 import org.apache.flink.runtime.state.IncrementalKeyedStateHandle;
 import org.apache.flink.runtime.state.IncrementalLocalKeyedStateHandle;
 import org.apache.flink.runtime.state.IncrementalRemoteKeyedStateHandle;
@@ -259,6 +261,18 @@ public class TaskStateSnapshotDeser {
                         persistedSize,
                         stateHandleId
                 );
+                managedKeyedState.add(flinkHandle);
+            } else if ("KeyGroupsSavepointStateHandle".equals(handleType)) {
+                KeyGroupRange keyGroupRange = parseKeyGroupRange(handleNode.get("groupRangeOffsets").get("keyGroupRange"));
+                JsonNode offsetsNode = handleNode.get("groupRangeOffsets").get("offsets");
+
+                long[] offsets = new long[offsetsNode.size()];
+                for (int i = 0; i < offsets.length; i++) {
+                    offsets[i] = offsetsNode.get(i).asLong();
+                }
+                KeyGroupRangeOffsets keyGroupRangeOffsets = new KeyGroupRangeOffsets(keyGroupRange, offsets);
+                StreamStateHandle streamStateHandle = parseStreamStateHandle(handleNode.get("streamStateHandle"));
+                KeyGroupsSavepointStateHandle flinkHandle = new KeyGroupsSavepointStateHandle(keyGroupRangeOffsets, streamStateHandle);
                 managedKeyedState.add(flinkHandle);
             }
         }

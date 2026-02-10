@@ -19,6 +19,7 @@ import org.apache.flink.runtime.state.LocalRecoveryDirectoryProviderImpl;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
 import org.apache.flink.runtime.state.DirectoryStateHandle;
 import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.CheckpointStreamWithResultProvider;
 import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.StreamStateHandle;
@@ -31,7 +32,6 @@ import org.apache.flink.runtime.taskmanager.RuntimeEnvironment;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.flink.util.jackson.JacksonMapperFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -45,6 +45,8 @@ import java.util.stream.Collectors;
 
 public class OmniTaskWrapper {
     OmniTask omniTask;
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public OmniTaskWrapper(OmniTask omniTask) {
         this.omniTask = omniTask;
@@ -103,11 +105,10 @@ public class OmniTaskWrapper {
     }
 
     public SnapshotResult<StreamStateHandle> materializeMetaData(long checkpointId, String stateMetaInfoSnapshotsJson, String localRecoveryConfigStr) throws IOException {
-        ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
         List<Map<String, Object>> stateMetaInfoMaps =
-                objectMapper.readValue(stateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {});
+                OBJECT_MAPPER.readValue(stateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {});
 
-        Map<String,Object> configMap = objectMapper.readValue(localRecoveryConfigStr, new TypeReference<Map<String,Object>>(){});
+        Map<String,Object> configMap = OBJECT_MAPPER.readValue(localRecoveryConfigStr, new TypeReference<Map<String,Object>>(){});
         List<String> dirs = (List<String>)configMap.get("allocationBaseDirs");
         File[] files = new File[dirs.size()];
         for (int i = 0; i < dirs.size(); i++) {
@@ -145,10 +146,45 @@ public class OmniTaskWrapper {
         }
     }
 
+    public CheckpointStreamWithResultProvider acquireSavepointOutputStream(long checkpointId) throws Exception {
+        return omniTask.acquireSavepointOutputStream(checkpointId);
+    }
+
+    public SnapshotResult<StreamStateHandle> closeSavepointOutputStream(CheckpointStreamWithResultProvider provider) throws Exception {
+        return omniTask.closeSavepointOutputStream(provider);
+    }
+
+    public void writeSavepointOutputStream(CheckpointStreamWithResultProvider provider, byte[] chunk) throws Exception {
+        omniTask.writeSavepointOutputStream(provider, chunk);
+    }
+
+    public void writeSavepointMetadata(CheckpointStreamWithResultProvider provider, String stateMetaInfoSnapshotsJson) throws Exception {
+        List<Map<String, Object>> stateMetaInfoMaps =
+                OBJECT_MAPPER.readValue(stateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {});
+
+        List<StateMetaInfoSnapshot> stateMetaInfoSnapshots = new ArrayList<>(stateMetaInfoMaps.size());
+        for (Map<String, Object> metaInfo : stateMetaInfoMaps) {
+            String name = (String) metaInfo.get("name");
+            int typeCode = (Integer) metaInfo.get("backendStateType");
+            Map<String, String> options = (Map<String, String>) metaInfo.get("options");
+
+            stateMetaInfoSnapshots.add(new StateMetaInfoSnapshot(
+                    name,
+                    StateMetaInfoSnapshot.BackendStateType.byCode(typeCode),
+                    options,
+                    Collections.emptyMap(),
+                    Collections.emptyMap()));
+        }
+        omniTask.writeSavepointMetadata(provider, stateMetaInfoSnapshots);
+    }
+
+    public long getSavepointOutputStreamPos(CheckpointStreamWithResultProvider provider) throws Exception {
+        return omniTask.getSavepointOutputStreamPos(provider);
+    }
+
     public List<HandleAndLocalPath> uploadFilesToCheckpointFs(String pathsJson,
                                                               int numberOfSnapshottingThreads) throws IOException {
-        final ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
-        final List<String> pathStrs = objectMapper.readValue(pathsJson, new TypeReference<List<String>>() {});
+        final List<String> pathStrs = OBJECT_MAPPER.readValue(pathsJson, new TypeReference<List<String>>() {});
         final List<java.nio.file.Path> paths = pathStrs.stream()
                                                     .map(java.nio.file.Paths::get)
                                                     .collect(Collectors.toList());
@@ -168,9 +204,7 @@ public class OmniTaskWrapper {
 
     private IncrementalLocalKeyedStateHandle deserializeIncrementalLocalKeyedStateHandle(String metaStateHandleStr) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-            
-            JsonNode rootNode = mapper.readTree(metaStateHandleStr);
+            JsonNode rootNode = OBJECT_MAPPER.readTree(metaStateHandleStr);
             UUID backendIdentifier = UUID.fromString(rootNode.get("backendIdentifier").asText());
             long checkpointId = rootNode.get("checkpointId").asLong();
             KeyGroupRange keyGroupRange = JsonHelper.fromJson(rootNode.get("keyGroupRange").toString(), KeyGroupRange.class);
@@ -204,8 +238,7 @@ public class OmniTaskWrapper {
 
     private IncrementalRemoteKeyedStateHandle deserializeIncrementalRemoteKeyedStateHandle(String metaStateHandleStr) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode rootNode = mapper.readTree(metaStateHandleStr);
+            JsonNode rootNode = OBJECT_MAPPER.readTree(metaStateHandleStr);
             List<HandleAndLocalPath> sharedState = new ArrayList<>();
             JsonNode sharedStateNode = rootNode.get("sharedState").get(1);
             for (JsonNode stateNode : sharedStateNode) {
@@ -255,8 +288,7 @@ public class OmniTaskWrapper {
     public <K> String readMetaData(String metaStateHandleStr) throws IOException {
         // Reconstruct a IncrementalLocalStateHandle
         StreamStateHandle metaStateHandle = null;
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode rootNode = mapper.readTree(metaStateHandleStr);
+        JsonNode rootNode = OBJECT_MAPPER.readTree(metaStateHandleStr);
         String classType = rootNode.get("@class").asText();
         if ("org.apache.flink.runtime.state.IncrementalLocalKeyedStateHandle".equals(classType)) {
             IncrementalLocalKeyedStateHandle localKeyedStateHandle =

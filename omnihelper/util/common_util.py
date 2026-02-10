@@ -11,7 +11,7 @@
 import os
 import re
 import sys
-import platform
+from omnihelper.parser.type_matcher import TypeMatcher, TypeEnum
 
 
 class CommonUtil:
@@ -117,7 +117,12 @@ class CommonUtil:
             size_str = size_str.strip()
 
             # 处理GB
-            if 'GiB' in size_str:
+            if 'TiB' in size_str:
+                gb = float(size_str.replace('TiB', '').strip())
+                return round(gb * 1024 * 1024, 3)  # 1TB = 1024GB
+
+            # 处理GB
+            elif 'GiB' in size_str:
                 gb = float(size_str.replace('GiB', '').strip())
                 return round(gb * 1024, 3)  # 1GB = 1024MB
 
@@ -212,3 +217,51 @@ class CommonUtil:
         })
 
         return result_item
+
+    @staticmethod
+    def split_complex_items(text):
+        """使用索引而非字符串拼接的高效版本"""
+        items = []
+        start = 0
+        level = 0
+
+        for i, char in enumerate(text):
+            if char == '(':
+                level += 1
+            elif char == ')':
+                level -= 1
+            elif char == ',' and level == 0:
+                item = text[start:i].strip()
+                if item:
+                    items.append(item)
+                start = i + 1
+
+        # 处理最后一项
+        last_item = text[start:].strip()
+        if last_item:
+            items.append(last_item)
+
+        return items
+
+    @staticmethod
+    def parse_param_list(param_match, param_type_mapping):
+        """
+        解析输入列表，处理包含嵌套括号的复杂表达式
+        :param param_match: 正则匹配结果对象
+        :param param_type_mapping: 参数类型映射字典
+        :return: 解析后的输入列表
+        """
+        if not param_match:
+            return []
+
+        param_list = []
+        for item in CommonUtil.split_complex_items(param_match.group(1)):
+            stripped_item = item.strip()
+            if not stripped_item:
+                continue
+
+            param_type = TypeMatcher.judge_param_type(stripped_item, param_type_mapping)
+            if param_type.upper().startswith("DECIMAL"):
+                param_type = TypeEnum.DECIMAL.value
+            param_list.append(param_type)
+        return param_list

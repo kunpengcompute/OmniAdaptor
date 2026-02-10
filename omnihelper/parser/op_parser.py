@@ -168,19 +168,11 @@ class OpParser:
             # 如果包含omni算子，直接跳过整个json
             if opname in self.omni_ops:
                 return True, []
-            input_list = []
-            output_list = []
 
             # 提取输入列表
             input_pattern = re.compile(r'Input\s*\[\d+\]:\s*\[([^\]]+)\]')
             input_match = input_pattern.search(block)
-            if input_match:
-                input_list = [
-                    TypeMatcher.judge_param_type(item.strip(), param_type_mapping)
-                    for item in input_match.group(1).split(',')
-                    if item.strip()
-                ]
-
+            input_list = CommonUtil.parse_param_list(input_match, param_type_mapping)
             is_supported_op = self.evaluate_support_status(opname, input_list)
             if is_supported_op:
                 continue
@@ -188,12 +180,7 @@ class OpParser:
             # 提取输出列表
             output_pattern = re.compile(r'Output\s*\[\d+\]:\s*\[([^\]]+)\]')
             output_match = output_pattern.search(block)
-            if output_match:
-                output_list = [
-                    TypeMatcher.judge_param_type(item.strip(), param_type_mapping)
-                    for item in output_match.group(1).split(',')
-                    if item.strip()
-                ]
+            output_list = CommonUtil.parse_param_list(output_match, param_type_mapping)
 
             # 构建time字符串
             time_str_parts = []

@@ -6,11 +6,13 @@ package com.huawei.omniruntime.flink.runtime.taskmanager;
 
 import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.TaskStateSnapshotDeser;
+import com.huawei.omniruntime.flink.runtime.restore.KeyGroupEntry;
+import com.huawei.omniruntime.flink.runtime.restore.KeyGroupEntryWrapper;
 
 import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.core.fs.FSDataInputStream;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
-import com.esotericsoftware.minlog.Log;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.state.LocalRecoveryConfig;
@@ -19,23 +21,33 @@ import org.apache.flink.runtime.state.LocalRecoveryDirectoryProviderImpl;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
 import org.apache.flink.runtime.state.DirectoryStateHandle;
 import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.KeyGroupRangeOffsets;
 import org.apache.flink.runtime.state.CheckpointStreamWithResultProvider;
 import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.IncrementalLocalKeyedStateHandle;
 import org.apache.flink.runtime.state.IncrementalRemoteKeyedStateHandle;
+import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.StateHandleID;
 import org.apache.flink.runtime.state.IncrementalKeyedStateHandle.HandleAndLocalPath;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
+import org.apache.flink.runtime.state.StreamCompressionDecorator;
+import org.apache.flink.runtime.state.SnappyStreamCompressionDecorator;
+import org.apache.flink.runtime.state.UncompressedStreamCompressionDecorator;
 import org.apache.flink.runtime.taskmanager.RuntimeEnvironment;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.flink.core.io.VersionMismatchException;
+
+import static org.apache.flink.runtime.state.FullSnapshotUtil.END_OF_KEY_GROUP_MARK;
+import static org.apache.flink.runtime.state.FullSnapshotUtil.FIRST_BIT_IN_BYTE_MASK;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -284,6 +296,35 @@ public class OmniTaskWrapper {
         }
     }
 
+    private KeyGroupsStateHandle deserializeKeyGroupsStateHandle(String metaStateHandleStr) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode rootNode = mapper.readTree(metaStateHandleStr);
+            KeyGroupRange keyGroupRange = JsonHelper.fromJson(
+                    rootNode.get("keyGroupRange").toString(),
+                    KeyGroupRange.class);
+
+            KeyGroupRangeOffsets keyGroupRangeOffsets = new KeyGroupRangeOffsets(keyGroupRange);
+
+            StreamStateHandle metaDataState =
+                    TaskStateSnapshotDeser.parseStreamStateHandle(rootNode.get("metaDataState"));
+
+            String jstateHandleId = rootNode.get("stateHandleId").get("keyString").asText();
+            StateHandleID stateHandleId = new StateHandleID(jstateHandleId);
+            
+            return KeyGroupsStateHandle.restore(
+                    keyGroupRangeOffsets,
+                    metaDataState,
+                    stateHandleId);
+        } catch (JsonHelper.JsonHelperException ex) {
+            throw ex;
+        } catch (Exception e) {
+            throw new JsonHelper.JsonHelperException(
+                    "Error deserializing metaStateHandleStr to KeyGroupsStateHandle: "
+                            + metaStateHandleStr, e);
+        }
+    }
+
     // This function is for C++ calling readMetaData in RocksDBIncrementalRestoreOperation
     public <K> String readMetaData(String metaStateHandleStr) throws IOException {
         // Reconstruct a IncrementalLocalStateHandle
@@ -298,6 +339,10 @@ public class OmniTaskWrapper {
             IncrementalRemoteKeyedStateHandle remoteKeyedStateHandle =
                     deserializeIncrementalRemoteKeyedStateHandle(metaStateHandleStr);
             metaStateHandle = remoteKeyedStateHandle.getMetaStateHandle();
+        } else if ("org.apache.flink.runtime.state.KeyGroupsStateHandle".equals(classType)) {
+            KeyGroupsStateHandle keyedGroupsStateHandle = 
+                    deserializeKeyGroupsStateHandle(metaStateHandleStr);
+            metaStateHandle = keyedGroupsStateHandle.getDelegateStateHandle();
         } else {
             throw new IOException("Unsupported metaStateHandleStr json.");
         }
@@ -324,5 +369,82 @@ public class OmniTaskWrapper {
                 inputStream.close();
             }
         }
+    }
+
+    public FSDataInputStream getSavepointInputStream(String metaStateHandleStr) throws IOException {
+        KeyGroupsStateHandle keyedGroupsStateHandle = deserializeKeyGroupsStateHandle(metaStateHandleStr);
+        StreamStateHandle metaStateHandle = keyedGroupsStateHandle.getDelegateStateHandle();
+        FSDataInputStream inputStream = metaStateHandle.openInputStream();
+        return inputStream;
+    }
+
+    public void closeSavepointInputStream(FSDataInputStream inputStream) throws IOException {
+        if (inputStream != null) {
+            inputStream.close();
+        }
+    }
+
+    public void setSavepointInputStreamOffset(FSDataInputStream inputStream, long offset) throws IOException {
+        if (inputStream != null) {
+            inputStream.seek(offset);
+        }
+    }
+
+    public boolean isUsingKeyGroupCompression(FSDataInputStream inputStream) throws IOException {
+        int[] versions = new int[] {6, 5, 4, 3, 2, 1}; 
+        DataInputView in = new DataInputViewStreamWrapper(inputStream);
+        int readVersion = in.readInt();
+        for (int version : versions) {
+            if (version == readVersion) {
+                if (readVersion >= 4) {
+                    return in.readBoolean();
+                } else {
+                    return false;
+                }
+            }
+        }
+        throw new VersionMismatchException("Incompatible version: found " + readVersion
+            + ", compatible version are" + Arrays.toString(versions));
+    }
+
+    private int[] deserialize(DataInputView source) throws IOException {
+        int length = source.readInt();
+        int[] result = new int[length];
+        if (length < 0) {
+            throw new IndexOutOfBoundsException();
+        }
+        for (int i = 0; i < length; i++) {
+            result[i] = source.readByte();
+        }
+        return result;
+    }
+
+    public <K> String getKeyGroupEntries(FSDataInputStream inputStream, int currentKvStateId,
+                                        boolean isUsingKeyGroupCompression) throws IOException {
+        StreamCompressionDecorator keygroupStressCompressionDecorator = isUsingKeyGroupCompression ?
+            SnappyStreamCompressionDecorator.INSTANCE : UncompressedStreamCompressionDecorator.INSTANCE;
+        InputStream compressedKgIn = keygroupStressCompressionDecorator.decorateWithCompression(inputStream);
+        DataInputViewStreamWrapper kgInputView = new DataInputViewStreamWrapper(compressedKgIn);
+        // first time
+        if (currentKvStateId == -1) {
+            currentKvStateId = END_OF_KEY_GROUP_MARK & kgInputView.readShort();
+        }
+        int entryStateId = currentKvStateId;
+        int count = 0;
+        List<KeyGroupEntry> keyGroupEntries = new ArrayList();
+        // read by state or by count 1000
+        while (count < 1000) {
+            count++;
+            int[] key = deserialize(kgInputView);
+            int[] value = deserialize(kgInputView);
+            if (0 != ((byte)key[0] & FIRST_BIT_IN_BYTE_MASK)) {
+                key[0] = (byte)key[0] & ~FIRST_BIT_IN_BYTE_MASK;
+                currentKvStateId = END_OF_KEY_GROUP_MARK & kgInputView.readShort();
+                keyGroupEntries.add(new KeyGroupEntry(entryStateId, key, value));
+                break;
+            }
+            keyGroupEntries.add(new KeyGroupEntry(entryStateId, key, value));
+        }
+        return JsonHelper.toJson(new KeyGroupEntryWrapper(keyGroupEntries, currentKvStateId));
     }
 }

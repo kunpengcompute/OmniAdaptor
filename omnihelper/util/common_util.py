@@ -162,6 +162,7 @@ class CommonUtil:
             func_name='',
             func_inputs='',
             func_times='',
+            is_udf = '',
             spark_version='',
             error_info='',
     ) -> dict:
@@ -182,6 +183,7 @@ class CommonUtil:
             func_name: 函数名称
             func_inputs: 函数输入列表
             func_times: 函数出现次数
+            is_udf: 是否为用户自定义函数
 
         返回:
             构建好的结果字典
@@ -212,6 +214,7 @@ class CommonUtil:
             'Omni不支持的表达式/内置函数名称': func_name,
             'Omni不支持的表达式/内置函数Input': ",".join(func_inputs),
             'Omni不支持的表达式/内置函数出现频次': func_times,
+            'Omni不支持的表达式/内置函数是否udf': is_udf,
             'Spark版本': spark_version,
             '异常信息/备注': error_info
         })

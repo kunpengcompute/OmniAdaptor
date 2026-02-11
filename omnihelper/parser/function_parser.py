@@ -20,16 +20,25 @@ from omnihelper.parser.type_matcher import TypeMatcher
 from omnihelper.util.common_util import CommonUtil
 from omnihelper.util.func_util import extract_cast_param
 
-SPECIAL_FUNCTION = [FunctionEnum.IF.value, FunctionEnum.CASE.value]
+# 在函数提取中需要排除的表达式
+EXCLUDED_EXPRS = [FunctionEnum.IF.value, FunctionEnum.CASE.value, FunctionEnum.IN.value]
+# 在表达式提取中需要排除的函数
+EXCLUDED_FUNCTIONS = [FunctionEnum.IF.value, FunctionEnum.CASE.value, FunctionEnum.FILTER.value]
+# trim相关函数
+TRIM_FUNCTIONS = [FunctionEnum.TRIM.value, FunctionEnum.LTRIM.value, FunctionEnum.RTRIM.value, FunctionEnum.BTRIM.value]
 
 class FunctionParser:
 
     DICTIONARY_PATH = os.path.join(CommonUtil.get_execute_path(), "resources", "omni_function_dictionary.json")
+    UDF_DICTIONARY_PATH = os.path.join(CommonUtil.get_execute_path(), "resources", "udf_dictionary.json")
 
     def __init__(self):
         self.function_list = []
         self.omni_functions = []
+        self.udf_list = []
+        self.user_defined_functions = []
         self.partial_func_mapping = {}
+        self.all_funcs = []
         self.load_func_list()
 
     def load_func_list(self):
@@ -38,8 +47,17 @@ class FunctionParser:
                 self.function_list = json.load(f)
         except Exception as e:
             raise Exception("Failed to load the functions list: " + str(e))
+
+        if os.path.exists(self.UDF_DICTIONARY_PATH):
+            try:
+                with open(self.UDF_DICTIONARY_PATH, "r", encoding="utf-8") as f:
+                    self.udf_list = json.load(f)
+            except Exception as e:
+                raise Exception("Failed to load the user defined function: " + str(e))
         self.omni_functions = [func.get("func_name").lower() for func in self.function_list]
-        self.func_pattern = re.compile("({})\\((.*)".format("|".join(map(re.escape, self.omni_functions))))
+        self.user_defined_functions = [func.get("func_name").lower() for func in self.udf_list]
+        self.all_funcs = self.omni_functions + self.user_defined_functions
+        self.func_pattern = re.compile("({})\\((.*)".format("|".join(map(re.escape, self.all_funcs))))
         for func in self.function_list:
             if func.get("hash_agg_func"):
                 self.partial_func_mapping[func["func_name"]] = func["hash_agg_func"]
@@ -64,7 +82,6 @@ class FunctionParser:
             if "ReadSchema" in line:
                 # 更新参数类型映射表
                 TypeMatcher.extract_param_type(line, param_type_mapping)
-                continue
             func_pairs = self.search_func_expr_pairs(line)
             if not func_pairs:
                 continue
@@ -74,7 +91,7 @@ class FunctionParser:
                 params = pair.get("params")
 
                 input_type = TypeMatcher.get_input_type(params, param_type_mapping, event.get("original query"), pair)
-                function_checker = FunctionChecker(self.function_list)
+                function_checker = FunctionChecker(self.function_list, self.udf_list)
                 is_not_supported_func = function_checker.check_support_status(func_name, params, input_type, event.get("original query"))
                 if not is_not_supported_func:
                     continue
@@ -126,8 +143,13 @@ class FunctionParser:
         for call in calls:
             func = self.extract_func_name(call)
             params = self.extract_func_args(call)
-            if not func.lower() in self.omni_functions or func.lower() in SPECIAL_FUNCTION:
+            if not func.lower() in self.all_funcs:
                 continue
+            if func.lower() in EXCLUDED_EXPRS:
+                continue
+            if func.lower() in TRIM_FUNCTIONS and len(params) > 1 and params[1] == "None":
+                # trim函数的第二个参数如果为None则删除第二个参数
+                del params[1]
             if func.lower() == FunctionEnum.CAST.value:
                 # cast函数的参数XXX as type的形式，需要特殊处理
                 params = extract_cast_param(call)
@@ -138,14 +160,19 @@ class FunctionParser:
     def search_exprs(self, line, func_expr_pairs):
         exprs = self.split_by_ops(line)
         for expr in exprs:
+            params = []
             left, op, right = expr
-            if not op.lower() in self.omni_functions or op.lower() in SPECIAL_FUNCTION:
+            if not op.lower() in self.all_funcs:
                 continue
-            if op.lower() in [FunctionEnum.FILTER.value]:
+            if op.lower() in EXCLUDED_FUNCTIONS:
                 continue
-            left_param = self.extract_left_param(left)
-            right_param = self.extract_right_param(right)
-            params = [self.strip_outer_parens(left_param), self.strip_outer_parens(right_param)]
+            left_param = self.strip_outer_parens(self.extract_left_param(left))
+            params.append(left_param)
+
+            right_param = self.strip_outer_parens(self.extract_right_param(right))
+            if not op.lower() == FunctionEnum.IN.value:
+                # in表达式只需要提取一边的类型
+                params.append(right_param)
 
             if not left_param or not right_param:
                 continue
@@ -440,7 +467,7 @@ class FunctionParser:
 
     def split_by_ops(self, expr):
         results = []
-        pattern = r"\s+(%s)\s+" % "|".join(map(re.escape, self.omni_functions))
+        pattern = r"\s+(%s)\s+" % "|".join(map(re.escape, self.all_funcs))
         for m in re.finditer(pattern, expr, re.I):
             results.append((
                 expr[:m.start(1)].strip(),
@@ -520,6 +547,7 @@ class FunctionParser:
                 "func_name": func_name,
                 "sql_hash": sql_hash,
                 "input": input_type,
-                "times": times
+                "times": times,
+                "is_udf": True if func_name.lower() in self.user_defined_functions else False
             })
         return update_event_result

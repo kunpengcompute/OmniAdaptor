@@ -19,7 +19,7 @@ DECIMAL128_PRECISION = [19, 38]
 
 NOT_SUPPORTED_TYPE = [TypeEnum.PARTITION.value, TypeEnum.NESTED_FUNCTIONS.value]
 
-PREDICATE_EXPR = ["<", "<=", "<>", "=", "==", ">", ">="]
+PREDICATE_EXPR = ["<", "<=", "<>", "=", "==", ">", ">=", FunctionEnum.IF.value]
 
 DATE_LITERAL = ["yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss"]
 
@@ -60,12 +60,11 @@ class TypeMatcher:
     def judge_param_type(param, param_type_mapping):
         if TypeMatcher.is_string_literal(param):
             return TypeEnum.STRING.value
-        for pattern, param_type in TYPE_PATTERNS:
-            if pattern.fullmatch(param):
-                return param_type
+
         ori_param = re.sub(r"#\d+(L)*", "", param)
         if TypeMatcher.is_nested_function(ori_param):
             return TypeEnum.NESTED_FUNCTIONS.value
+        ori_param = re.sub(r"^-\s*", "", ori_param)
         if ori_param in param_type_mapping:
             return param_type_mapping[ori_param]
         return TypeEnum.PARTITION.value
@@ -82,9 +81,20 @@ class TypeMatcher:
                 input_type.append(param_type)
                 continue
 
-            if extract_type == "func" and TypeMatcher.is_string_in_ori_sql(param, ori_sql):
+            if TypeMatcher.is_string_in_ori_sql(param, ori_sql):
                 # 判断是否在原SQL中为字符串，physical plan中将其优化
                 input_type.append(TypeEnum.STRING.value)
+                continue
+
+            is_match = False
+            for pattern, match_type in TYPE_PATTERNS:
+                # 判断参数是否为默认参数类型
+                if pattern.fullmatch(param):
+                    is_match = True
+                    input_type.append(match_type)
+
+            if is_match:
+                # 如果已经匹配到则不执行后续逻辑
                 continue
 
             if param_type == TypeEnum.NESTED_FUNCTIONS.value and TypeMatcher.is_pure_cast(param):
@@ -95,8 +105,8 @@ class TypeMatcher:
 
             input_type.append(param_type)
 
-        if extract_type == "expr" and func_name in PREDICATE_EXPR:
-            # 判断参数是否为比较表达式，如果是且有一侧类型不确定，则将类型判断为确定的类型
+        if func_name in PREDICATE_EXPR:
+            # 判断参数是否为比较表达式或IF函数，如果是且有一侧类型不确定，则将类型判断为确定的类型
             input_type = TypeMatcher.replace_predicate_partition(input_type)
 
         if func_name == FunctionEnum.CAST.value and len(params) == 2:
@@ -112,8 +122,10 @@ class TypeMatcher:
 
     @staticmethod
     def is_string_in_ori_sql(param, ori_sql):
-        spark_param = "'" + param.replace("\\", "\\\\") + "'"
-        return spark_param in ori_sql
+        escaped_single_param = "'" + param.replace("\\", "\\\\") + "'"
+        escaped_double_param = '"' + param.replace("\\", "\\\\") + '"'
+        param_literal_list = [f"'{param}'", f'"{param}"', f'{escaped_single_param}', f'{escaped_double_param}']
+        return any(literal in ori_sql for literal in param_literal_list)
 
     @staticmethod
     def is_date_literal(param):

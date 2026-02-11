@@ -18,3 +18,8 @@ class FunctionEnum(Enum):
     IF = "if"
     CASE = "case"
     FILTER = "filter"
+    IN = "in"
+    TRIM = "trim"
+    LTRIM = "ltrim"
+    RTRIM = "rtrim"
+    BTRIM = "btrim"

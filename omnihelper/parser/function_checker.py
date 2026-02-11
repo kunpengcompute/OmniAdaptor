@@ -22,8 +22,9 @@ class TypeLimitEnum(Enum):
 
 class FunctionChecker:
 
-    def __init__(self, function_list):
+    def __init__(self, function_list, udf_list):
         self.function_list = function_list
+        self.udf_list = udf_list
         self.current_rule = None
 
     def check_support_status(self, func_name, params, input_type, ori_sql):
@@ -31,6 +32,9 @@ class FunctionChecker:
         检查函数或者表达式的omni支持性
         :return: true:不支持, false:支持
         """
+        if any(func_name.lower() == udf.get("func_name") for udf in self.udf_list):
+            # 如果自定义函数存在，优先级较高，先判断是否支持
+            return True
         for rule in self.function_list:
             if not rule.get("func_name").lower() == func_name.lower():
                 continue

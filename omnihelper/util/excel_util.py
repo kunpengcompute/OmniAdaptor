@@ -42,6 +42,7 @@ class ExcelWriterWithStyle:
              "column_width": 20},
             {'main': 'Omni不支持的表达式/内置函数', 'sub': 'Input', "column_width": 35},
             {'main': 'Omni不支持的表达式/内置函数', 'sub': '出现频次', "column_width": 10},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': '是否udf', "column_width": 10},
             {'main': 'Spark版本', "column_width": 15},
             {'main': '异常信息/备注', "column_width": 30}
         ]

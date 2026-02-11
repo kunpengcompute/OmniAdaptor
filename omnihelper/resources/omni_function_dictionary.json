@@ -237,18 +237,6 @@
         ]
     },
     {
-        "func_name": "when",
-        "is_support_func": true,
-        "no_support_type": [
-            "BYTE",
-            "FLOAT",
-            "BINARY",
-            "ARRAY",
-            "MAP",
-            "STRUCT(ROW)"
-        ]
-    },
-    {
         "func_name": "cast",
         "is_support_func": true,
         "cast_no_support_type": {
@@ -2789,6 +2777,11 @@
         "func_name": "partial_percentile",
         "is_support_func": false,
         "hash_agg_func": "percentile"
+    },
+    {
+        "func_name": "partial_percentile_approx",
+        "is_support_func": false,
+        "hash_agg_func": "percentile_approx"
     },
     {
         "func_name": "partial_collect_list",

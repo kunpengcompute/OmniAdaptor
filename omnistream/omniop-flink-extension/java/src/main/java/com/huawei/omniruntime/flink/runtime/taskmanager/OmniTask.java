@@ -984,7 +984,7 @@ public class OmniTask extends Task {
         this.checkpointStreamFactory = checkpointAccess.resolveCheckpointStorageLocation(checkpointId, this.checkpointOptions.getTargetLocation());
 
         CheckpointStreamWithResultProvider streamWithResultProvider =
-                localRecoveryConfig.isLocalRecoveryEnabled()
+                localRecoveryConfig != null && localRecoveryConfig.isLocalRecoveryEnabled()
                 ? CheckpointStreamWithResultProvider.createDuplicatingStream(
                         checkpointId,
                         CheckpointedStateScope.EXCLUSIVE,

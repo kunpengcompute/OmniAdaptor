@@ -127,22 +127,25 @@ public class OmniTaskWrapper {
         List<Map<String, Object>> stateMetaInfoMaps =
                 OBJECT_MAPPER.readValue(stateMetaInfoSnapshotsJson, new TypeReference<List<Map<String, Object>>>() {});
 
-        Map<String,Object> configMap = OBJECT_MAPPER.readValue(localRecoveryConfigStr, new TypeReference<Map<String,Object>>(){});
-        List<String> dirs = (List<String>)configMap.get("allocationBaseDirs");
-        File[] files = new File[dirs.size()];
-        for (int i = 0; i < dirs.size(); i++) {
-            files[i] = new File(dirs.get(i));
-        }
-        
-        String jobIdHexStr = (String) configMap.get("jobID");
-        String jobVertexIdHexStr = (String) configMap.get("jobVertexID");
+        LocalRecoveryConfig recoveryConfig = null;
+        if (!"{}".equals(localRecoveryConfigStr)){
+            Map<String,Object> configMap = OBJECT_MAPPER.readValue(localRecoveryConfigStr, new TypeReference<Map<String,Object>>(){});
+            List<String> dirs = (List<String>)configMap.get("allocationBaseDirs");
+            File[] files = new File[dirs.size()];
+            for (int i = 0; i < dirs.size(); i++) {
+                files[i] = new File(dirs.get(i));
+            }
+            
+            String jobIdHexStr = (String) configMap.get("jobID");
+            String jobVertexIdHexStr = (String) configMap.get("jobVertexID");
 
-        JobID jobID = JobID.fromHexString(jobIdHexStr);
-        JobVertexID jobVertexID = JobVertexID.fromHexString(jobVertexIdHexStr);
-        int subtaskIndex = (Integer) configMap.get("subtaskIndex");
-        LocalRecoveryDirectoryProvider provider = new LocalRecoveryDirectoryProviderImpl(files, jobID, jobVertexID,
-                subtaskIndex);
-        LocalRecoveryConfig recoveryConfig = new LocalRecoveryConfig(provider);
+            JobID jobID = JobID.fromHexString(jobIdHexStr);
+            JobVertexID jobVertexID = JobVertexID.fromHexString(jobVertexIdHexStr);
+            int subtaskIndex = (Integer) configMap.get("subtaskIndex");
+            LocalRecoveryDirectoryProvider provider = new LocalRecoveryDirectoryProviderImpl(files, jobID, jobVertexID,
+                    subtaskIndex);
+            recoveryConfig = new LocalRecoveryConfig(provider);
+        }    
 
         List<StateMetaInfoSnapshot> stateMetaInfoSnapshots = new ArrayList<>(stateMetaInfoMaps.size());
         for (Map<String, Object> metaInfo : stateMetaInfoMaps) {

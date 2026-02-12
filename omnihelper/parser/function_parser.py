@@ -176,7 +176,7 @@ class FunctionParser:
 
             if not left_param or not right_param:
                 continue
-            if re.fullmatch(r"^\s*(?::\s*)*(?:\+\-|\:\-)\s*$", left_param):
+            if re.fullmatch(r"^\s*(?::\s*)*(?:\+\-|\:\-|\-)\s*$", left_param):
                 # 排除类似【+- * Project (32)】左边参数是+-，: +-，: :-等情况
                 continue
 
@@ -478,52 +478,179 @@ class FunctionParser:
 
     def extract_left_param(self, left_part):
         """
-        返回表达式左边最靠近的参数或函数
+        返回表达式左边最靠近的参数或函数：
+        - 支持函数调用：rand(..)等
+        - 支持括号表达式：(255.0)
+        - 支持为闭合括号：((255
+        - 支持普通token：c_string#11, 255.0
+        - 支持表达式partition列：avg(c_int)#20
         :return: 左边参数
         """
-        lt_index = len(left_part)
-        depth = 0
-        end = lt_index
-        for i in range(lt_index - 1, -1, -1):
-            ch = left_part[i]
-            if ch == ")":
-                depth += 1
-            elif ch == "(":
-                depth -= 1
-            if depth < 0:
-                return left_part[i + 1:end].strip()
-        left = left_part[:lt_index].rstrip()
-        return left
+        s = left_part.rstrip()
+        n = len(s)
+        if not n:
+            return s
+
+        # 找到最右边的非空字符
+        i = n - 1
+        while i >= 0 and s[i].isspace():
+            i -= 1
+        if i < 0:
+            return ""
+
+        # 如果是token（字母/数字/#/_/.）
+        if s[i].isalnum() or s[i] in ["#", "_", "."]:
+            j = i
+            while j >= 0 and (s[j].isalnum() or s[j] in ["#", "_", "."]):
+                j -= 1
+            token_start = j + 1
+            token = s[token_start:i + 1]
+
+            # 检查token前是否紧跟未闭合括号表达式
+            k = token_start - 1
+            if k >= 0 and s[k] == ")":
+                # 解析括号表达式
+                depth = 0
+                paren_end = k
+                paren_start = -1
+                for t in range(k, -1, -1):
+                    if s[t] == ")":
+                        depth += 1
+                    elif s[t] == "(":
+                        depth -= 1
+                        if depth == 0:
+                            paren_start = t
+                            break
+
+                if paren_start != -1:
+                    # 扩展函数名
+                    f = paren_start - 1
+                    while f >= 0 and (s[f].isalnum() or s[f] in ["_", "#"]):
+                        f -= 1
+                    return s[f + 1:i + 1]
+            return token
+
+        # 如果是右括号 -> 完整函数或括号表达式
+        if s[i] == ')':
+            depth = 0
+            paren_end = i
+            paren_start = -1
+
+            for k in range(i, -1, -1):
+                if s[k] == ")":
+                    depth += 1
+                elif s[k] == "(":
+                    depth -= 1
+                    if depth == 0:
+                        paren_start = k
+                        break
+
+            if paren_start != -1:
+                # 扩展函数名
+                j = paren_start - 1
+                while j >= 0 and (s[j].isalnum() or s[j] in ["_", "#"]):
+                    j -= 1
+                return s[j + 1:paren_end + 1].strip()
+
+            return s[i:]
+
+        # 如果是左括号 -> 未闭合括号
+        if s[i] == "(":
+            j = i - 1
+            while j >= 0 and (s[j].isalnum() or s[j] in ["#", "_", "."]):
+                j -= 1
+            return s[j + 1:i].strip()
+
+        return s[i]
+
 
     def extract_right_param(self, right_part):
         """
         返回表达式右边最靠近的参数或函数
+        - 支持函数调用：lower(...), rand(...)
+        - 括号表达式: (255.0)
+        - 普通token: c_string#11, 255.0
         :return: 右边参数
         """
-        depth = 0
-        for i, ch in enumerate(right_part):
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-            if depth < 0:
-                return right_part[:i].strip()
-        right = self.clean_spark_suffix(right_part)
-        return right
+        s = right_part.lstrip()
+        n = len(s)
+        if not n:
+            return s
 
-    def strip_outer_parens(self, expr):
-        expr = expr.strip()
-        if expr.startswith("(") and expr.endswith(")"):
+        i = 0
+        # 找第一个非空字符
+        while i < n and s[i].isspace():
+            i += 1
+        if i >= n:
+            return ""
+
+        ch = s[i]
+
+        # 如果是字母/下划线/# 开头 -> 可能是函数名或普通标识符
+        if ch.isalpha() or ch in ["_", "#"]:
+            start = i
+            # 先读完整标识符
+            while i < n and (s[i].isalnum() or s[i] in ["_", "#"]):
+                i += 1
+            name_end = i
+
+            # 跳过空格
+            while i < n and s[i].isspace():
+                i += 1
+
+            # 如果后面紧跟'(' -> 函数调用，向后找匹配的右括号
+            if i < n and s[i] == "(":
+                depth = 0
+                lparen = i
+                end = None
+                for k in range(lparen, n):
+                    if s[k] == "(":
+                        depth += 1
+                    elif s[k] == ")":
+                        depth -= 1
+                        if depth == 0:
+                            end = k
+                            break
+                if end is not None:
+                    return s[start:end + 1].strip()
+                else:
+                    # 括号没闭合，就取到结尾
+                    return s[start:].strip()
+            else:
+                # 普通标识符
+                return s[start:name_end].strip()
+
+        # 如果是'(' -> 括号表达式
+        if ch == "(":
             depth = 0
-            for i, ch in enumerate(expr):
-                if ch == "(":
+            lparen = i
+            end = None
+            for k in range(lparen, n):
+                if s[k] == "(":
                     depth += 1
-                elif ch == ")":
+                elif s[k] == ")":
                     depth -= 1
-                    if depth == 0 and i != len(expr) - 1:
-                        return expr
-            return expr[1:-1].strip()
-        return expr
+                    if depth == 0:
+                        end = k
+                        break
+            if end is not None:
+                return s[lparen:end + 1].strip()
+            else:
+                # 括号没闭合 就取到结尾
+                return s[lparen:].strip()
+
+        # 如果是数字或'.' -> 数字token（支持小数）
+        if ch.isdigit() or ch == ".":
+            start = i
+            while i < n and (s[i].isdigit() or s[i] == "."):
+                i += 1
+            return s[start:i]
+
+        # 兜底：返回这个字符后面的连续非空白
+        start = i
+        while i < n and not s[i].isspace():
+            i += 1
+        return s[start:i]
 
     def build_not_supported_func(self, func_name, event, input_type):
         func_name = self.partial_func_mapping[func_name] if func_name in self.partial_func_mapping else func_name

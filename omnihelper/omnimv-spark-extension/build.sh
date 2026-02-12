@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+set -e
 
 # 当前脚本目录：.../omnihelper/omnimv-spark-extension
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

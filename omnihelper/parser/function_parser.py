@@ -563,6 +563,19 @@ class FunctionParser:
 
         return s[i]
 
+    def strip_outer_parens(self, expr):
+        expr = expr.strip()
+        if expr.startswith("(") and expr.endswith(")"):
+            depth = 0
+            for i, ch in enumerate(expr):
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                    if depth == 0 and i != len(expr) - 1:
+                        return expr
+            return expr[1:-1].strip()
+        return expr
 
     def extract_right_param(self, right_part):
         """

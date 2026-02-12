@@ -57,13 +57,11 @@ Usage Examples:
   ./omnihelper -i ./input_data -o ./output_dir 
     --java-path /path/to/java/bin/java 
     --class-path /path/to/boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar:\
-/path/to/boostkit-omnimv-spark-3.4.3-1.2.0-aarch64.jar:\
 /path/to/spark-3.4.3-bin-hadoop3/jars/*
 
   ./omnihelper -i ./input_data/eventlog.lz4 -o ./output_dir
     --java-path /path/to/java/bin/java 
     --class-path /path/to/boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar:\
-/path/to/boostkit-omnimv-spark-3.4.3-1.2.0-aarch64.jar:\
 /path/to/spark-3.4.3-bin-hadoop3/jars/*
 """
         )

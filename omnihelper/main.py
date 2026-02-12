@@ -89,7 +89,7 @@ Usage Examples:
         self.parser.add_argument(
             '--show-op-details', '-s',
             action='store_false',  # 默认为 True，传参时设为 False
-            help='Disable displaying op file sizes and output rows (default: enabled)'
+            help='Disable displaying op file sizes and output rows'
         )
 
         # Java相关参数组

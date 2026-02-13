@@ -51,7 +51,28 @@ Java Configuration:
 （1）日志解析依赖包：
 - 从resources文件夹中获取 boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar依赖包
 
-（2）Spark相关依赖包：
+（2）自行构建 JAR 包（可选）：
+- 如未使用 resources 中的预编译包，可按以下步骤自行构建：
+- 构建环境要求：JDK 1.8;Maven 3.6+, Linux/macOS 或 Windows（推荐使用 Git Bash / WSL 执行脚本）
+
+  ① 进入构建目录
+  ```
+  cd omnihelper/omnimv-spark-extension
+  ```
+  ② 执行构建脚本：
+  ```
+  bash build.sh
+  ```
+  构建完成后，生成的 JAR 包会自动拷贝至：
+  ```
+  omnihelper/resources/
+  ```
+  生成文件示例：
+  ```
+  boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar
+  ```
+
+（3）Spark相关依赖包：
 - 通过[链接](https://repo.huaweicloud.com/apache/spark/spark-3.4.3/)获取spark-3.4.3-bin-hadoop3.tgz包，解压后的jars文件夹中包含Spark相关依赖
 
 3、准备事件日志：

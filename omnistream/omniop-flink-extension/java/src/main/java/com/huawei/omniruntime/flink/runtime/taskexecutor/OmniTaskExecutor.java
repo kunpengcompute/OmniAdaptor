@@ -40,6 +40,8 @@ import com.huawei.omniruntime.flink.utils.UdfUtil;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.blob.TaskExecutorBlobService;
 import org.apache.flink.runtime.checkpoint.CheckpointException;
@@ -116,6 +118,43 @@ import javax.annotation.Nullable;
  * @since 2025-04-27
  */
 public class OmniTaskExecutor extends TaskExecutor {
+
+    // -------------------------------- FALCON Implementation --------------------------------
+
+    /**
+     * Calculate falcon cache size limit of each slot, and add the info into each subTask (ExecutionAttemptID). Slot
+     * cache size is set as "TMCacheSize / TMSlotNum"
+     * @brief FALCON implementation
+     * @param executionAttemptID subTask execution info, including subTask num in the same slot, and slot cache size
+     */
+    public void calculateSlotFalconSize(ExecutionAttemptID executionAttemptID) {
+        // if enable falcon cache, configure falcon memory manager, set cache size of each slot into ExecutionAttemptID
+        final boolean enableFalconCache = GlobalConfiguration.loadConfiguration().get(
+            ConfigOptions.key("state.backend.rocksdb.falcon.use-state-cache")
+                .booleanType()
+                .defaultValue(false)
+                .withDescription("If true, falcon cache will be used for RocksDBValueState and RocksDBMapState.")
+        );
+        if (enableFalconCache) {
+            // each taskManager can cache at most "taskManagerFalconSize" state items.
+            final int taskManagerFalconSize = GlobalConfiguration.loadConfiguration().get(
+                ConfigOptions.key("state.backend.rocksdb.falcon.state-cache-sizeLimit")
+                    .intType()
+                    .defaultValue(12000)
+                    .withDescription("The maximum number of state items that can be cached by each TaskManager, " +
+                            " which is set as 12000 by default.")
+            );
+            int numSlots = taskManagerConfiguration.getNumberSlots(); // num slots in current taskManager
+            int slotFalconSize = (numSlots == 0) ? 0 : taskManagerFalconSize / numSlots;
+            executionAttemptID.setSlotFalconSize(slotFalconSize);
+            // this log will be print n times, where n = numSubTasks
+            log.info("[FALCON] configuring falcon cache heap memory management system. current TM have {} slots, " +
+                    "so each slot can cache {} states.", numSlots, slotFalconSize);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+
     private static final Logger LOG = LoggerFactory.getLogger(OmniTaskExecutor.class);
 
     private long nativeTaskExecutorReference;
@@ -201,6 +240,8 @@ public class OmniTaskExecutor extends TaskExecutor {
         try {
             final JobID jobId = tdd.getJobId();
             final ExecutionAttemptID executionAttemptID = tdd.getExecutionAttemptId();
+
+            calculateSlotFalconSize(executionAttemptID); // [FALCON] calculate slot falcon size
 
             final JobTable.Connection jobManagerConnection = getJobManagerConnection(tdd, jobMasterId, jobId);
 

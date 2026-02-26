@@ -39,7 +39,7 @@ public enum OmniSerializerType {
     TUPLE(OmniSerializerCategory.TUPLE, null, TupleSerializer.class, -1),
     VOID_NAMESPACE(OmniSerializerCategory.VOID_NAMESPACE, VoidNamespace.class, VoidNamespaceSerializer.class, -1),
 
-    UN_KNOW(OmniSerializerCategory.UNKNOWN, null, null, 0);
+    UNKNOW(OmniSerializerCategory.UNKNOWN, null, null, 0);
 
     private final OmniSerializerCategory category;
     private final Class<?> clazz;

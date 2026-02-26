@@ -12,6 +12,7 @@ public enum OmniSerializerKey {
     KEY_SERIALIZER("keySerializer", StateMetaInfoSnapshot.CommonSerializerKeys.KEY_SERIALIZER),
     NAMESPACE_SERIALIZER("namespaceSerializer", StateMetaInfoSnapshot.CommonSerializerKeys.NAMESPACE_SERIALIZER),
     VALUE_SERIALIZER("valueSerializer", StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER),
+    /* native 返回，目的是与 MapSerializer 做区分，此处兼容处理 */
     STATE_SERIALIZER("stateSerializer", StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER),
     ;
 

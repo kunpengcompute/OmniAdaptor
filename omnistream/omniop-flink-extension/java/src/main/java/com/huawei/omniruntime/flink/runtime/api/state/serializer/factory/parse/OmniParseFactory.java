@@ -71,7 +71,7 @@ public abstract class OmniParseFactory {
                 case VOID_NAMESPACE:
                     factory = new OmniParseValueFactory();
                     break;
-                case UN_KNOW:
+                case UNKNOW:
                     break;
                 default:
                     LOG.warn("method : build -> serializer type : {} has no deal.", serializerType);

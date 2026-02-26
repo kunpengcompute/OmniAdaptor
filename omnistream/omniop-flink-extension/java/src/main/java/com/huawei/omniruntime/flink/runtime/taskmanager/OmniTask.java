@@ -136,7 +136,13 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
@@ -1007,9 +1013,6 @@ public class OmniTask extends Task {
         snapshotCloseableRegistry.registerCloseable(streamWithResultProvider);
 
         try {
-//            final TypeSerializer<?> keySerializer =
-//                    BasicTypeInfo.STRING_TYPE_INFO.createSerializer(((StreamTask<?, ?>) this.invokable).getExecutionConfig());
-
             keySerializer = (null != keySerializer)
                     ? keySerializer
                     : BasicTypeInfo.STRING_TYPE_INFO.createSerializer(((StreamTask<?, ?>) this.invokable).getExecutionConfig());
@@ -1258,10 +1261,7 @@ public class OmniTask extends Task {
     public void writeSavepointMetadata(
             CheckpointStreamWithResultProvider provider,
             final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots,
-            TypeSerializer<?> keySerializer)
-            throws Exception {
-//        final TypeSerializer<?> keySerializer =
-//            BasicTypeInfo.STRING_TYPE_INFO.createSerializer(((StreamTask<?, ?>) this.invokable).getExecutionConfig());
+            TypeSerializer<?> keySerializer) throws Exception {
 
         keySerializer = (null != keySerializer)
                 ? keySerializer

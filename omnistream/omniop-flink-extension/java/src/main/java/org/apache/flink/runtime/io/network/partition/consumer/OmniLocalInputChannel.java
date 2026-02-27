@@ -46,7 +46,7 @@ public class OmniLocalInputChannel extends LocalInputChannel {
     private ExecutorService executorService = Executors.newSingleThreadExecutor();
     private volatile boolean running = true;
     private Queue<PendingRecycleBuffer> pendingRecycleBuffers = new ConcurrentLinkedQueue<>();
-    private AtomicInteger capacity = new AtomicInteger(10);
+    private AtomicInteger capacity = new AtomicInteger(100);
     private String taskName;
     
     
@@ -146,8 +146,7 @@ public class OmniLocalInputChannel extends LocalInputChannel {
                                 "memorySegmentOffset = {}, sequenceNumber = {}, bufferType = {}, capacity = {}",
                         localInputChannel.getChannelIndex(), taskName, segmentAddress, readIndex, length,
                         memorySegmentOffset, sequenceNumber, bufferType, capacity.get());
-                sendMemorySegmentToNative(nativeLocalInputChannelRef, segmentAddress, readIndex, length,
-                        memorySegmentOffset, sequenceNumber, bufferType);
+                sendMemorySegmentToNative(nativeLocalInputChannelRef, segmentAddress, readIndex, length, memorySegmentOffset, sequenceNumber, bufferType);
                 if (ba.moreAvailable()) {
                     doGetNextBuffer();
                 }

@@ -43,6 +43,7 @@ public class TaskManagerServicesConfigurationPOJO {
     private int numberofSegmentsGlobal;
     private int sortShuffleMinBuffers;
     private int sortShuffleMinParallelism;
+    private int maxBuffersPerChannel;
 
     public TaskManagerServicesConfigurationPOJO(ResourceIDPOJO resourceID, long memorySize,
                                                 int pageSize, long requestSegmentsTimeoutMillis,
@@ -65,6 +66,7 @@ public class TaskManagerServicesConfigurationPOJO {
         this.numberofSegmentsGlobal = networkConfig.numNetworkBuffers();
         this.sortShuffleMinBuffers = networkConfig.sortShuffleMinBuffers();
         this.sortShuffleMinParallelism = networkConfig.sortShuffleMinParallelism();
+        this.maxBuffersPerChannel = networkConfig.getMaxBuffersPerChannel();
     }
 
     public TaskManagerServicesConfigurationPOJO() {
@@ -199,5 +201,13 @@ public class TaskManagerServicesConfigurationPOJO {
 
     public void setSortShuffleMinParallelism(int sortShuffleMinParallelism) {
         this.sortShuffleMinParallelism = sortShuffleMinParallelism;
+    }
+
+    public int getMaxBuffersPerChannel() {
+        return maxBuffersPerChannel;
+    }
+
+    public void setMaxBuffersPerChannel(int maxBuffersPerChannel) {
+        this.maxBuffersPerChannel = maxBuffersPerChannel;
     }
 }

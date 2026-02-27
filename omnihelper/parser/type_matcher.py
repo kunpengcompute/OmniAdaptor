@@ -54,7 +54,7 @@ class TypeMatcher:
                     continue
                 name, par_type = param_spilt
                 spark_type = TypeMatcher.switch_param_type(par_type)
-                param_type_mapping[name] = spark_type
+                param_type_mapping[name.lower()] = spark_type
 
     @staticmethod
     def judge_param_type(param, param_type_mapping):
@@ -64,15 +64,15 @@ class TypeMatcher:
         ori_param = re.sub(r"#\d+(L)*", "", param)
         if TypeMatcher.is_nested_function(ori_param):
             return TypeEnum.NESTED_FUNCTIONS.value
+
         ori_param = re.sub(r"^-\s*", "", ori_param)
-        if ori_param in param_type_mapping:
-            return param_type_mapping[ori_param]
+        if ori_param.lower() in param_type_mapping:
+            return param_type_mapping[ori_param.lower()]
         return TypeEnum.PARTITION.value
 
     @staticmethod
     def get_input_type(params, param_type_mapping, ori_sql, pair):
         input_type = []
-        extract_type = pair.get("extract_type")
         func_name = pair.get("func")
         for param in params:
             param_type = TypeMatcher.judge_param_type(param, param_type_mapping)
@@ -103,10 +103,15 @@ class TypeMatcher:
                 if cast_params:
                     param_type = TypeMatcher.switch_param_type(cast_params[1])
 
+            m = re.search(r"input\[\s*[^,]+,\s*([^,\]]+)", param)
+            if m:
+                # 匹配到形如input[0, int, true]的input参数
+                param_type = TypeMatcher.switch_param_type(m.group(1))
+
             input_type.append(param_type)
 
         if func_name in PREDICATE_EXPR:
-            # 判断参数是否为比较表达式或IF函数，如果是且有一侧类型不确定，则将类型判断为确定的类型
+            # 判断参数是否为比较表达式或if函数，如果是且有一侧类型不确定，则将类型判断为确定的类型
             input_type = TypeMatcher.replace_predicate_partition(input_type)
 
         if func_name == FunctionEnum.CAST.value and len(params) == 2:
@@ -176,7 +181,7 @@ class TypeMatcher:
     def replace_predicate_partition(args):
         supported = None
         for arg in args:
-            if arg not in NOT_SUPPORTED_TYPE:
+            if arg not in NOT_SUPPORTED_TYPE and arg != TypeEnum.NULL.value:
                 supported = arg
                 break
         if supported is None:

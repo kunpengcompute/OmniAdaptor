@@ -57,7 +57,7 @@ class FunctionParser:
         self.omni_functions = [func.get("func_name").lower() for func in self.function_list]
         self.user_defined_functions = [func.get("func_name").lower() for func in self.udf_list]
         self.all_funcs = self.omni_functions + self.user_defined_functions
-        self.func_pattern = re.compile("({})\\((.*)".format("|".join(map(re.escape, self.all_funcs))))
+        self.func_pattern = re.compile("({})\\((.*)".format("|".join(map(re.escape, self.all_funcs))), re.I)
         for func in self.function_list:
             if func.get("hash_agg_func"):
                 self.partial_func_mapping[func["func_name"]] = func["hash_agg_func"]
@@ -77,26 +77,13 @@ class FunctionParser:
         if event.get("node metrics"):
             TypeMatcher.extract_param_type(event.get("node metrics"), param_type_mapping)
         update_physical_plan = self.preprocess_physical_plan(physical_plan)
+        operator_blocks = self.split_operators(update_physical_plan)
 
-        for line in update_physical_plan:
-            if "ReadSchema" in line:
-                # 更新参数类型映射表
-                TypeMatcher.extract_param_type(line, param_type_mapping)
-            func_pairs = self.search_func_expr_pairs(line)
-            if not func_pairs:
-                continue
+        if not operator_blocks:
+            analysis_result = self.parse_physical_plan(update_physical_plan, event, param_type_mapping)
+        for block in operator_blocks:
+            analysis_result.extend(self.parse_physical_plan(block, event, param_type_mapping))
 
-            for pair in func_pairs:
-                func_name = pair.get("func")
-                params = pair.get("params")
-
-                input_type = TypeMatcher.get_input_type(params, param_type_mapping, event.get("original query"), pair)
-                function_checker = FunctionChecker(self.function_list, self.udf_list)
-                is_not_supported_func = function_checker.check_support_status(func_name, params, input_type, event.get("original query"))
-                if not is_not_supported_func:
-                    continue
-                not_supported_func = self.build_not_supported_func(func_name, event, input_type)
-                analysis_result.append(not_supported_func)
         return self.count_func_times(analysis_result)
 
     def preprocess_physical_plan(self, physical_plan):
@@ -128,6 +115,48 @@ class FunctionParser:
 
         return line
 
+    def split_operators(self, physical_plan):
+        result = []
+        current_block = []
+
+        for line in physical_plan:
+            if re.match(r"^\(\d+\)", line.strip()):
+                if current_block:
+                    result.append(current_block)
+                    current_block = []
+            current_block.append(line)
+
+        if current_block:
+            result.append(current_block)
+
+        return result
+
+    def parse_physical_plan(self, physical_plan, event, param_type_mapping):
+        analysis_result = []
+        for line in physical_plan:
+            if "ReadSchema" in line:
+                # 更新参数类型映射表
+                TypeMatcher.extract_param_type(line, param_type_mapping)
+
+        for line in physical_plan:
+            func_pairs = self.search_func_expr_pairs(line)
+            if not func_pairs:
+                continue
+
+            for pair in func_pairs:
+                func_name = pair.get("func")
+                params = pair.get("params")
+
+                input_type = TypeMatcher.get_input_type(params, param_type_mapping, event.get("original query"), pair)
+                function_checker = FunctionChecker(self.function_list, self.udf_list)
+                is_not_supported_func = function_checker.check_support_status(func_name, params, input_type,
+                                                                              event.get("original query"))
+                if not is_not_supported_func:
+                    continue
+                not_supported_func = self.build_not_supported_func(func_name, event, input_type)
+                analysis_result.append(not_supported_func)
+        return analysis_result
+
     def search_func_expr_pairs(self, line):
         func_expr_pairs = []
         self.search_func_calls(line, func_expr_pairs)
@@ -155,7 +184,7 @@ class FunctionParser:
                 params = extract_cast_param(call)
                 if not params:
                     continue
-            func_expr_pairs.append({"func": func.lower(), "params": params, "extract_type": "func"})
+            func_expr_pairs.append({"func": func.lower(), "params": params})
 
     def search_exprs(self, line, func_expr_pairs):
         exprs = self.split_by_ops(line)
@@ -180,7 +209,7 @@ class FunctionParser:
                 # 排除类似【+- * Project (32)】左边参数是+-，: +-，: :-等情况
                 continue
 
-            func_expr_pairs.append({"func": op.lower(), "params": params, "extract_type": "expr"})
+            func_expr_pairs.append({"func": op.lower(), "params": params})
 
     def extract_special_func(self, line, func_expr_pairs):
         line_low = line.lower()
@@ -191,106 +220,104 @@ class FunctionParser:
 
     def extract_if_expressions(self, line, func_expr_pairs):
         results = []
-        for m in re.finditer(r"\bif\s*\(", line):
-            start = m.start()
-            parsed = self.parse_if(line[start:])
-            if parsed:
-                results.append(parsed)
+        pos = 0
+        while pos < len(line):
+            node, new_pos = self.parse_if(line, pos)
+            if not node:
+                pos += 1
+            else:
+                results.append(node)
+                pos = new_pos
         for res in results:
             params = self.collect_if_values(res)
             func_expr_pairs.append({
                 "func": "if",
-                "params": params,
-                "extract_type": "func"
+                "params": params
             })
 
-    def parse_if(self, expr):
+    def parse_if(self, expr, pos=0):
         """
         提取if函数的cond, true_value, false_value
         :return: dict<cond:条件，true_value:为真的值，false_value:为假的值，nested:嵌套的if内容>
         """
-        expr = expr.strip()
-        if not expr.startswith("if"):
-            return None
+        n = len(expr)
+        # 匹配if
+        m = re.match(r"\s*if\s*\(", expr[pos:], re.I)
+        if not m:
+            return None, pos
+
+        i  = pos + m.end() - 1
 
         # 解析cond
-        i = expr.find("(")
-        if i == -1:
-            return None
-
-        stack = 0
-        cond_start = i +1
+        depth = 0
+        cond_start = i + 1
         j = cond_start
-        while j < len(expr):
+        while j < n:
             if expr[j] == "(":
-                stack += 1
+                depth += 1
             elif expr[j] == ")":
-                if stack == 0:
-                    cond_end = j
+                if depth == 0:
                     break
-                stack -= 1
+                depth -= 1
             j += 1
-        else:
-            return None
 
-        cond = expr[cond_start:cond_end].strip()
+        cond = expr[cond_start:j].strip()
+        cur = j + 1
 
-        # 解析true_value
-        k = cond_end + 1
-        while k < len(expr) and expr[k].isspace():
-            k += 1
+        while cur < n and expr[cur].isspace():
+            # 跳过空格
+            cur += 1
 
-        true_start = k
-        stack = 0
+        # 解析true_expr
+        true_node, cur = self.parse_expr(expr, cur)
 
-        while k < len(expr):
-            if expr[k] == "(":
-                stack += 1
-            elif expr[k] == ")":
-                stack -= 1
-            elif expr[k:k + 4] == "else" and stack == 0:
-                true_end = k
-                break
-            k += 1
-        else:
-            return None
+        while cur < n and expr[cur].isspace():
+            # 跳过空格
+            cur += 1
 
-        true_value = expr[true_start:true_end].strip()
-        true_value = self.clean_spark_suffix(true_value)
+        if not expr[cur:cur + 4].lower() == "else":
+            return None, pos
 
-        # 解析false_value
-        false_start = true_end + 4
-        false_raw = expr[false_start:].lstrip()
+        cur += 4
+        while cur < n and expr[cur].isspace():
+            # 跳过空格
+            cur += 1
 
-        # 扫描到顶层分隔符（逗号、右括号、右中括号）
-        stack = 0
-        end = len(false_raw)
-        for idx, ch in enumerate(false_raw):
-            if ch == "(":
-                stack += 1
-            elif ch == ")":
-                if stack == 0:
-                    end = idx
-                    break
-                stack -= 1
-            elif ch in "]," and stack == 0:
-                end = idx
-                break
+        # 解析false_expr
+        false_node, cur = self.parse_expr(expr, cur)
 
-        false_value = false_raw[:end].strip()
-        false_value = self.clean_spark_suffix(false_value)
-
-        nested = None
-        if false_value.startswith(FunctionEnum.IF.value):
-            nested = self.parse_if(false_value)
-            false_value = ""
-
-        return {
+        node = {
             "cond": cond,
-            "true_value": true_value,
-            "false_value": false_value,
-            "nested": nested
+            "true_value": true_node,
+            "false_value": false_node
         }
+
+        return node, cur
+
+    def parse_expr(self, expr, pos):
+        n = len(expr)
+
+        # 如果是if，递归
+        if re.match(r"\s*if\s*\(", expr[pos:], re.I):
+            return self.parse_if(expr, pos)
+
+        # 解析普通表达式
+        depth = 0
+        start = pos
+        cur = pos
+
+        while cur < n:
+            if expr[cur] == "(":
+                depth += 1
+            elif expr[cur] == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif depth == 0 and (expr[cur:cur + 4].lower() == "else" or expr[cur] in "],"):
+                break
+            cur += 1
+
+        return self.clean_spark_suffix(expr[start:cur].strip()), cur
 
     def clean_spark_suffix(self, expr):
         """去除spark的参数后缀"""
@@ -339,36 +366,49 @@ class FunctionParser:
     def collect_if_values(self, res):
         """递归收集true_value/false_value"""
         values = []
-        if res.get("true_value"):
+        if isinstance(res["true_value"], str):
             values.append(res["true_value"])
-        if res.get("false_value"):
+        if isinstance(res["true_value"], dict):
+            values.extend(self.collect_if_values(res["true_value"]))
+
+        if isinstance(res["false_value"], str):
             values.append(res["false_value"])
-        # 递归处理 nested
-        nested = res.get("nested")
-        if nested:
-            values.extend(self.collect_if_values(nested))
+        if isinstance(res["false_value"], dict):
+            values.extend(self.collect_if_values(res["false_value"]))
+
         return values
 
     def extract_case_when_exprs(self, line, func_expr_pairs):
         line_low = line.lower()
-        res = []
-        i = 0
+        n = len(line)
+        start = 0
 
-        while i < len(line):
-            if line_low.startswith(" then ", i):
-                st = i + 6
-                ed = self.skip_expr(line_low, st, line)
-                res.append(self.strip_outer_parens(line[st:ed].strip()))
-                i = ed
-            elif line_low.startswith(" else ", i):
-                st = i + 6
-                ed = line_low.find(" end", st)
-                res.append(self.strip_outer_parens(line[st:ed].strip()))
+        while True:
+            i = line_low.find("case when", start)
+            if i == -1:
                 break
-            else:
-                i += 1
 
-        func_expr_pairs.append({"func": "case", "params": res, "extract_type": "func"})
+            res = []
+            pos = i + len("case")
+
+            while pos < n:
+                if line_low.startswith(" then ", pos):
+                    st = pos + 6
+                    ed = self.skip_expr(line_low, st, line)
+                    res.append(self.strip_outer_parens(line[st:ed].strip()))
+                    pos = ed
+                elif line_low.startswith(" else ", pos):
+                    st = pos + 6
+                    ed = self.skip_expr(line_low, st, line)
+                    res.append(self.strip_outer_parens(line[st:ed].strip()))
+                    pos = ed
+                elif line_low.startswith(" end", pos):
+                    start = i + 9 # 从当前case when后开始找下一个
+                    break
+                else:
+                    pos += 1
+
+            func_expr_pairs.append({"func": "case", "params": res})
 
     def skip_expr(self, line_low, pos, line):
         depth = 0
@@ -377,7 +417,7 @@ class FunctionParser:
                 depth += 1
             elif line[pos] == ")":
                 depth -= 1
-            elif depth == 0 and line_low.startswith((" when ", " then ", " else ", " end "), pos):
+            elif depth == 0 and line_low.startswith((" when ", " then ", " else ", " end"), pos):
                 break
             pos += 1
         return pos
@@ -396,7 +436,7 @@ class FunctionParser:
         while i < n:
             if line[i].isalpha() or line[i] == "_":
                 j = i + 1
-                while j < n and (line[j].isalnum() or line[j] == '_'):
+                while j < n and (line[j].isalnum() or line[j] == "_"):
                     j += 1
                 if j < n and line[j] == "(":
                     stack.append((i, depth))
@@ -417,7 +457,7 @@ class FunctionParser:
         提取函数调用的函数名
         :return: 函数名
         """
-        m = re.match(r'\s*([a-zA-Z_]\w*)\s*\(', call)
+        m = re.match(r"\s*([a-zA-Z_]\w*)\s*\(", call)
         return m.group(1) if m else ""
 
     def extract_func_args(self, call):
@@ -481,7 +521,7 @@ class FunctionParser:
         返回表达式左边最靠近的参数或函数：
         - 支持函数调用：rand(..)等
         - 支持括号表达式：(255.0)
-        - 支持为闭合括号：((255
+        - 支持未闭合括号：((255
         - 支持普通token：c_string#11, 255.0
         - 支持表达式partition列：avg(c_int)#20
         :return: 左边参数
@@ -531,7 +571,7 @@ class FunctionParser:
             return token
 
         # 如果是右括号 -> 完整函数或括号表达式
-        if s[i] == ')':
+        if s[i] == ")":
             depth = 0
             paren_end = i
             paren_start = -1
@@ -603,7 +643,7 @@ class FunctionParser:
         if ch.isalpha() or ch in ["_", "#"]:
             start = i
             # 先读完整标识符
-            while i < n and (s[i].isalnum() or s[i] in ["_", "#"]):
+            while i < n and not s[i].isspace() and s[i] not in ["(", "[", ")", "]"]:
                 i += 1
             name_end = i
 
@@ -611,7 +651,7 @@ class FunctionParser:
             while i < n and s[i].isspace():
                 i += 1
 
-            # 如果后面紧跟'(' -> 函数调用，向后找匹配的右括号
+            # 如果后面紧跟"(" -> 函数调用，向后找匹配的右括号
             if i < n and s[i] == "(":
                 depth = 0
                 lparen = i
@@ -633,7 +673,7 @@ class FunctionParser:
                 # 普通标识符
                 return s[start:name_end].strip()
 
-        # 如果是'(' -> 括号表达式
+        # 如果是"(" -> 括号表达式
         if ch == "(":
             depth = 0
             lparen = i
@@ -652,7 +692,7 @@ class FunctionParser:
                 # 括号没闭合 就取到结尾
                 return s[lparen:].strip()
 
-        # 如果是数字或'.' -> 数字token（支持小数）
+        # 如果是数字或"." -> 数字token（支持小数）
         if ch.isdigit() or ch == ".":
             start = i
             while i < n and (s[i].isdigit() or s[i] == "."):

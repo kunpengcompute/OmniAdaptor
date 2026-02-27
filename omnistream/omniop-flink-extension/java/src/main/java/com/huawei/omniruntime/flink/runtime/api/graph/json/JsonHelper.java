@@ -6,6 +6,7 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonTyp
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.PropertyAccessor;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.DeserializationFeature;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
@@ -104,6 +105,21 @@ public class JsonHelper {
     public static <T> T fromJson(String json, Class<T> valueType) {
         try {
             return objectMapper.readValue(json, valueType);
+        } catch (IOException e) {
+            throw new JsonHelperException("Error deserializing JSON to object", e);
+        }
+    }
+
+    /**
+     * fromJson
+     *
+     * @param json json
+     * @param valueTypeRef valueTypeRef
+     * @return T
+     */
+    public static <T> T fromJson(String json, TypeReference<T> valueTypeRef) {
+        try {
+            return objectMapper.readValue(json, valueTypeRef);
         } catch (IOException e) {
             throw new JsonHelperException("Error deserializing JSON to object", e);
         }

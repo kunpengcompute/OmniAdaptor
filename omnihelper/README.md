@@ -108,3 +108,25 @@ tar -zxvf omnihelper_release_x86.tar.gz # x86架构
 --java-path /path/to/java/bin/java
 --class-path /path/to/boostkit-omnimv-logparser-spark-3.4.3-1.2.0-aarch64.jar:/path/to/spark-3.4.3-bin-hadoop3/jars/*
 ```
+
+### 自定义函数配置
+
+支持用户配置自定义函数，工具根据提供的函数名称进行匹配识别，在报告中展示。
+
+#### 配置方法
+找到resources目录下的内置文件udf_dictionary.json，填写需要识别的自定义函数，格式如下：
+```
+[
+    {
+        "func_name": "int_plus_10",
+        "is_support_func": false
+    },
+    {
+        "func_name": "abs",
+        "is_support_func": false
+    }
+]
+```
+参数func_name表示自定义函数名，is_support_func表示是否支持该函数，需要识别则填写false，填写后保存即可。
+
+> 注意：若自定义函数与spark内置函数同名，优先识别为自定义函数。

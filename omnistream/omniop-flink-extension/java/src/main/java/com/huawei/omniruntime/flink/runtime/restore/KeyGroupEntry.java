@@ -5,25 +5,19 @@
 package com.huawei.omniruntime.flink.runtime.restore;
 
 public class KeyGroupEntry {
-    private final int kvStateId;
-    private final int[] key;
-    private final int[] value;
+    private final byte[] key;
+    private final byte[] value;
 
-    public KeyGroupEntry(int kvStateId, int[] key, int[] value) {
-        this.kvStateId = kvStateId;
+    public KeyGroupEntry(byte[] key, byte[] value) {
         this.key = key;
         this.value = value;
     }
 
-    public int getKvStateId() {
-        return this.kvStateId;
-    }
-
-    public int[] getKey() {
+    public byte[] getKey() {
         return this.key;
     }
 
-    public int[] getValue() {
+    public byte[] getValue() {
         return this.value;
     }
 }

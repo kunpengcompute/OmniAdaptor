@@ -573,12 +573,12 @@ public class OmniTask extends Task {
 
             originalTaskDataFetcher = createAndStartRemoteDataFetcher(inputGates);
 
+            // call native restore and invoke before java
+            long status = doRunRestoreNativeTask(nativeTaskRef, nativeStreamTask);
             if (!transitionState(ExecutionState.INITIALIZING, ExecutionState.RUNNING)) {
                 throw new CancelTaskException();
             }
             taskManagerActions.updateTaskExecutionState(new TaskExecutionState(executionId, ExecutionState.RUNNING));
-            // call native restore and invoke before java
-            long status = doRunRestoreNativeTask(nativeTaskRef, nativeStreamTask);
             registerEventDispatcher((StreamTask<?, ?>) invokable);
             status = doRunInvokeNativeTask(nativeTaskRef, nativeStreamTask);
         } else {

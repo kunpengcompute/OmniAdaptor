@@ -7,20 +7,31 @@ package com.huawei.omniruntime.flink.runtime.restore;
 import java.util.List;
 
 public class KeyGroupEntryWrapper {
-    private List<KeyGroupEntry> entries;
-
+    private KeyGroupEntry[] entries;
     private int currentKvStateId;
+    private int kvStateId;
+    private int count;
 
-    public KeyGroupEntryWrapper(List<KeyGroupEntry> entries, int currentKvStateId) {
+    public KeyGroupEntryWrapper(KeyGroupEntry[] entries, int currentKvStateId, int kvStateId, int count) {
         this.entries = entries;
         this.currentKvStateId = currentKvStateId;
+        this.kvStateId = kvStateId;
+        this.count = count;
     }
 
-    public List<KeyGroupEntry> getEntries() {
+    public KeyGroupEntry[] getEntries() {
         return this.entries;
     }
 
     public int getCurrentKvStateId() {
         return this.currentKvStateId;
+    }
+
+    public int getKvStateId() {
+        return this.kvStateId;
+    }
+
+    public int getCount() {
+        return this.count;
     }
 }

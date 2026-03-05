@@ -605,34 +605,35 @@ public class OmniTaskWrapper {
             + ", compatible version are" + Arrays.toString(versions));
     }
 
-    public <K> String getKeyGroupEntries(FSDataInputStream inputStream, int currentKvStateId,
+    public KeyGroupEntryWrapper getKeyGroupEntries(FSDataInputStream inputStream, int currentKvStateId,
                                         boolean isUsingKeyGroupCompression) throws IOException {
         StreamCompressionDecorator keygroupStressCompressionDecorator = isUsingKeyGroupCompression ?
             SnappyStreamCompressionDecorator.INSTANCE : UncompressedStreamCompressionDecorator.INSTANCE;
-        InputStream compressedKgIn = keygroupStressCompressionDecorator.decorateWithCompression(inputStream);
-        DataInputViewStreamWrapper kgInputView = new DataInputViewStreamWrapper(compressedKgIn);
-        // first time
-        if (currentKvStateId == -1) {
-            currentKvStateId = END_OF_KEY_GROUP_MARK & kgInputView.readShort();
-        }
-        int entryStateId = currentKvStateId;
-        int count = 0;
-        List<KeyGroupEntry> keyGroupEntries = new ArrayList(1000);
-        // read by state or by count 1000
-        while (count < 1000) {
-            count++;
-            byte[] key = BytePrimitiveArraySerializer.INSTANCE.deserialize(kgInputView);
-            byte[] value = BytePrimitiveArraySerializer.INSTANCE.deserialize(kgInputView);
-            // 通过 key[0] & FIRST_BIT_IN_BYTE_MASK 可以判断是否应该读取下一个kvStateId的数据；
-            if (hasMetaDataFollowsFlag(key)) {
-                // 清除key[0] 的标识信息
-                clearMetaDataFollowsFlag(key);
+        try(InputStream compressedKgIn = keygroupStressCompressionDecorator.decorateWithCompression(inputStream);
+            DataInputViewStreamWrapper kgInputView = new DataInputViewStreamWrapper(compressedKgIn)) {
+            // first time
+            if (currentKvStateId == -1) {
                 currentKvStateId = END_OF_KEY_GROUP_MARK & kgInputView.readShort();
-                keyGroupEntries.add(new KeyGroupEntry(entryStateId, key, value));
-                break;
             }
-            keyGroupEntries.add(new KeyGroupEntry(entryStateId, key, value));
+            int entryStateId = currentKvStateId;
+            KeyGroupEntry[] keyGroupEntries = new KeyGroupEntry[1000];
+            // read by state or by count 1000
+            int count = 0;
+            for (int i = 0; i < 1000; i++) {
+                count++;
+                byte[] key = BytePrimitiveArraySerializer.INSTANCE.deserialize(kgInputView);
+                byte[] value = BytePrimitiveArraySerializer.INSTANCE.deserialize(kgInputView);
+                // 通过 key[0] & FIRST_BIT_IN_BYTE_MASK 可以判断是否应该读取下一个kvStateId的数据；
+                if (hasMetaDataFollowsFlag(key)) {
+                    // 清除key[0] 的标识信息
+                    clearMetaDataFollowsFlag(key);
+                    currentKvStateId = END_OF_KEY_GROUP_MARK & kgInputView.readShort();
+                    keyGroupEntries[i] = new KeyGroupEntry(key, value);
+                    break;
+                }
+                keyGroupEntries[i] = new KeyGroupEntry(key, value);
+            }
+            return new KeyGroupEntryWrapper(keyGroupEntries, currentKvStateId, entryStateId, count);
         }
-        return JsonHelper.toJson(new KeyGroupEntryWrapper(keyGroupEntries, currentKvStateId));
     }
 }

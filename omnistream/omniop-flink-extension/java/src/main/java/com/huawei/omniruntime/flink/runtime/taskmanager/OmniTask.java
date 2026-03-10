@@ -580,8 +580,6 @@ public class OmniTask extends Task {
                 throw new CancelTaskException();
             }
             taskManagerActions.updateTaskExecutionState(new TaskExecutionState(executionId, ExecutionState.RUNNING));
-            // call native restore and invoke before java
-            long status = doRunRestoreNativeTask(nativeTaskRef, nativeStreamTask);
             registerEventDispatcher((StreamTask<?, ?>) invokable);
             status = doRunInvokeNativeTask(nativeTaskRef, nativeStreamTask);
         } else {

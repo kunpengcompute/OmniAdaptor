@@ -83,8 +83,10 @@ class OpParser:
                 continue
 
             node_id = int(block_match.group(1).strip())
-            name_match = block_match.group(2)
-            node_name_mapping.setdefault(name_match.lower(), []).append(node_id)
+            name_match = block_match.group(2).lower()
+            if self.opname_mapping.get(name_match):
+                name_match = self.opname_mapping.get(name_match)
+            node_name_mapping.setdefault(name_match, []).append(node_id)
             nodes[node_id] = {
                 'id': node_id,
                 'name': name_match,
@@ -178,6 +180,7 @@ class OpParser:
                 continue
 
             # 提取输出列表
+            opname = self.opname_mapping.get(opname)
             output_pattern = re.compile(r'Output\s*\[\d+\]:\s*\[([^\]]+)\]')
             output_match = output_pattern.search(block)
             output_list = CommonUtil.parse_param_list(output_match, param_type_mapping)
@@ -205,7 +208,7 @@ class OpParser:
 
             analysis_result.append(
                 {
-                    "op_name": self.opname_mapping.get(opname),
+                    "op_name": opname,
                     "sql_hash": sql_hash,
                     "input_list": input_list,
                     "output_list": output_list,

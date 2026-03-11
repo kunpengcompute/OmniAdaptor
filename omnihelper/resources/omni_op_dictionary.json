@@ -1352,24 +1352,25 @@
         ]
     },
     "ColumnarToRowExec": {
-        "supported_list": [],
-        "not_supported_list": [
+        "supported_list": [
             "BOOLEAN",
-            "BYTE",
             "SHORT",
             "INT",
             "LONG",
-            "FLOAT",
             "DOUBLE",
             "STRING",
             "NULL",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL"
+        ],
+        "not_supported_list": [
+            "BYTE",
+            "FLOAT",
             "BINARY",
             "ARRAY",
             "MAP",
             "STRUCT(ROW)",
-            "DATE",
-            "TIMESTAMP",
-            "DECIMAL",
             "CALENDAR",
             "UDT"
         ]
@@ -2042,24 +2043,25 @@
         ]
     },
     "RowToColumnarExec": {
-        "supported_list": [],
-        "not_supported_list": [
+        "supported_list": [
             "BOOLEAN",
-            "BYTE",
             "SHORT",
             "INT",
             "LONG",
-            "FLOAT",
             "DOUBLE",
             "STRING",
             "NULL",
+            "DATE",
+            "TIMESTAMP",
+            "DECIMAL"
+        ],
+        "not_supported_list": [
+            "BYTE",
+            "FLOAT",
             "BINARY",
             "ARRAY",
             "MAP",
             "STRUCT(ROW)",
-            "DATE",
-            "TIMESTAMP",
-            "DECIMAL",
             "CALENDAR",
             "UDT"
         ]

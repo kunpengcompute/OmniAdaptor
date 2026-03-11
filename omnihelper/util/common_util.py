@@ -263,6 +263,10 @@ class CommonUtil:
             if not stripped_item:
                 continue
 
+            # 处理 AS 语法，只取左边部分
+            if ' AS ' in stripped_item:
+                stripped_item = stripped_item.split(' AS ')[0].strip()
+
             param_type = TypeMatcher.judge_param_type(stripped_item, param_type_mapping)
             if param_type.upper().startswith("DECIMAL"):
                 param_type = TypeEnum.DECIMAL.value

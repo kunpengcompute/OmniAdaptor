@@ -873,7 +873,7 @@ public class OmniTask extends Task {
             
             if (!remoteInputChannels.isEmpty() || !localInputChannels.isEmpty()) {
                 OriginalTaskDataFetcher originalTaskDataFetcher = new OriginalTaskDataFetcher(nativeTaskRef,
-                        this.getTaskInfo().getTaskName(), jobType);
+                        this.getTaskInfo().getTaskNameWithSubtasks(), jobType);
                 if (!remoteInputChannels.isEmpty()) {
                     originalTaskDataFetcher.createAndStartRemoteDataFetcher(remoteInputChannels);
                 }
@@ -1166,7 +1166,7 @@ public class OmniTask extends Task {
         ChannelStateWriter stateWriter = getChannelStateWriter(localInputChannel);
         OmniLocalInputChannel omniLocalInputChannel = new OmniLocalInputChannel(localInputChannel, partitionManager,
                 nativeTaskRef, singleInputGate, initialBackoff, maxBackoff, numBytesIn, numBuffersIn,
-                taskEventPublisher, stateWriter, this.getTaskInfo().getTaskName());
+                taskEventPublisher, stateWriter, this.getTaskInfo().getTaskNameWithSubtasks());
         return omniLocalInputChannel;
     }
     

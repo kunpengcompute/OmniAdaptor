@@ -35,7 +35,8 @@ public class DataStreamRemoteDataFetcher extends RemoteDataFetcher {
             List<OmniRemoteInputChannel> remoteInputChannels) {
         super(nativeTaskRef, taskName, jobType, remoteInputChannels);
     }
-    
+
+    @Override
     public void recycleBuffer(long address, Buffer buffer) {
         if (address != -1 && buffer != null) {
             waitingForRecycleBuffers.put(address, buffer);

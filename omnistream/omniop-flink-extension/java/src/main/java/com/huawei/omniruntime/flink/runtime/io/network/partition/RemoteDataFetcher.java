@@ -65,7 +65,6 @@ public class RemoteDataFetcher implements Runnable {
     public void run() {
         Thread.currentThread().setName("RemoteDataFetcher-----> for task: " + taskName);
         registerRemoteDataFetcherToNative(nativeTaskRef);
-        startRecycleBuffersThreadForRemote();
         buildRemoteConnection();
         while (running) {
             try {
@@ -158,6 +157,8 @@ public class RemoteDataFetcher implements Runnable {
                             MemorySegment eventMemorySegment = MemorySegmentFactory.wrapOffHeapMemory(byteBuffer);
                             EventBuffer eventBuffer = new EventBuffer(eventMemorySegment);
                             buffer = eventBuffer;
+                            LOG.info("Notify remote event buffer available, buffer address: {}, buffer class: {}, buffer type: {}",
+                                    buffer.getMemorySegment().getAddress(), buffer.getClass().getSimpleName(), buffer.getDataType().toString());
                         }
                         long bufferAddress = buffer.getMemorySegment().getAddress();
                         int readIndex = buffer.getReaderIndex();
@@ -198,14 +199,18 @@ public class RemoteDataFetcher implements Runnable {
     class BufferRecyclingRunnable implements Runnable {
         @Override
         public void run() {
+            Thread.currentThread().setName("RemoteDataFetcher - BufferRecycler -----> for task: " + taskName);
             try {
                 while (running) {
                     long address = getRecycleBufferAddress(nativeTaskRef);
                     if (address != -1) {
                         Buffer buffer = waitingForRecycleBuffers.remove(address);
                         if (buffer != null) {
-                            LOG.info("Recycling buffer with address: {}", address);
                             buffer.recycleBuffer();
+                            LOG.info("Buffer has been recycled, buffer address: {}, buffer clazz: {}, buffer type: {}, " +
+                                            "size of buffers waiting to be recycled: {}",
+                                    address, buffer.getClass().getSimpleName(),
+                                    buffer.getDataType().toString(), waitingForRecycleBuffers.size());
                         } else {
                             if (address == -9999) {
                                 LOG.info("Received special address -9999, indicating no buffer to recycle.");

@@ -11,6 +11,7 @@ import java.nio.file.FileSystem;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
@@ -307,29 +308,24 @@ public class NativeMain {
     }
 
     // Get hash value based on jar content
-    public static String getFileHashCode(String jarFilePath){
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            try(FileInputStream fis = new FileInputStream(jarFilePath)){
-                byte[] byteArray = new byte[1024];
-                int byteCount;
-                while ((byteCount = fis.read(byteArray)) != -1){
-                    digest.update(byteArray,0,byteCount);
-                }
+    public static String getFileHashCode(String jarFilePath) throws IOException, NoSuchAlgorithmException {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (FileInputStream fis = new FileInputStream(jarFilePath)) {
+            byte[] byteArray = new byte[1024];
+            int byteCount;
+            while ((byteCount = fis.read(byteArray)) != -1) {
+                digest.update(byteArray,0,byteCount);
             }
-            byte[] bytes = digest.digest();
-            StringBuilder sb = new StringBuilder();
-            for (byte b : bytes) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) {
-                    sb.append("0");
-                }
-                sb.append(hex);
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            LOG.error("get File HashCode Error", e);
-            return "";
         }
+        byte[] bytes = digest.digest();
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) {
+                sb.append("0");
+            }
+            sb.append(hex);
+        }
+        return sb.toString();
     }
 }

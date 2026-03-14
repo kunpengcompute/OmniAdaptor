@@ -296,7 +296,7 @@ public class TaskStateSnapshotDeser {
         }
         for (JsonNode handleNode : inputChannelStateArray) {
             String handleType = handleNode.get("@class").asText();
-            if ("InputChannelStateHandle".contains(handleType)) {
+            if (handleType.contains("InputChannelStateHandle")) {
                 int subTaskIndex = handleNode.get("subtaskIndex").asInt();
                 InputChannelInfo info = null;
                 StreamStateHandle delegate = null;
@@ -355,7 +355,7 @@ public class TaskStateSnapshotDeser {
         }
         for (JsonNode handleNode : resultSubpartitionStateArray) {
             String handleType = handleNode.get("@class").asText();
-            if ("ResultSubpartitionStateHandle".contains(handleType)) {
+            if (handleType.contains("ResultSubpartitionStateHandle")) {
                 int subTaskIndex = handleNode.get("subtaskIndex").asInt();
                 ResultSubpartitionInfo info = null;
                 StreamStateHandle delegate = null;

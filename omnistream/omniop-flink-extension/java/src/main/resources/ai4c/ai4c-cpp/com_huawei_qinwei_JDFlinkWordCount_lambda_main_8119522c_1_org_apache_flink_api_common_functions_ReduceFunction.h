@@ -16,10 +16,6 @@ public:
     ~com_huawei_qinwei_JDFlinkWordCount_lambda_main_8119522c_1_org_apache_flink_api_common_functions_ReduceFunction();
     Object *reduce(Object *input0, Object *input1)  override;
     com_huawei_qinwei_JDFlinkWordCount_lambda_main_8119522c_1_org_apache_flink_api_common_functions_ReduceFunction(nlohmann::json jsonObj);
-private:
-    String *strBuffer;
-    Long *longBuffer;
-    Tuple2 *result;
 };
 
 #endif

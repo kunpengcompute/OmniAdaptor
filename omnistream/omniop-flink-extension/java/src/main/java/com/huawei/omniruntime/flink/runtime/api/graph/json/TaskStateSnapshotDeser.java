@@ -316,11 +316,11 @@ public class TaskStateSnapshotDeser {
                             omniTask.getCheckpointStreamFactory(checkpointId), streamPos);
                     } catch (Exception e) {
                         LOG.error("uploadFilesToCheckpointFs failed. filePath: {}", filePath);
-                        throw new JsonProcessingException(e);
+                        throw new FlinkRuntimeException(e);
                     }
                 } else {
                     LOG.error("Not support for StreamStateHandle type: " + className2);
-                    throw new JsonProcessingException("Not support for StreamStateHandle type: " + className2);
+                    throw new FlinkRuntimeException("Not support for StreamStateHandle type: " + className2);
                 }
                 JsonNode infoNode = handleNode.get("info");
                 String className3 = infoNode.get("@class").asText();
@@ -344,7 +344,7 @@ public class TaskStateSnapshotDeser {
                 inputChannelState.add(new InputChannelStateHandle(subTaskIndex, info, delegate, metaInfo));
             } else {
                 LOG.error("State handle JSON is error. handleType: " + handleType);
-                throw new JsonProcessingException("handleType is failed. handleType: " + handleType);
+                throw new FlinkRuntimeException("handleType is failed. handleType: " + handleType);
             }
         }
     }
@@ -377,11 +377,11 @@ public class TaskStateSnapshotDeser {
                             omniTask.getCheckpointStreamFactory(checkpointId), streamPos);
                     } catch (Exception e) {
                         LOG.error("uploadFilesToCheckpointFs failed. filePath: {}", filePath);
-                        throw new JsonProcessingException(e);
+                        throw new FlinkRuntimeException(e);
                     }
                 } else {
                     LOG.error("Not support for StreamStateHandle type: " + className2);
-                    throw new JsonProcessingException("Not support for StreamStateHandle type: " + className2);
+                    throw new FlinkRuntimeException("Not support for StreamStateHandle type: " + className2);
                 }
                 JsonNode infoNode = handleNode.get("info");
                 String className3 = infoNode.get("@class").asText();
@@ -405,7 +405,7 @@ public class TaskStateSnapshotDeser {
                 resultSubpartitionState.add(new ResultSubpartitionStateHandle(subTaskIndex, info, delegate, metaInfo));
             } else {
                 LOG.error("State handle JSON is error. handleType: " + handleType);
-                throw new JsonProcessingException("handleType is failed. handleType: " + handleType);
+                throw new FlinkRuntimeException("handleType is failed. handleType: " + handleType);
             }
         }
     }

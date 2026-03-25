@@ -22,6 +22,7 @@
 package com.huawei.omniruntime.flink.runtime.taskmanager;
 
 import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
+import com.huawei.omniruntime.flink.runtime.api.graph.json.descriptor.ResultPartitionIDPOJO;
 import com.huawei.omniruntime.flink.runtime.io.network.partition.OriginalTaskDataFetcher;
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.runtime.metrics.groups.OmniTaskMetricGroup;
@@ -77,6 +78,7 @@ import org.apache.flink.runtime.io.network.partition.consumer.OmniRemoteInputCha
 import org.apache.flink.runtime.io.network.partition.consumer.RecoveredInputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
+import org.apache.flink.runtime.io.network.partition.consumer.LocalRecoveredInputChannel;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.tasks.CoordinatedTask;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
@@ -129,6 +131,7 @@ import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -579,13 +582,11 @@ public class OmniTask extends Task {
             // make sure the user code classloader is accessible thread-locally
             executingThread.setContextClassLoader(userCodeClassLoader.asClassLoader());
 
-            // create RemoteDataFetcher for remote input channelsE
-
             // call native restore and invoke before java
+            notifyChannelToOmni(inputGates);
             long status = doRunRestoreNativeTask(nativeTaskRef, nativeStreamTask);
-            LOG.error("begin createAndStartRemoteDataFetcher ");
+            // create RemoteDataFetcher for remote input channelsE
             originalTaskDataFetcher = createAndStartRemoteDataFetcher(inputGates);
-            LOG.error("end createAndStartRemoteDataFetcher ");
             if (!transitionState(ExecutionState.INITIALIZING, ExecutionState.RUNNING)) {
                 throw new CancelTaskException();
             }
@@ -843,6 +844,30 @@ public class OmniTask extends Task {
             completeCpp(nativeTaskRef, checkpointId, inputState);
         } else if (NotifyCheckpointOperation.SUBSUME == notifyCheckpointOperation) {
             subsumedCpp(nativeTaskRef, latestCompletedCheckpointId);
+        }
+    }
+
+    private void notifyChannelToOmni(IndexedInputGate[] inputGates) {
+        if (!isTaskNative()) {
+            return;
+        }
+        for (IndexedInputGate inputGate : inputGates) {
+            InputGateWithMetrics inputGateWithMetrics = (InputGateWithMetrics) inputGate;
+            int numberOfChannels = inputGateWithMetrics.getNumberOfInputChannels();
+            for (int i = 0; i < numberOfChannels; i++) {
+                InputChannel inputChannel = inputGateWithMetrics.getChannel(i);
+                if (!(inputChannel instanceof LocalRecoveredInputChannel)) {
+                    continue;
+                }
+                boolean targetIsNative = checkIfTargetResultPartitionIsNative(inputChannel.getPartitionId());
+                if (targetIsNative) {
+                    continue;
+                }
+                ResultPartitionIDPOJO resultPartitionIDPOJO = new ResultPartitionIDPOJO(inputChannel.getPartitionId());
+                JSONObject jsonObject = new JSONObject(resultPartitionIDPOJO);
+                String parititonIdString = jsonObject.toString();
+                notifyChannelToOmni(nativeTaskRef, parititonIdString);
+            }
         }
     }
 
@@ -1292,6 +1317,8 @@ public class OmniTask extends Task {
     // return nativeAddressOfStreamTask
     private native long setupStreamTaskBeforeInvoke(long nativeTaskRef, String StreamTaskClassName /* possible other
      parameter*/);
+
+    public native void notifyChannelToOmni(long nativeTaskRef, String partitionId);
 
     private native long doRunRestoreNativeTask(long nativeTaskRef, long streamTaskRef /* possible other parameter*/);
 

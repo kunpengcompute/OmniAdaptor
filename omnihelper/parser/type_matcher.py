@@ -8,6 +8,7 @@
    MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
    See the Mulan PSL v2 for more details.
 """
+import copy
 import re
 
 from omnihelper.enum.function_enum import FunctionEnum
@@ -136,8 +137,9 @@ class TypeMatcher:
             col = map_match.group(1)
             if col.lower() in param_type_mapping:
                 map_type = param_type_mapping[col.lower()]
-                value_type = map_type[map_type.index(",") + 1: -1].strip()
-                return TypeMatcher.switch_param_type(value_type)
+                if "," in map_type:
+                    value_type = map_type[map_type.index(",") + 1: -1].strip()
+                    return TypeMatcher.switch_param_type(value_type)
 
         if TypeMatcher.is_pure_cast(param):
             # 判断参数是否为cast嵌套函数，如果是，参数类型可以判断为as后的类型
@@ -251,6 +253,7 @@ class TypeMatcher:
 
         stack = []
         return_type_parser = ReturnTypeParser()
+        duplicate_return_types = []
         for pair in pairs:
             input_type = pair.get("input_type", [])
             if TypeEnum.NESTED_FUNCTIONS.value in input_type:
@@ -260,7 +263,15 @@ class TypeMatcher:
             return_type = return_type_parser.analyse_return_type(pair)
             if not return_type:
                 continue
-            pair["return_type"] = return_type
+            if "/" in return_type:
+                parts = return_type.split("/")
+                pair["return_type"] = parts[0]
+                for re_type in parts[1:]:
+                    new_pair = copy.deepcopy(pair)
+                    new_pair["return_type"] = re_type
+                    duplicate_return_types.append(new_pair)
+            else:
+                pair["return_type"] = return_type
 
         base_funcs = [pair for pair in pairs if pair.get("return_type")]
         while stack:
@@ -281,7 +292,17 @@ class TypeMatcher:
             return_type = return_type_parser.analyse_return_type(pair)
             if not return_type:
                 continue
-            pair["return_type"] = return_type
+            if "/" in return_type:
+                parts = return_type.split("/")
+                pair["return_type"] = parts[0]
+                for re_type in parts[1:]:
+                    new_pair = copy.deepcopy(pair)
+                    new_pair["return_type"] = re_type
+                    duplicate_return_types.append(new_pair)
+            else:
+                pair["return_type"] = return_type
+
+        pairs.extend(duplicate_return_types)
 
         if is_nested_function:
             outer_func_name = TypeMatcher.find_outer_func_name(ori_param)

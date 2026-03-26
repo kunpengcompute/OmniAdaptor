@@ -89,6 +89,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("AND", SpecialExprType.AND);
         specialOperatorMap.put("OR", SpecialExprType.OR);
         specialOperatorMap.put("IF", SpecialExprType.IF);
+        specialOperatorMap.put("JSON_VALUE", SpecialExprType.JSON_VALUE);
     }
 
     static {
@@ -163,7 +164,8 @@ public class RexNodeUtil {
         OTHERS,
         AND,
         OR,
-        IF
+        IF,
+        JSON_VALUE
     }
 
 
@@ -282,6 +284,17 @@ public class RexNodeUtil {
                         regArgs.add(buildJsonMap(operands.get(2)));
                         jsonMap.put("arguments", regArgs);
                         LOG.info("The expression is {} ", rexCall.toString());
+                        break;
+                    case JSON_VALUE:
+                        jsonMap.put("exprType", "FUNCTION");
+                        setDataType(rexCall,jsonMap, "returnType");
+                        jsonMap.put("function_name", "json_value");
+
+                        List<Map<String, Object>> jsonArgs = new ArrayList<>();
+                        jsonArgs.add(buildJsonMap(operands.get(0)));
+                        jsonArgs.add(buildJsonMap(operands.get(1)));
+                        jsonMap.put("arguments", jsonArgs);
+                        LOG.info("The JSON_VALUE expression is {} ", rexCall.toString());
                         break;
                     case SPLIT_INDEX:
                         jsonMap.put("exprType", "FUNCTION");

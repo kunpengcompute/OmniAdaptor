@@ -216,7 +216,7 @@ class CommonUtil:
         result_item.update({
             'Omni不支持的表达式/内置函数名称': func_name,
             'Omni不支持的表达式/内置函数Input': ",".join(func_inputs),
-            'Omni不支持的表达式/内置函数嵌套内容': "\n".join(not_supported_line),
+            'Omni不支持的表达式/内置函数嵌套内容': "\n".join(f"{i+1}. {x}" for i,x in enumerate(not_supported_line)),
             'Omni不支持的表达式/内置函数出现频次': func_times,
             'Omni不支持的表达式/内置函数是否udf': is_udf,
             'Spark版本': spark_version,

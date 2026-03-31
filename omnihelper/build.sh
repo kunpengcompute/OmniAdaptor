@@ -41,6 +41,14 @@ get_architecture() {
 # 获取架构信息
 ARCH=$(get_architecture)
 
+if command -v pyinstaller > /dev/null; then
+    echo "pyinstaller 已安装"
+else
+    echo "未检测到pyinstaller"
+    python3 -m venv build_venv
+    source build_venv/bin/activate
+    pip3 install ${SCRIPT_DIR}[dev]
+fi
 # 使用绝对路径
 pyinstaller --onefile \
             --name "omnihelper" \

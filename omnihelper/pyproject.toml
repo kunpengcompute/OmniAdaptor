@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omnihelper"
+version = "0.1.0"
+description = "Big data operator scanning command line tool."
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+    "tqdm==4.67.3",
+    "pandas==2.3.3",
+    "openpyxl==3.1.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyinstaller==6.19.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]

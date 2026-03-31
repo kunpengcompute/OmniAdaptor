@@ -23,31 +23,31 @@ class ExcelWriterWithStyle:
 
     def __init__(self):
         # 定义表头结构（使用字典结构更灵活）
-        # main：主标题  sub:副标题  merge_start:该部分合并起始点  merged_op_column 同名算子合并项 show_detail 展示算子细节
+        # main：主标题  sub:副标题  merge_start:该部分合并起始点  need_merged_column 需要合并项 show_detail 展示算子细节
         self.headers = [
             {'main': 'ApplicationID+SQL ID', "column_width": 35},
             {'main': 'SQL Hash', "column_width": 10},
             {'main': 'Omni不支持的算子', 'sub': '名称', 'merge_start': self.DEFAULT_VALUE,
-             "column_width": 20, "merged_op_column": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的算子', 'sub': 'Input', "column_width": 35},
-            {'main': 'Omni不支持的算子', 'sub': 'Output', "column_width": 35},
-            {'main': 'Omni不支持的算子', 'sub': '出现频次', "column_width": 10},
-            {'main': 'Omni不支持的算子', 'sub': '运行时间（s）', "column_width": 35,
-             "merged_op_column": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的算子', 'sub': '文件大小（MiB）', "column_width": 15,
-             "merged_op_column": self.DEFAULT_VALUE, "show_details": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的算子', 'sub': 'Output rows', "column_width": 15,
-             "merged_op_column": self.DEFAULT_VALUE, "show_details": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': '名称', 'merge_start': self.DEFAULT_VALUE,
              "column_width": 20},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': 'Input', "column_width": 35},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': '嵌套内容', "column_width": 40},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': '出现频次', "column_width": 10},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': '是否udf', "column_width": 10},
+            {'main': 'Omni不支持的算子', 'sub': 'Input', "column_width": 35, "need_merged_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的算子', 'sub': 'Output', "column_width": 35, "need_merged_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的算子', 'sub': '出现频次', "column_width": 10, "need_merged_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的算子', 'sub': '运行时间（s）', "column_width": 35,
+             "need_merged_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的算子', 'sub': '文件大小（MiB）', "column_width": 15,
+             "need_merged_column": self.DEFAULT_VALUE, "show_details": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的算子', 'sub': 'Output rows', "column_width": 15,
+             "need_merged_column": self.DEFAULT_VALUE, "show_details": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': '名称', 'merge_start': self.DEFAULT_VALUE,
+             "column_width": 20, "need_merged_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': 'Input', "column_width": 35, "need_merged_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': '嵌套内容', "column_width": 40, "need_merged_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': '出现频次', "column_width": 10, "need_merged_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': '是否udf', "column_width": 10, "need_merged_column": self.DEFAULT_VALUE},
             {'main': 'Spark版本', "column_width": 15},
             {'main': '异常信息/备注', "column_width": 30}
         ]
-        self.merged_op_column = []
+        self.need_merged_column = []
 
         # 定义样式
         self._init_styles()
@@ -104,7 +104,13 @@ class ExcelWriterWithStyle:
                 self._write_headers(worksheet)
 
                 # 合并相同值的单元格
-                self._merge_duplicate_cells(worksheet, df)
+                self.merge_cells_full(
+                    worksheet,
+                    start_row=3,
+                    independent_cols=[1, 2, 3],
+                    linked_cols=self.need_merged_column,
+                    control_cols=[1, 2, 3]
+                )
 
             print(f"[SUCCESS] Analysis report has been saved to: {output_excel_path}")
             return True
@@ -145,9 +151,9 @@ class ExcelWriterWithStyle:
                 merge_end = len([i for i in self.headers if i['main'] == item['main']]) + col_idx - 1
                 worksheet.merge_cells(start_row=1, start_column=col_idx, end_row=1, end_column=merge_end)
 
-            # 如果表头项指定了需要合并操作的列，则将该列索引添加到merged_op_column列表中
-            if 'merged_op_column' in item and item['merged_op_column']:
-                self.merged_op_column.append(col_idx)
+            # 如果表头项指定了需要合并操作的列，则将该列索引添加到need_merged_column列表中
+            if 'need_merged_column' in item and item['need_merged_column']:
+                self.need_merged_column.append(col_idx)
 
     def _apply_styles(self, worksheet, df):
         """应用样式（自动处理所有列）"""
@@ -179,59 +185,91 @@ class ExcelWriterWithStyle:
                     # 数据行应用居中对齐
                     cell.alignment = self.center_alignment
 
-    def _merge_duplicate_cells(self, worksheet, df):
-        """合并相同值的单元格"""
-        title_start_row = self.DEFAULT_START_ROW
-        op_start_row = self.DEFAULT_START_ROW
-        total_rows = len(df) + 2
+    def process_merge(self, ws, data_cache, start_row, max_row, cols, control_cols=None, is_linked=False):
+        """
+        通用列合并函数（独立列或受联动控制的列）
 
-        # 遍历所有数据行
-        for current_row in range(self.DEFAULT_START_ROW, total_rows + 1):
-            current_col1_value = worksheet.cell(row=current_row, column=1).value
-            current_col2_value = worksheet.cell(row=current_row, column=2).value
-            current_col3_value = worksheet.cell(row=current_row, column=3).value
+        参数:
+            ws (Worksheet): openpyxl 工作表对象
+            data_cache (dict): {(row, col): value}，缓存的原始单元格数据，防止 merge 后变 None
+            start_row (int): 数据起始行（通常跳过表头）
+            max_row (int): 数据最大行
+            cols (list[int]): 需要合并的列列表
+            control_cols (list[int]): 联动列控制的列索引（仅 is_linked=True 时有效）
+            is_linked (bool): 是否受控制列联动（True: 仅在控制列值相同时合并）
+        """
+        control_cols = control_cols or []
 
-            # 获取下一行的值（如果存在）
-            if current_row < total_rows:
-                next_col1_value = worksheet.cell(row=current_row + 1, column=1).value
-                next_col2_value = worksheet.cell(row=current_row + 1, column=2).value
-                next_col3_value = worksheet.cell(row=current_row + 1, column=3).value
-            else:
-                next_col1_value = None
-                next_col2_value = None
-                next_col3_value = None
+        for col in cols:
+            merge_start = start_row
+            in_group = False
 
-            # 检查当前行是否与下一行的第1、2列值相同
-            same_values = (current_col1_value == next_col1_value and
-                           current_col2_value == next_col2_value)
+            for row in range(start_row + 1, max_row + 1):
+                current = data_cache[(row, col)]
+                previous = data_cache[(row - 1, col)]
 
-            if not same_values or not current_col3_value == next_col3_value:
-                if op_start_row < current_row:
-                    # 设置合并后的单元格样式
-                    for col in self.merged_op_column:
-                        worksheet.merge_cells(start_row=op_start_row, start_column=col, end_row=current_row,
-                                              end_column=col)
-                        merged_cell = worksheet.cell(row=op_start_row, column=col)
-                        merged_cell.alignment = self.center_alignment
-                        merged_cell.border = self.thin_border
-                # 更新起始行为下一行
-                op_start_row = current_row + 1
+                # 判断是否属于同一组
+                if is_linked:
+                    control_same = all(
+                        data_cache[(row, c)] == data_cache[(row - 1, c)]
+                        for c in control_cols
+                    )
+                    same_group = control_same and current == previous and current not in [None, ""]
+                else:
+                    same_group = current == previous and current not in [None, ""]
 
-            # 如果值不相同或者已经到最后一行，则合并之前相同的行
-            if not same_values:
-                if title_start_row < current_row:
-                    # 合并第1列
-                    worksheet.merge_cells(start_row=title_start_row, start_column=1, end_row=current_row, end_column=1)
-                    # 合并第2列
-                    worksheet.merge_cells(start_row=title_start_row, start_column=2, end_row=current_row, end_column=2)
+                if same_group:
+                    in_group = True
+                    continue
 
-                    # 设置合并后的单元格样式
-                    for col in [1, 2]:
-                        worksheet.merge_cells(start_row=title_start_row, start_column=col, end_row=current_row,
-                                              end_column=col)
-                        merged_cell = worksheet.cell(row=title_start_row, column=col)
-                        merged_cell.alignment = self.center_alignment
-                        merged_cell.border = self.thin_border
+                # 断组处理：只有连续组才执行 merge
+                if in_group:
+                    if row - merge_start >= 1:
+                        ws.merge_cells(
+                            start_row=merge_start, start_column=col,
+                            end_row=row - 1, end_column=col
+                        )
+                        cell = ws.cell(row=merge_start, column=col)
+                        cell.alignment = self.center_alignment
+                        cell.border = self.thin_border
 
-                # 更新起始行为下一行
-                title_start_row = current_row + 1
+                merge_start = row
+                in_group = False
+
+            # 处理最后一组连续值
+            if in_group and max_row - merge_start >= 1:
+                ws.merge_cells(
+                    start_row=merge_start, start_column=col,
+                    end_row=max_row, end_column=col
+                )
+                cell = ws.cell(row=merge_start, column=col)
+                cell.alignment = self.center_alignment
+                cell.border = self.thin_border
+
+    def merge_cells_full(self, ws, start_row=3, independent_cols=None, linked_cols=None, control_cols=None):
+        """
+        对 Excel 工作表进行多列合并
+
+        参数:
+            ws (Worksheet): openpyxl 工作表对象
+            start_row (int): 数据起始行
+            independent_cols (list[int]): 独立列（不受其他列控制）合并
+            linked_cols (list[int]): 联动列（受 control_cols 控制）合并
+            control_cols (list[int]): 控制列索引，只有当这些列值相同时才允许 linked_cols 合并
+        """
+        independent_cols = independent_cols or []
+        linked_cols = linked_cols or []
+        control_cols = control_cols or []
+
+        max_row = ws.max_row
+
+        # 缓存数据，避免合并后后破坏判断
+        data_cache = {}
+        for r in range(start_row, max_row + 1):
+            for c in range(1, ws.max_column + 1):
+                data_cache[(r, c)] = ws.cell(row=r, column=c).value
+
+        # 执行独立列合并
+        self.process_merge(ws, data_cache, start_row, max_row, independent_cols, is_linked=False)
+        # 执行联动列合并
+        self.process_merge(ws, data_cache, start_row, max_row, linked_cols, control_cols=control_cols, is_linked=True)

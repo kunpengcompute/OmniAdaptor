@@ -161,6 +161,7 @@ class CommonUtil:
             func_name='',
             func_inputs='',
             not_supported_line='',
+            not_supported_params='',
             func_times='',
             is_udf = '',
             spark_version='',
@@ -183,6 +184,7 @@ class CommonUtil:
             func_name: 函数名称
             func_inputs: 函数输入列表
             not_supported_line: 嵌套函数所在行内容
+            not_supported_params: 嵌套函数/PARTITION参数内容
             func_times: 函数出现次数
             is_udf: 是否为用户自定义函数
 
@@ -197,6 +199,8 @@ class CommonUtil:
             func_inputs = []
         if not_supported_line is None:
             not_supported_line = []
+        if not_supported_params is None:
+            not_supported_params = []
 
         result_item = {
             'ApplicationID+SQL ID': app_id,
@@ -213,10 +217,15 @@ class CommonUtil:
             result_item['Omni不支持的算子文件大小'] = op_output_sizes
             result_item['Omni不支持的算子Output rows'] = op_output_rows
 
+        nested_line = []
+        for i, x in enumerate(not_supported_line):
+            param = ", ".join(not_supported_params[i])
+            nested_line.append(f"{i + 1}. {x} 参数名：{param}")
+
         result_item.update({
             'Omni不支持的表达式/内置函数名称': func_name,
             'Omni不支持的表达式/内置函数Input': ",".join(func_inputs),
-            'Omni不支持的表达式/内置函数嵌套内容': "\n".join(f"{i+1}. {x}" for i,x in enumerate(not_supported_line)),
+            'Omni不支持的表达式/内置函数嵌套内容': nested_line,
             'Omni不支持的表达式/内置函数出现频次': func_times,
             'Omni不支持的表达式/内置函数是否udf': is_udf,
             'Spark版本': spark_version,

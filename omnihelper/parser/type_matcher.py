@@ -23,7 +23,8 @@ DECIMAL128_PRECISION = [19, 38]
 
 NOT_SUPPORTED_TYPE = [TypeEnum.PARTITION.value, TypeEnum.NESTED_FUNCTIONS.value]
 
-PREDICATE_EXPR = ["<", "<=", "<>", "=", "==", ">", ">=", FunctionEnum.IF.value]
+PREDICATE_EXPR = ["<", "<=", "<>", "=", "==", ">", ">=", "+", "-", "*", "/",
+                  FunctionEnum.IF.value, FunctionEnum.COALESCE.value]
 
 DATE_LITERAL = ["yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss"]
 
@@ -77,14 +78,14 @@ class TypeMatcher:
         return TypeEnum.PARTITION.value
 
     @staticmethod
-    def get_input_type(params, param_type_mapping, event, pair, function_builder, depth):
+    def get_input_type(params, param_type_mapping, event, pair, function_builder, alias_map, depth):
         if depth > 10:
             return TypeEnum.PARTITION.value
         input_type = []
         func_name = pair.get("func")
         for param in params:
             param_type = TypeMatcher.analyse_function_param_type(param, param_type_mapping, event,
-                                                                 function_builder, depth + 1)
+                                                                 function_builder, alias_map, depth + 1)
             input_type.append(param_type)
 
         if func_name in PREDICATE_EXPR:
@@ -98,7 +99,7 @@ class TypeMatcher:
         return input_type
 
     @staticmethod
-    def analyse_function_param_type(param, param_type_mapping, event, function_builder, depth):
+    def analyse_function_param_type(param, param_type_mapping, event, function_builder, alias_map, depth):
         if depth > 10:
             return TypeEnum.PARTITION.value
         ori_sql = event.get("original query")
@@ -116,7 +117,7 @@ class TypeMatcher:
             return TypeEnum.STRING.value
 
         ori_param = re.sub(r"#\d+(L)*", "", param)
-        ori_param = re.sub(r"^-\s*", "", ori_param)
+        ori_param = re.sub(r"^(-|distinct)\s*", "", ori_param)
 
         if ori_param.lower() in param_type_mapping:
             return TypeMatcher.switch_param_type(param_type_mapping[ori_param.lower()])
@@ -148,7 +149,14 @@ class TypeMatcher:
                 return TypeMatcher.switch_param_type(cast_params[1])
 
         nested_function_type = TypeMatcher.get_func_return_type(param, param_type_mapping, event,
-                                                                function_builder, depth + 1)
+                                                                function_builder, alias_map, depth + 1)
+
+        if nested_function_type in NOT_SUPPORTED_TYPE and param in alias_map:
+            real_param = alias_map[param]
+            real_type = TypeMatcher.analyse_function_param_type(real_param, param_type_mapping, event,
+                                                                function_builder, alias_map, depth + 1)
+            return real_type
+
         return nested_function_type
 
     @staticmethod
@@ -238,7 +246,7 @@ class TypeMatcher:
         return False
 
     @staticmethod
-    def get_func_return_type(ori_param, param_type_mapping, event, function_builder, depth):
+    def get_func_return_type(ori_param, param_type_mapping, event, function_builder, alias_map, depth):
         is_nested_function = TypeMatcher.is_nested_function(ori_param)
         nested_function_type = TypeEnum.NESTED_FUNCTIONS.value if is_nested_function else TypeEnum.PARTITION.value
         pairs = function_builder.search_func_expr_pairs(ori_param)
@@ -247,8 +255,8 @@ class TypeMatcher:
 
         for pair in pairs:
             params = pair.get("params", [])
-            input_type = TypeMatcher.get_input_type(params, param_type_mapping, event,
-                                                    pair, function_builder, depth + 1)
+            input_type = TypeMatcher.get_input_type(params, param_type_mapping, event, pair,
+                                                    function_builder, alias_map, depth + 1)
             pair["input_type"] = input_type
 
         stack = []

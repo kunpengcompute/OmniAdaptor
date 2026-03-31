@@ -14,6 +14,7 @@ import re
 import hashlib
 from collections import defaultdict
 
+from omnihelper.enum.type_enum import TypeEnum
 from omnihelper.parser.function_builder import FunctionBuilder
 from omnihelper.parser.function_checker import FunctionChecker
 from omnihelper.parser.type_matcher import TypeMatcher
@@ -64,6 +65,7 @@ class FunctionParser:
             return []
         analysis_result = []
         param_type_mapping = {}
+        alias_map = {}
         param_type_mapping.update(column_type)
         physical_plan = event.get("physical plan")
         if not physical_plan:
@@ -74,9 +76,9 @@ class FunctionParser:
         operator_blocks = self.split_operators(update_physical_plan)
 
         if not operator_blocks:
-            analysis_result = self.parse_physical_plan(update_physical_plan, event, param_type_mapping)
+            analysis_result = self.parse_physical_plan(update_physical_plan, event, param_type_mapping, alias_map)
         for block in operator_blocks:
-            analysis_result.extend(self.parse_physical_plan(block, event, param_type_mapping))
+            analysis_result.extend(self.parse_physical_plan(block, event, param_type_mapping, alias_map))
 
         return self.count_func_times(analysis_result)
 
@@ -125,12 +127,13 @@ class FunctionParser:
 
         return result
 
-    def parse_physical_plan(self, physical_plan, event, param_type_mapping):
+    def parse_physical_plan(self, physical_plan, event, param_type_mapping, alias_map):
         analysis_result = []
         for line in physical_plan:
             if "ReadSchema" in line:
                 # 更新参数类型映射表
                 TypeMatcher.extract_param_type(line, param_type_mapping)
+            self.extract_alias_map(line, alias_map)
         function_builder = FunctionBuilder(self.func_pattern, self.all_funcs)
         for line in physical_plan:
             func_pairs = function_builder.search_func_expr_pairs(line)
@@ -141,35 +144,45 @@ class FunctionParser:
                 func_name = pair.get("func")
                 params = pair.get("params")
 
-                input_type = TypeMatcher.get_input_type(params, param_type_mapping, event, pair, function_builder, 0)
+                input_type = TypeMatcher.get_input_type(params, param_type_mapping, event, pair,
+                                                        function_builder, alias_map, 0)
                 function_checker = FunctionChecker(self.function_list, self.udf_list)
                 is_not_supported_func = function_checker.check_support_status(func_name, params, input_type,
                                                                               event.get("original query"))
                 if not is_not_supported_func:
                     continue
-                not_supported_func = self.build_not_supported_func(func_name, event, input_type, line)
+                not_supported_func = self.build_not_supported_func(func_name, event, input_type, params, line)
                 analysis_result.append(not_supported_func)
         return analysis_result
 
-    def build_not_supported_func(self, func_name, event, input_type, line):
+    def build_not_supported_func(self, func_name, event, input_type, params, line):
         func_name = self.partial_func_mapping[func_name] if func_name in self.partial_func_mapping else func_name
         sql_hash = hashlib.sha256(event.get("original query").encode("utf-8")).hexdigest()[-6:]
+        not_supported_params = [
+            param
+            for idx, param in enumerate(params)
+            if input_type[idx] in NOT_SUPPORTED_TYPE
+        ]
         return {
             "func_name": func_name,
             "sql_hash": sql_hash,
             "input": input_type,
-            "not_supported_line": line if any(param_type in NOT_SUPPORTED_TYPE for param_type in input_type) else ""
+            "not_supported_line": line if any(param_type in NOT_SUPPORTED_TYPE for param_type in input_type) else "",
+            "not_supported_params": not_supported_params
         }
 
     def count_func_times(self, event_result):
         counter = defaultdict(int)
-        not_supported = defaultdict(list)
+        not_supported_line = defaultdict(list)
+        not_supported_params = defaultdict(list)
 
         for item in event_result:
             key = (item["func_name"], item["sql_hash"], tuple(item["input"]))
             counter[key] += 1
             if item.get("not_supported_line"):
-                not_supported[key].append(item["not_supported_line"])
+                not_supported_line[key].append(item["not_supported_line"])
+            if item.get("not_supported_params"):
+                not_supported_params[key].append(item["not_supported_params"])
 
         update_event_result = []
         for (func_name, sql_hash, input_type), times in counter.items():
@@ -179,7 +192,8 @@ class FunctionParser:
                 "input": input_type,
                 "times": times,
                 "is_udf": True if func_name.lower() in self.user_defined_functions else False,
-                "not_supported_line": list(set(not_supported[(func_name, sql_hash, input_type)]))
+                "not_supported_line": not_supported_line[(func_name, sql_hash, input_type)],
+                "not_supported_params": not_supported_params[(func_name, sql_hash, input_type)]
             })
         return update_event_result
 
@@ -189,5 +203,7 @@ class FunctionParser:
         func_builder.search_exprs(line, func_expr_pairs)
         for expr in func_expr_pairs:
             params = expr.get("params")
+            if params[0].upper() in [enum.value for enum in TypeEnum]:
+                continue
             if params[1] not in alias_map and params[0] != params[1]:
                 alias_map[params[1]] = params[0]

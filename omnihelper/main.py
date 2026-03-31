@@ -315,6 +315,7 @@ Usage Examples:
                     func_name = expr_event_result[i].get('func_name', '') if i < len(expr_event_result) else ''
                     func_inputs = expr_event_result[i].get('input', []) if i < len(expr_event_result) else []
                     not_supported_line = expr_event_result[i].get('not_supported_line', []) if i < len(expr_event_result) else []
+                    not_supported_params = expr_event_result[i].get('not_supported_params', []) if i < len(expr_event_result) else []
                     func_times = expr_event_result[i].get('times', 0) if i < len(expr_event_result) else ''
                     is_udf = ''
                     if i < len(expr_event_result):
@@ -332,7 +333,7 @@ Usage Examples:
                                                                op_name, op_inputs, op_outputs, op_times,
                                                                op_running_time, op_output_sizes, op_output_rows,
                                                                func_name, func_inputs, not_supported_line,
-                                                               func_times, is_udf)
+                                                               not_supported_params, func_times, is_udf)
                     analysis_result.append(result_item)
 
             self.analysis_result.extend(analysis_result)
@@ -372,8 +373,10 @@ Usage Examples:
             return
 
         df = pd.DataFrame(self.analysis_result)
+        # 拆分单元格
+        df_exploded = df.explode("Omni不支持的表达式/内置函数嵌套内容").reset_index(drop=True)
         output_excel_path = os.path.join(self.args.output_dir, f"Omni_Analysis_All_Report_{self.TIMESTAMP}.xlsx")
-        self.excel_writer.write_to_excel(df, output_excel_path, self.args.show_op_details)
+        self.excel_writer.write_to_excel(df_exploded, output_excel_path, self.args.show_op_details)
 
 
 def main():

@@ -23,3 +23,4 @@ class FunctionEnum(Enum):
     LTRIM = "ltrim"
     RTRIM = "rtrim"
     BTRIM = "btrim"
+    COALESCE = "coalesce"

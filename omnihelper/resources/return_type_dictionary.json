@@ -431,6 +431,5 @@
   {"func_name": "sequence", "need_param_type": false, "return_type": "ARRAY"},
   {"func_name": "shuffle", "need_param_type": false, "return_type": "ARRAY"},
   {"func_name": "slice", "need_param_type": false, "return_type": "ARRAY"},
-  {"func_name": "sort_array", "need_param_type": false, "return_type": "ARRAY"},
-  {"func_name": "stringsplitsql", "need_param_type": false, "return_type": "ARRAY"}
+  {"func_name": "sort_array", "need_param_type": false, "return_type": "ARRAY"}
 ]

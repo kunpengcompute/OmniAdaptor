@@ -23,8 +23,8 @@ import subprocess
 from tqdm import tqdm
 from pathlib import Path
 from datetime import datetime
-from omnihelper.parser.function_parser import FunctionParser
-from omnihelper.parser.op_parser import OpParser
+from omnihelper.parser.function.function_parser import FunctionParser
+from omnihelper.parser.operator.op_parser import OpParser
 from omnihelper.util.common_util import CommonUtil
 from omnihelper.util.excel_util import ExcelWriterWithStyle
 

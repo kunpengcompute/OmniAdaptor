@@ -13,8 +13,8 @@ import re
 
 from omnihelper.enum.function_enum import FunctionEnum
 from omnihelper.enum.type_enum import TypeEnum
-from omnihelper.parser.expr_tree import ExprTree
-from omnihelper.parser.return_type_parser import ReturnTypeParser
+from omnihelper.parser.function.expr_tree import ExprTree
+from omnihelper.parser.function.return_type_parser import ReturnTypeParser
 from omnihelper.util.common_util import CommonUtil
 from omnihelper.util.func_util import extract_cast_param, replace_predicate_partition, strip_outer_parens
 

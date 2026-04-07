@@ -13,7 +13,7 @@ import re
 import sys
 
 from omnihelper.enum.spark_type_enum import SparkTypeEnum
-from omnihelper.parser.function_builder import FunctionBuilder
+from omnihelper.parser.function.function_builder import FunctionBuilder
 
 
 class CommonUtil:

@@ -15,7 +15,7 @@ import re
 import hashlib
 from collections import defaultdict
 
-from omnihelper.parser.function_builder import FunctionBuilder
+from omnihelper.parser.function.function_builder import FunctionBuilder
 from omnihelper.parser.type_matcher import TypeMatcher
 from omnihelper.util.common_util import CommonUtil
 

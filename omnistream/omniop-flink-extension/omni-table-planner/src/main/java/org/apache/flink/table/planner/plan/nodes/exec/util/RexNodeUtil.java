@@ -89,6 +89,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("AND", SpecialExprType.AND);
         specialOperatorMap.put("OR", SpecialExprType.OR);
         specialOperatorMap.put("IF", SpecialExprType.IF);
+        specialOperatorMap.put("JSON_VALUE", SpecialExprType.JSON_VALUE);
     }
 
     static {
@@ -163,7 +164,8 @@ public class RexNodeUtil {
         OTHERS,
         AND,
         OR,
-        IF
+        IF,
+        JSON_VALUE
     }
 
 
@@ -282,6 +284,34 @@ public class RexNodeUtil {
                         regArgs.add(buildJsonMap(operands.get(2)));
                         jsonMap.put("arguments", regArgs);
                         LOG.info("The expression is {} ", rexCall.toString());
+                        break;
+                    case JSON_VALUE:
+                        jsonMap.put("exprType", "FUNCTION");
+                        setDataType(rexCall,jsonMap, "returnType");
+                        jsonMap.put("function_name", "json_value");
+
+                        List<Map<String, Object>> jsonArgs = new ArrayList<>();
+                        jsonArgs.add(buildJsonMap(operands.get(0))); // json input
+                        jsonArgs.add(buildJsonMap(operands.get(1))); // path expression
+                        
+                        // Parse ON EMPTY behavior (operands 2-4)
+                        if (operands.size() > 2) {
+                            Map<String, Object> emptyBehavior = parseBehaviorOperands(operands, 2, "emptyBehavior");
+                            if (emptyBehavior != null) {
+                                jsonMap.put("emptyBehavior", emptyBehavior);
+                            }
+                        }
+                        
+                        // Parse ON ERROR behavior (operands 5-7)
+                        if (operands.size() > 5) {
+                            Map<String, Object> errorBehavior = parseBehaviorOperands(operands, 5, "errorBehavior");
+                            if (errorBehavior != null) {
+                                jsonMap.put("errorBehavior", errorBehavior);
+                            }
+                        }
+                        
+                        jsonMap.put("arguments", jsonArgs);
+                        LOG.info("The JSON_VALUE expression is {} ", rexCall.toString());
                         break;
                     case SPLIT_INDEX:
                         jsonMap.put("exprType", "FUNCTION");
@@ -548,6 +578,52 @@ public class RexNodeUtil {
             jsonMap.put("exprType",  OperatorExprType.INVALID.name());
             LOG.info("The RexNode is not a RexCall/RexInputRef/RexLiteral. It is not recognized.");
             return jsonMap;
+        }
+    }
+
+    /**
+     * Parse behavior operands for JSON_VALUE ON EMPTY/ERROR clauses
+     * 
+     * @param operands The operand list from RexCall
+     * @param startIndex The start index for behavior parsing
+     * @param behaviorKey The key name for JSON output
+     * @return Map containing behavior type and optional default value
+     */
+    private static Map<String, Object> parseBehaviorOperands(List<RexNode> operands, int startIndex, String behaviorKey) {
+        if (operands.size() <= startIndex) {
+            return null;
+        }
+        
+        Map<String, Object> behaviorMap = new LinkedHashMap<>();
+        
+        try {
+            RexNode behaviorNode = operands.get(startIndex);
+            
+            // Check if it's a literal (NULL, ERROR, or DEFAULT flag)
+            if (behaviorNode instanceof RexLiteral) {
+                RexLiteral behaviorLiteral = (RexLiteral) behaviorNode;
+                String behaviorName = behaviorLiteral.getValue().toString();
+                
+                // Map behavior names
+                if ("NULL".equalsIgnoreCase(behaviorName)) {
+                    behaviorMap.put("type", "NULL");
+                } else if ("ERROR".equalsIgnoreCase(behaviorName)) {
+                    behaviorMap.put("type", "ERROR");
+                } else if ("DEFAULT".equalsIgnoreCase(behaviorName)) {
+                    behaviorMap.put("type", "DEFAULT");
+                    
+                    // For DEFAULT, get the next operand as the default value
+                    if (operands.size() > startIndex + 1) {
+                        Map<String, Object> defaultValue = buildJsonMap(operands.get(startIndex + 1));
+                        behaviorMap.put("defaultValue", defaultValue);
+                    }
+                }
+            }
+            
+            return behaviorMap;
+        } catch (Exception e) {
+            LOG.warn("Failed to parse behavior operands for {}: {}", behaviorKey, e.getMessage());
+            return null;
         }
     }
 }

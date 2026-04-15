@@ -14,7 +14,6 @@ import com.huawei.omniruntime.flink.runtime.restore.KeyGroupEntryWrapper;
 import org.apache.flink.core.execution.SavepointFormatType;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.OmniStateSerializerHelper;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniStateMetaSerializerInfo;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.array.BytePrimitiveArraySerializer;
@@ -242,13 +241,11 @@ public class OmniTaskWrapper {
 
                 Map<String, String> options = (Map<String, String>) metaInfo.get("options");
                 String keyedStateTypeValue = options.get(StateMetaInfoSnapshot.CommonOptionsKeys.KEYED_STATE_TYPE.toString());
-                if (StringUtils.isNotEmpty(keyedStateTypeValue)) {
-                    OmniSerializerKeyedStateType keyedStateType = OmniSerializerKeyedStateType.get(keyedStateTypeValue);
-                    if (null == keyedStateType) {
-                        LOG.warn("method : materializeMetaData -> keyedStateTypeValue : {} undefined.", keyedStateTypeValue);
-                    } else {
-                        options.put(StateMetaInfoSnapshot.CommonOptionsKeys.KEYED_STATE_TYPE.toString(), keyedStateType.getTypeName());
-                    }
+                OmniSerializerKeyedStateType keyedStateType = OmniSerializerKeyedStateType.get(keyedStateTypeValue);
+                if (null == keyedStateType) {
+                    LOG.warn("method : materializeMetaData -> keyedStateTypeValue : {} undefined.", keyedStateTypeValue);
+                } else {
+                    options.put(StateMetaInfoSnapshot.CommonOptionsKeys.KEYED_STATE_TYPE.toString(), keyedStateType.getTypeName());
                 }
 
                 if (null == keySerializer) {
@@ -325,13 +322,11 @@ public class OmniTaskWrapper {
 
                 Map<String, String> options = (Map<String, String>) metaInfo.get("options");
                 String keyedStateTypeValue = options.get(StateMetaInfoSnapshot.CommonOptionsKeys.KEYED_STATE_TYPE.toString());
-                if (StringUtils.isNotEmpty(keyedStateTypeValue)) {
-                    OmniSerializerKeyedStateType keyedStateType = OmniSerializerKeyedStateType.get(keyedStateTypeValue);
-                    if (null == keyedStateType) {
-                        LOG.warn("method : writeSavepointMetadata -> keyedStateTypeValue : {} undefined.", keyedStateTypeValue);
-                    } else {
-                        options.put(StateMetaInfoSnapshot.CommonOptionsKeys.KEYED_STATE_TYPE.toString(), keyedStateType.getTypeName());
-                    }
+                OmniSerializerKeyedStateType keyedStateType = OmniSerializerKeyedStateType.get(keyedStateTypeValue);
+                if (null == keyedStateType) {
+                    LOG.warn("method : writeSavepointMetadata -> keyedStateTypeValue : {} undefined.", keyedStateTypeValue);
+                } else {
+                    options.put(StateMetaInfoSnapshot.CommonOptionsKeys.KEYED_STATE_TYPE.toString(), keyedStateType.getTypeName());
                 }
 
                 if(null == keySerializer){

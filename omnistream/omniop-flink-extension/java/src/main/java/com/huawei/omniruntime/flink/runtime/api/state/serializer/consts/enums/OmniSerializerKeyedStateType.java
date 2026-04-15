@@ -38,6 +38,9 @@ public enum OmniSerializerKeyedStateType {
     }
 
     public static OmniSerializerKeyedStateType get(String code) {
+        if(null == code){
+            return null;
+        }
         for (OmniSerializerKeyedStateType item : OmniSerializerKeyedStateType.values()) {
             if (item.equals(code)) {
                 return item;

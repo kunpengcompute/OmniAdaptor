@@ -10,6 +10,7 @@ public enum OmniSerializerJson {
     ELEMENT_TYPE("element_type"),
     KEY_SERIALIZER("keySerializer"),
     VALUE_SERIALIZER("valueSerializer"),
+    NAMESPACE_SERIALIZER("namespaceSerializer"),
     FIELD_NAMES("fieldNames"),
     FIELD_SERIALIZERS("fieldSerializers"),
     ;

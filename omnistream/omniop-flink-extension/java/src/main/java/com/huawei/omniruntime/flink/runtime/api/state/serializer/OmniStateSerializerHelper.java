@@ -64,7 +64,7 @@ public class OmniStateSerializerHelper {
                     || (null == serializerMap || serializerMap.isEmpty())
                     || null == executionConfig
                     || null == userCodeClassLoader) {
-                return null;
+                throw new IllegalArgumentException("StateMetaInfoSnapshot info not completed.");
             }
             OmniStateMetaSerializerInfo.Builder builder = OmniStateMetaSerializerInfo.builder();
             builder.backendStateType(backendStateType);
@@ -164,7 +164,7 @@ public class OmniStateSerializerHelper {
         if (null != map.get(OmniSerializerJson.ELEMENT_TYPE.getKey())) {
             info.setElementType((String) map.get(OmniSerializerJson.ELEMENT_TYPE.getKey()));
             if (StringUtils.isNotEmpty(info.getElementType())) {
-                info.setElementType(info.getElementType().replaceAll(SC.UNDERSCORE, SC.DOT));
+                info.setElementType(info.getElementType().replace(SC.UNDERSCORE, SC.DOT));
                 try {
                     info.setElementTypeClazz(Class.forName(info.getElementType(), false, userCodeClassLoader));
                 } catch (ClassNotFoundException e) {
@@ -184,6 +184,13 @@ public class OmniStateSerializerHelper {
             String valueSerializerStr = (String) map.get(OmniSerializerJson.VALUE_SERIALIZER.getKey());
             if (StringUtils.isNotEmpty(valueSerializerStr)) {
                 info.setValueSerializer(convert(valueSerializerStr, userCodeClassLoader, depth + DEPTH_INTERVAL));
+            }
+        }
+
+        if (null != map.get(OmniSerializerJson.NAMESPACE_SERIALIZER.getKey())) {
+            String namespaceSerializerStr = (String) map.get(OmniSerializerJson.NAMESPACE_SERIALIZER.getKey());
+            if (StringUtils.isNotEmpty(namespaceSerializerStr)) {
+                info.setNamespaceSerializer(convert(namespaceSerializerStr, userCodeClassLoader, depth + DEPTH_INTERVAL));
             }
         }
 

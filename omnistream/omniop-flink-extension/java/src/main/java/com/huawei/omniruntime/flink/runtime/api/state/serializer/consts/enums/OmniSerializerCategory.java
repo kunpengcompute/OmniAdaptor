@@ -13,5 +13,6 @@ public enum OmniSerializerCategory {
     TUPLE,
     POJO,
     VOID_NAMESPACE,
+    TIMER,
     UNKNOWN
 }

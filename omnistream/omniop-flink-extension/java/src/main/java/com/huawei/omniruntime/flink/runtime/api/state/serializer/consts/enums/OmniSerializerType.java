@@ -5,6 +5,8 @@ import org.apache.flink.api.java.typeutils.runtime.PojoSerializer;
 import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
+import org.apache.flink.streaming.api.operators.TimerHeapInternalTimer;
+import org.apache.flink.streaming.api.operators.TimerSerializer;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -16,10 +18,8 @@ import java.util.Date;
  *
  */
 public enum OmniSerializerType {
-    VOID(OmniSerializerCategory.BASIC, Void.class, VoidSerializer.class, -1),
-    STRING(OmniSerializerCategory.BASIC, String.class, StringSerializer.class, 8),
     BYTE(OmniSerializerCategory.BASIC, Byte.class, ByteSerializer.class, -1),
-    BOOLEAN(OmniSerializerCategory.BASIC, Boolean.class, BooleanSerializer.class, -1),
+    BOOLEAN(OmniSerializerCategory.BASIC, Boolean.class, BooleanSerializer.class, 9),
     SHORT(OmniSerializerCategory.BASIC, Short.class, ShortSerializer.class, -1),
     INT(OmniSerializerCategory.BASIC, Integer.class, IntSerializer.class, 4),
     LONG(OmniSerializerCategory.BASIC, Long.class, LongSerializer.class, 3),
@@ -28,15 +28,18 @@ public enum OmniSerializerType {
     CHAR(OmniSerializerCategory.BASIC, Character.class, CharSerializer.class, -1),
     BIG_DEC(OmniSerializerCategory.BASIC, BigDecimal.class, BigDecSerializer.class, -1),
     BIG_INT(OmniSerializerCategory.BASIC, BigInteger.class, BigIntSerializer.class, 2),
+    STRING(OmniSerializerCategory.BASIC, String.class, StringSerializer.class, 8),
+    VOID(OmniSerializerCategory.BASIC, Void.class, VoidSerializer.class, 10),
     INSTANT(OmniSerializerCategory.BASIC, Instant.class, InstantSerializer.class, -1),
     DATE(OmniSerializerCategory.DATE, Date.class, DateSerializer.class, -1),
 
 
     LIST(OmniSerializerCategory.LIST, null, ListSerializer.class, 1),
     MAP(OmniSerializerCategory.MAP, null, MapSerializer.class, 6),
-    POJO(OmniSerializerCategory.LIST, null, PojoSerializer.class, 7),
+    POJO(OmniSerializerCategory.POJO, null, PojoSerializer.class, 7),
     TUPLE(OmniSerializerCategory.TUPLE, null, TupleSerializer.class, -1),
-    VOID_NAMESPACE(OmniSerializerCategory.VOID_NAMESPACE, VoidNamespace.class, VoidNamespaceSerializer.class, -1),
+    VOID_NAMESPACE(OmniSerializerCategory.VOID_NAMESPACE, VoidNamespace.class, VoidNamespaceSerializer.class, 11),
+    TIMER(OmniSerializerCategory.TIMER, TimerHeapInternalTimer.class, TimerSerializer.class, 12),
 
     UNKNOW(OmniSerializerCategory.UNKNOWN, null, null, 0);
 

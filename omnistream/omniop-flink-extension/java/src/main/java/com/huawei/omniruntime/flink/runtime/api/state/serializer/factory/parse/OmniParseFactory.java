@@ -1,9 +1,11 @@
 package com.huawei.omniruntime.flink.runtime.api.state.serializer.factory.parse;
 
+import com.esotericsoftware.minlog.Log;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.SC;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerType;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniNativeSerializerJsonInfo;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.OmniSerializerJsonInfo;
+import com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info.type.TimerTypeInfo;
 import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeException;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -18,6 +20,7 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.api.java.typeutils.runtime.PojoSerializer;
 import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
 import org.apache.flink.runtime.state.VoidNamespaceTypeInfo;
+import org.apache.flink.streaming.api.operators.TimerSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,6 +65,7 @@ public abstract class OmniParseFactory {
                 case POJO:
                 case TUPLE:
                 case VOID_NAMESPACE:
+                case TIMER:
                     factory = new OmniParseValueFactory();
                     break;
                 case UNKNOW:
@@ -104,6 +108,14 @@ public abstract class OmniParseFactory {
             return TypeExtractor.createTypeInfo(info.getElementTypeClazz());
         } else if (OmniSerializerType.VOID_NAMESPACE.equals(info.getSerializerType())) {
             return new VoidNamespaceTypeInfo();
+        } else if (OmniSerializerType.TIMER.equals(info.getSerializerType())) {
+            OmniNativeSerializerJsonInfo keySerializerInfo = info.getKeySerializer();
+            OmniNativeSerializerJsonInfo namespaceSerializerInfo = info.getNamespaceSerializer();
+            TypeInformation<?> keyTypeInfo =  (null == keySerializerInfo)
+                    ? Types.STRING : buildTypeInformationBy(keySerializerInfo, depth + DEPTH_INTERVAL);
+            TypeInformation<?> namespaceTypeInfo =  (null == namespaceSerializerInfo)
+                    ? new VoidNamespaceTypeInfo() : buildTypeInformationBy(namespaceSerializerInfo, depth + DEPTH_INTERVAL);
+            return new TimerTypeInfo<>(keyTypeInfo, namespaceTypeInfo);
         }
 
         return null;
@@ -118,6 +130,7 @@ public abstract class OmniParseFactory {
         }
         OmniSerializerJsonInfo jsonInfo = new OmniSerializerJsonInfo();
         jsonInfo.setSerializerName(typeSerializer.getClass().getName());
+        jsonInfo.setSerializerInstanceClazz(typeSerializer.createInstance().getClass().getName());
         if (serializerType.isBasic()) {
             return jsonInfo;
         } else if (OmniSerializerType.LIST.equals(serializerType)) {
@@ -192,6 +205,23 @@ public abstract class OmniParseFactory {
             jsonInfo.setFieldSerializers(fieldSerializerInfoList);
             return jsonInfo;
         } else if (OmniSerializerType.VOID_NAMESPACE.equals(serializerType)) {
+            return jsonInfo;
+        } else if (OmniSerializerType.TIMER.equals(serializerType)) {
+            TimerSerializer<?, ?> timerSerializer = (TimerSerializer<?, ?>) typeSerializer;
+            OmniSerializerJsonInfo keySerializerJsonInfo = (null == timerSerializer.getKeySerializer())
+                    ? null
+                    : buildJsonInfoBy(
+                    timerSerializer.getKeySerializer(),
+                    OmniSerializerType.get(timerSerializer.getKeySerializer().getClass()),
+                    depth + DEPTH_INTERVAL);
+            OmniSerializerJsonInfo namespaceSerializerJsonInfo = (null == timerSerializer.getNamespaceSerializer())
+                    ? null
+                    : buildJsonInfoBy(
+                    timerSerializer.getNamespaceSerializer(),
+                    OmniSerializerType.get(timerSerializer.getNamespaceSerializer().getClass()),
+                    depth + DEPTH_INTERVAL);
+            jsonInfo.setKeySerializer(keySerializerJsonInfo);
+            jsonInfo.setNamespaceSerializer(namespaceSerializerJsonInfo);
             return jsonInfo;
         }
 

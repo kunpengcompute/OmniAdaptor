@@ -22,6 +22,7 @@ public class OmniNativeSerializerJsonInfo implements Serializable {
     private Class<?> elementTypeClazz;
     private OmniNativeSerializerJsonInfo keySerializer;
     private OmniNativeSerializerJsonInfo valueSerializer;
+    private OmniNativeSerializerJsonInfo namespaceSerializer;
     private List<String> fieldNames;
     private List<OmniNativeSerializerJsonInfo> fieldSerializers;
 
@@ -73,6 +74,14 @@ public class OmniNativeSerializerJsonInfo implements Serializable {
         this.valueSerializer = valueSerializer;
     }
 
+    public OmniNativeSerializerJsonInfo getNamespaceSerializer() {
+        return namespaceSerializer;
+    }
+
+    public void setNamespaceSerializer(OmniNativeSerializerJsonInfo namespaceSerializer) {
+        this.namespaceSerializer = namespaceSerializer;
+    }
+
     public List<String> getFieldNames() {
         return fieldNames;
     }
@@ -108,6 +117,7 @@ public class OmniNativeSerializerJsonInfo implements Serializable {
                 + "elementTypeClazz = " + this.elementTypeClazz + ", "
                 + "keySerializer = " + (null == this.keySerializer ? null : this.keySerializer.toString()) + ", "
                 + "valueSerializer = " + (null == this.valueSerializer ? null : this.valueSerializer.toString()) + ", "
+                + "namespaceSerializer = " + (null == this.namespaceSerializer ? null : this.namespaceSerializer.toString()) + ", "
                 + "fieldNames = [" + String.join(SC.BLANK + SC.COMMA, fieldNameInfoList) + "], "
                 + "fieldSerializers = [" + String.join(SC.BLANK + SC.COMMA, fieldSerializerInfoList) + "]"
                 + "}";

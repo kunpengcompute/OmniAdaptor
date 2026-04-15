@@ -16,10 +16,12 @@ public class OmniSerializerJsonInfo implements Serializable {
     private static final long serialVersionUID = 6753209368135180619L;
 
     private String serializerName;
+    private String serializerInstanceClazz;
     private String clazz;
     private OmniSerializerJsonInfo elementSerializer;
     private OmniSerializerJsonInfo keySerializer;
     private OmniSerializerJsonInfo valueSerializer;
+    private OmniSerializerJsonInfo namespaceSerializer;
     private List<String> fields;
     private List<OmniSerializerJsonInfo> fieldSerializers;
 
@@ -29,6 +31,14 @@ public class OmniSerializerJsonInfo implements Serializable {
 
     public void setSerializerName(String serializerName) {
         this.serializerName = serializerName;
+    }
+
+    public String getSerializerInstanceClazz() {
+        return serializerInstanceClazz;
+    }
+
+    public void setSerializerInstanceClazz(String serializerInstanceClazz) {
+        this.serializerInstanceClazz = serializerInstanceClazz;
     }
 
     public String getClazz() {
@@ -63,6 +73,14 @@ public class OmniSerializerJsonInfo implements Serializable {
         this.valueSerializer = valueSerializer;
     }
 
+    public OmniSerializerJsonInfo getNamespaceSerializer() {
+        return namespaceSerializer;
+    }
+
+    public void setNamespaceSerializer(OmniSerializerJsonInfo namespaceSerializer) {
+        this.namespaceSerializer = namespaceSerializer;
+    }
+
     public List<String> getFields() {
         return fields;
     }
@@ -93,10 +111,12 @@ public class OmniSerializerJsonInfo implements Serializable {
         }
         return "OmniSerializerJsonInfo {"
                 + "serializerName = " + this.serializerName + ", "
+                + "serializerInstanceClazz = " + this.serializerInstanceClazz + ", "
                 + "clazz = " + this.clazz + ", "
                 + "elementSerializer = " + (null == this.elementSerializer ? null : this.elementSerializer.toString()) + ", "
                 + "keySerializer = " + (null == this.keySerializer ? null : this.keySerializer.toString()) + ", "
                 + "valueSerializer = " + (null == this.valueSerializer ? null : this.valueSerializer.toString()) + ", "
+                + "namespaceSerializer = " + (null == this.namespaceSerializer ? null : this.namespaceSerializer.toString()) + ", "
                 + "fields = [" + String.join(SC.BLANK + SC.COMMA, fieldInfoList) + "], "
                 + "fieldSerializers = [" + String.join(SC.BLANK + SC.COMMA, fieldSerializerInfoList) + "]"
                 + "}";

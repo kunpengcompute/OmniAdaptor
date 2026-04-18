@@ -248,6 +248,11 @@ public final class OmniGraphOverride {
         JobVertex jobVertex = vertexEntry.getValue();
 
         if (validateVertexChainInfoForOmniTask(vertexID, chainInfos, chainedConfigs, jobVertex, vertexConfigs, jobType)) {
+            if (vertexConfig.getOperatorName().contains("Source") || vertexConfig.getOperatorName().contains("Sink") || vertexConfig.getOperatorName().contains("Map")) {
+                LOG.info("validateVertexForOmniTask  false for : vertexID is {}, and vertexName {}", vertexID, vertexConfig.getOperatorName());
+                vertexConfig.setUseOmniEnabled(false);
+                return false;
+            }
             LOG.info("validateVertexForOmniTask  true for : vertexID is {}, and vertexName {}", vertexID, vertexConfig.getOperatorName());
             vertexConfig.setUseOmniEnabled(true);
             return true;

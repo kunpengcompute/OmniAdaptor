@@ -639,9 +639,13 @@ public class StreamingJobGraphGenerator {
             LOG.warn("SQL Unsupported Checkpoint in native side and will roll back to Original plan.");
             return true;
         }
-        if (!containKeyCoProcessOperator().getRight()){
+        Pair<Boolean, Boolean> statefulOps = containKeyCoProcessOperator();
+        if (!statefulOps.getLeft() && !statefulOps.getRight()) {
+            LOG.warn("DataStream job with checkpoint contains no supported stateful operator "
+            + "(StreamGroupedReduceOperator / KeyedCoProcessOperator) and will roll back to Original plan.");
             return true;
         }
+
         CheckpointConfigPOJO checkpointConfigPOJO = new CheckpointConfigPOJO(streamGraph.getConfiguration(), streamGraph);
         ExecutionCheckpointConfigPOJO executionCheckpointConfigPOJO =
                 new ExecutionCheckpointConfigPOJO(streamGraph.getCheckpointConfig(), streamGraph.getConfiguration());
@@ -676,8 +680,8 @@ public class StreamingJobGraphGenerator {
                 LOG.warn("Unsupported StateBackend in native DataStream and will roll back to Original plan.");
                 return true;
             }
-            if (containOperator.getRight() && !"EmbeddedRocksDBStateBackend".equals(backendName)) {
-                LOG.warn("Fallback to native plan: Non-Rocksdb backend conflicts with a Rocksdb-only operator.");
+            if (containOperator.getRight() && !"EmbeddedRocksDBStateBackend".equals(backendName) && !"HashMapStateBackend".equals(backendName)) {
+                LOG.warn("Fallback to native plan: Non-Rocksdb backend or Non-Heap backend.");
                 return true;
             }
             if (containOperator.getLeft() && !"HashMapStateBackend".equals(backendName)) {

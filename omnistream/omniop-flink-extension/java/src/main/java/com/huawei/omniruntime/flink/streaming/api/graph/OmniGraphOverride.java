@@ -333,24 +333,6 @@ public final class OmniGraphOverride {
             return false;
         }
 
-        // revert window operator when parallelism > 1
-        boolean containsWindowOp = false;
-        for (StreamNode node : chainedNode) {
-            String opSimpleName = extractOperatorName(node.getOperatorName());
-            if (WINDOW_OP_NAMES.contains(opSimpleName)) {
-                containsWindowOp = true;
-                break;
-            }
-        }
-
-        int vertexParallelism = jobVertex.getParallelism();
-        if (containsWindowOp && vertexParallelism > 1) {
-            LOG.info("validateVertexChainInfoForOmniTask: rollback vertex ID {} "
-                            + "because it contains window operator with parallelism {} > 1",
-                    vertexID, vertexParallelism);
-            return false;
-        }
-
         // set jobType, taskType, operatorType for each StreamConfig
         for (int i = 0; i < operatorTypes.size(); i++) {
             for (Map.Entry<Integer, OperatorType> entry : operatorTypes.get(i).entrySet()) {

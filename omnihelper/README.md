@@ -287,6 +287,15 @@ tar -zxvf omnihelper_release_x86.tar.gz # x86架构
 > 注意：若自定义函数与spark内置函数同名，优先识别为自定义函数。
 
 
+### 报告参数说明<a name="ZH-CN_TOPIC_0000002515658378"></a>
+
+
+Omni不支持的表达式/内置函数的识别中，Input列默认表示函数的输入参数类型，以下为特殊参数说明：
+
+（1）cast函数，Input列表示源参数类型和目标参数类型，例如cast(c_int as long)，返回源参数c_int的类型和目标参数类型long
+
+（2）if、case函数：Input列表示结果的参数类型，例如if(a==1) 0 else 1，返回结果0的类型 a
+
 
 ## 安全声明<a name="ZH-CN_TOPIC_0000002547265321"></a>
 

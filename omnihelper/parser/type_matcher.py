@@ -95,6 +95,8 @@ class TypeMatcher:
         for param in params:
             param_type = TypeMatcher.analyse_function_param_type(param, param_type_mapping, event,
                                                                  function_builder, alias_map, depth + 1)
+            if func_name in [FunctionEnum.SPLIT.value, FunctionEnum.CONCAT.value] and param == "":
+                param_type = TypeEnum.STRING.value
             input_type.append(param_type)
 
         if func_name in PREDICATE_EXPR:
@@ -362,7 +364,8 @@ class TypeMatcher:
                 if filtered:
                     # 匹配到函数名相同，参数名最长的pair
                     filtered_pair = max(filtered, key=lambda x:len("".join(x["params"])))
-                    nested_function_type = filtered_pair.get("return_type", TypeEnum.NESTED_FUNCTIONS.value)
+                    if filtered_pair.get("return_type") not in NOT_SUPPORTED_TYPE:
+                        nested_function_type = filtered_pair.get("return_type", TypeEnum.NESTED_FUNCTIONS.value)
         else:
             # 如果原始参数是表达式
             for pair in pairs:

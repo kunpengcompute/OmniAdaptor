@@ -23,31 +23,33 @@ class ExcelWriterWithStyle:
 
     def __init__(self):
         # 定义表头结构（使用字典结构更灵活）
-        # main：主标题  sub:副标题  merge_start:该部分合并起始点  need_merged_column 需要合并项 show_detail 展示算子细节
+        # main：主标题  sub:副标题  merge_start:该部分合并起始点  merged_op_column 同名算子合并项
+        # merged_func_column 同名函数合并项 show_detail 展示算子细节
         self.headers = [
             {'main': 'ApplicationID+SQL ID', "column_width": 35},
             {'main': 'SQL Hash', "column_width": 10},
             {'main': 'Omni不支持的算子', 'sub': '名称', 'merge_start': self.DEFAULT_VALUE,
              "column_width": 20},
-            {'main': 'Omni不支持的算子', 'sub': 'Input', "column_width": 35, "need_merged_column": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的算子', 'sub': 'Output', "column_width": 35, "need_merged_column": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的算子', 'sub': '出现频次', "column_width": 10, "need_merged_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的算子', 'sub': 'Input', "column_width": 35, "merged_op_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的算子', 'sub': 'Output', "column_width": 35, "merged_op_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的算子', 'sub': '出现频次', "column_width": 10, "merged_op_column": self.DEFAULT_VALUE},
             {'main': 'Omni不支持的算子', 'sub': '运行时间（s）', "column_width": 35,
-             "need_merged_column": self.DEFAULT_VALUE},
+             "merged_op_column": self.DEFAULT_VALUE},
             {'main': 'Omni不支持的算子', 'sub': '文件大小（MiB）', "column_width": 15,
-             "need_merged_column": self.DEFAULT_VALUE, "show_details": self.DEFAULT_VALUE},
+             "merged_op_column": self.DEFAULT_VALUE, "show_details": self.DEFAULT_VALUE},
             {'main': 'Omni不支持的算子', 'sub': 'Output rows', "column_width": 15,
-             "need_merged_column": self.DEFAULT_VALUE, "show_details": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': '名称', 'merge_start': self.DEFAULT_VALUE,
-             "column_width": 20, "need_merged_column": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': 'Input', "column_width": 35, "need_merged_column": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': '嵌套内容', "column_width": 40, "need_merged_column": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': '出现频次', "column_width": 10, "need_merged_column": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': '是否udf', "column_width": 10, "need_merged_column": self.DEFAULT_VALUE},
+             "merged_op_column": self.DEFAULT_VALUE, "show_details": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': '名称', 'merge_start': self.DEFAULT_VALUE, "column_width": 20,
+             "merged_func_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': 'Input', "column_width": 35, "merged_func_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': '嵌套内容', "column_width": 40, "merged_func_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': '出现频次', "column_width": 10, "merged_func_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': '是否udf', "column_width": 10, "merged_func_column": self.DEFAULT_VALUE},
             {'main': 'Spark版本', "column_width": 15},
             {'main': '异常信息/备注', "column_width": 30}
         ]
-        self.need_merged_column = []
+        self.merged_op_column = []
+        self.merged_func_column = []
 
         # 定义样式
         self._init_styles()
@@ -103,13 +105,30 @@ class ExcelWriterWithStyle:
                 # 设置标题及列宽
                 self._write_headers(worksheet)
 
+                # 缓存数据，避免合并后后破坏判断
+                data_cache = {}
+                for r in range(3, worksheet.max_row + 1):
+                    for c in range(1, worksheet.max_column + 1):
+                        data_cache[(r, c)] = worksheet.cell(row=r, column=c).value
+
+                # 合并算子单元格
+                self.merge_cells_full(
+                    worksheet,
+                    data_cache,
+                    start_row=3,
+                    independent_cols=[1, 2, 3],
+                    linked_cols=self.merged_op_column,
+                    control_cols=[1, 2, 3]
+                )
+
                 # 合并相同值的单元格
                 self.merge_cells_full(
                     worksheet,
+                    data_cache,
                     start_row=3,
-                    independent_cols=[1, 2, 3],
-                    linked_cols=self.need_merged_column,
-                    control_cols=[1, 2, 3]
+                    independent_cols=[10],
+                    linked_cols=self.merged_func_column,
+                    control_cols=[1, 2, 3, 10]
                 )
 
             print(f"[SUCCESS] Analysis report has been saved to: {output_excel_path}")
@@ -151,9 +170,13 @@ class ExcelWriterWithStyle:
                 merge_end = len([i for i in self.headers if i['main'] == item['main']]) + col_idx - 1
                 worksheet.merge_cells(start_row=1, start_column=col_idx, end_row=1, end_column=merge_end)
 
-            # 如果表头项指定了需要合并操作的列，则将该列索引添加到need_merged_column列表中
-            if 'need_merged_column' in item and item['need_merged_column']:
-                self.need_merged_column.append(col_idx)
+            # 如果表头项指定了需要合并操作的列，则将该列索引添加到merged_op_column列表中
+            if 'merged_op_column' in item and item['merged_op_column']:
+                self.merged_op_column.append(col_idx)
+
+            # 如果表头项指定了需要合并操作的列，则将该列索引添加到merged_func_column列表中
+            if 'merged_func_column' in item and item['merged_func_column']:
+                self.merged_func_column.append(col_idx)
 
     def _apply_styles(self, worksheet, df):
         """应用样式（自动处理所有列）"""
@@ -246,7 +269,7 @@ class ExcelWriterWithStyle:
                 cell.alignment = self.center_alignment
                 cell.border = self.thin_border
 
-    def merge_cells_full(self, ws, start_row=3, independent_cols=None, linked_cols=None, control_cols=None):
+    def merge_cells_full(self, ws, data_cache, start_row=3, independent_cols=None, linked_cols=None, control_cols=None):
         """
         对 Excel 工作表进行多列合并
 
@@ -262,12 +285,6 @@ class ExcelWriterWithStyle:
         control_cols = control_cols or []
 
         max_row = ws.max_row
-
-        # 缓存数据，避免合并后后破坏判断
-        data_cache = {}
-        for r in range(start_row, max_row + 1):
-            for c in range(1, ws.max_column + 1):
-                data_cache[(r, c)] = ws.cell(row=r, column=c).value
 
         # 执行独立列合并
         self.process_merge(ws, data_cache, start_row, max_row, independent_cols, is_linked=False)

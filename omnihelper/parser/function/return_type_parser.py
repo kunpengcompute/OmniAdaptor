@@ -11,8 +11,8 @@
 import json
 import os
 
-from omnihelper.enum.function_enum import FunctionEnum
-from omnihelper.enum.type_enum import TypeEnum
+from omnihelper.constants.function_enum import FunctionEnum
+from omnihelper.constants.type_enum import TypeEnum
 from omnihelper.util.common_util import CommonUtil
 from omnihelper.util.func_util import replace_predicate_partition
 

@@ -11,8 +11,8 @@
 import copy
 import re
 
-from omnihelper.enum.function_enum import FunctionEnum
-from omnihelper.enum.type_enum import TypeEnum
+from omnihelper.constants.function_enum import FunctionEnum
+from omnihelper.constants.type_enum import TypeEnum
 from omnihelper.parser.function.expr_tree import ExprTree
 from omnihelper.parser.function.return_type_parser import ReturnTypeParser
 from omnihelper.util.common_util import CommonUtil

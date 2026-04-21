@@ -12,7 +12,7 @@ import os
 import re
 import sys
 
-from omnihelper.enum.spark_type_enum import SparkTypeEnum
+from omnihelper.constants.spark_type_enum import SparkTypeEnum
 from omnihelper.parser.function.function_builder import FunctionBuilder
 
 

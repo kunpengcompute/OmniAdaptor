@@ -94,6 +94,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("OR", SpecialExprType.OR);
         specialOperatorMap.put("IF", SpecialExprType.IF);
         specialOperatorMap.put("JSON_VALUE", SpecialExprType.JSON_VALUE);
+        specialOperatorMap.put("JSON_QUERY", SpecialExprType.JSON_QUERY);
         specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);
     }
 
@@ -176,6 +177,7 @@ public class RexNodeUtil {
         OR,
         IF,
         JSON_VALUE,
+        JSON_QUERY,
         JSON_SPLIT
     }
 
@@ -326,6 +328,18 @@ public class RexNodeUtil {
                         
                         jsonMap.put("arguments", jsonArgs);
                         LOG.info("The JSON_VALUE expression is {} ", rexCall.toString());
+                        break;
+                    case JSON_QUERY:
+                        jsonMap.put("exprType", "FUNCTION");
+                        setDataType(rexCall, jsonMap, "returnType");
+                        jsonMap.put("function_name", "json_query");
+
+                        List<Map<String, Object>> queryArgs = new ArrayList<>();
+                        queryArgs.add(buildJsonMap(operands.get(0)));
+                        queryArgs.add(buildJsonMap(operands.get(1)));
+
+                        jsonMap.put("arguments", queryArgs);
+                        LOG.info("The JSON_QUERY expression is {} ", rexCall.toString());
                         break;
                     case JSON_SPLIT:
                         // JsonSplit is a ScalarFunction: eval(String input) -> String

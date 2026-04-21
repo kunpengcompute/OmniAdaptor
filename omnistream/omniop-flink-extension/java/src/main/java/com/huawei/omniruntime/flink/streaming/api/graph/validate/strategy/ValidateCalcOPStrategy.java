@@ -302,6 +302,27 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                     }
                 }
 
+                if ("json_query".equals(functionName)) {
+                    Object argumentsObj = exprMap.get("arguments");
+                    if (!(argumentsObj instanceof List)) {
+                        LOG.info("ERROR: json_query arguments is not a list");
+                        return false;
+                    }
+                    List<?> args = (List<?>) argumentsObj;
+                    if (args.size() != 2) {
+                        LOG.info("ERROR: json_query expects exactly 2 arguments, but got {}", args.size());
+                        return false;
+                    }
+                    Object returnTypeVal = exprMap.get("returnType");
+                    if (returnTypeVal instanceof Integer) {
+                        int retType = (Integer) returnTypeVal;
+                        if (retType != 15 && retType != 16) {
+                            LOG.info("ERROR: json_query expects STRING return type, but got typeId {}", retType);
+                            return false;
+                        }
+                    }
+                }
+
                 return validateReturnTypeAndArguments(exprMap, inputSize);
 
             case "SWITCH_GENERAL":

@@ -70,10 +70,18 @@ def _create_flink_parser(subparsers):
     )
 
     flink_parser.add_argument(
+        '--jobid', '-j',
+        type=str,
+        nargs='*',
+        default=None,
+        help='Flink job IDs (optional). Multiple job IDs can be provided. If not provided, will try to get from API.'
+    )
+
+    flink_parser.add_argument(
         '--interval', '-i',
         type=int,
         default=100,
-        help='API call interval in milliseconds (default: 1000)'
+        help='API call interval in milliseconds (default: 100)'
     )
 
     flink_parser.add_argument(
@@ -119,7 +127,9 @@ Usage Examples:
 
   Flink Log Analysis:
     ./omnihelper flink --url http://127.0.0.1:8081
-    ./omnihelper flink -u https://127.0.0.1:8081 -o ./output_dir
+    ./omnihelper flink -u https://example.com -o ./output_dir
+    ./omnihelper flink --url http://127.0.0.1:8081 --jobid job1 job2 job3
+    ./omnihelper flink -u http://127.0.0.1:8081 -j job1 job2 -o ./output_dir
 """
     )
 
@@ -141,9 +151,10 @@ Usage Examples:
         print("-" * 60)
     elif args.command == 'flink':
         flink_log_parser = FlinkLogParser(args)
-        flink_log_parser.analyze_flink_logs()
-        flink_log_parser.generate_report()
-        print("-" * 60)
+        if flink_log_parser.args_valid:
+            flink_log_parser.analyze_flink_logs()
+            flink_log_parser.generate_report()
+            print("-" * 60)
 
 
 if __name__ == "__main__":

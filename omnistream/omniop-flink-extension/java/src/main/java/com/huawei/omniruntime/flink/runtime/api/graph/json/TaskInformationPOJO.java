@@ -15,7 +15,10 @@ import static org.apache.flink.util.Preconditions.checkState;
 
 import com.huawei.omniruntime.flink.runtime.api.graph.json.configuration.StreamConfigHelper;
 
+import org.apache.flink.contrib.streaming.state.RocksDBMemoryConfiguration;
+import org.apache.flink.core.memory.ManagedMemoryUseCase;
 import org.apache.flink.runtime.executiongraph.TaskInformation;
+import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.taskexecutor.TaskManagerConfiguration;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -56,7 +59,14 @@ public class TaskInformationPOJO {
 
     private String stateBackend;
 
+    // rocksdb related config
     private String[] rocksdbStorePaths = new String[0];
+    private RocksDBMemoryConfiguration rocksDBMemoryConfiguration = new RocksDBMemoryConfiguration();
+    private int numberOfTransferThreads = 4;
+    private double stateBackendManagedMemoryFraction;
+    private long stateBackendManagedMemorySize;
+    private long cacheAddr;
+    private long writeBufferManagerAddr;
 
     private int taskType;
 
@@ -64,27 +74,24 @@ public class TaskInformationPOJO {
 
     private ExecutionCheckpointConfigPOJO executionCheckpointConfig;
 
-    private int numberOfTransferThreads = 4;
-
     private String tmpWorkingDirectory = "";
 
-    // Default constructor
     private String localRecoveryConfig = "";
 
+    // Default constructor
     public TaskInformationPOJO() {
     }
 
     public TaskInformationPOJO(TaskInformation taskInformation, ClassLoader cl, int indexOfSubtask,
-        TaskManagerConfiguration taskManagerConfiguration) {
+                               TaskManagerConfiguration taskManagerConfiguration, MemoryManager memoryManager) throws Exception {
         this.taskName = taskInformation.getTaskName();
         this.numberOfSubtasks = taskInformation.getNumberOfSubtasks();
         this.maxNumberOfSubtasks = taskInformation.getMaxNumberOfSubtasks();
         this.indexOfSubtask = indexOfSubtask;
         StreamConfig tempStreamConfig = new StreamConfig(taskInformation.getTaskConfiguration());
-        getBackend(tempStreamConfig);
         this.streamConfig = new StreamConfigPOJO(tempStreamConfig, cl);
-        LOG.info("before OperatorChainDescriptorHelper.retrieveOperatorChain");
-        LOG.info("after OperatorChainDescriptorHelper.retrieveOperatorChain");
+
+        getStateBackendConfig(tempStreamConfig, taskManagerConfiguration, cl, memoryManager);
 
         this.chainedConfig = new ArrayList<>(StreamConfigHelper.retrieveChainedConfig(tempStreamConfig, cl).values());
         getCheckpointConfig(tempStreamConfig);
@@ -103,32 +110,43 @@ public class TaskInformationPOJO {
         this.chainedConfig = chainedConfig;
     }
 
-    private void getBackend(StreamConfig tempStreamConfig) {
+    private void getStateBackendConfig(StreamConfig tempStreamConfig, TaskManagerConfiguration taskManagerConfiguration,
+                                       ClassLoader cl, MemoryManager memoryManager) throws Exception {
         StateBackend backend = tempStreamConfig.getStateBackend(Thread.currentThread().getContextClassLoader());
         stateBackend = backend == null ? "HashMapStateBackend" : backend.getName();
         if (!stateBackend.equals("EmbeddedRocksDBStateBackend")) {
             return;
         }
-        try {
-            Class<?> backendClass = backend.getClass();
-            Field[] fields = backendClass.getDeclaredFields();
-            for (Field field : fields) {
-                String name = field.getName();
-                if (!field.isAccessible()) {
-                    field.setAccessible(true);
-                }
-                if (name.equals("localRocksDbDirectories")) {
-                    Object value = field.get(backend);
-                    File[] localRocksDbDirectories = (File[]) value;
-                    rocksdbStorePaths = getDbStoragePaths(localRocksDbDirectories);
-                    continue;
-                }
-                if (name.equals("numberOfTransferThreads")) {
-                    numberOfTransferThreads = (int) field.get(backend);
-                }
+        Class<?> backendClass = backend.getClass();
+        Field[] fields = backendClass.getDeclaredFields();
+        for (Field field : fields) {
+            String name = field.getName();
+            if (!field.isAccessible()) {
+                field.setAccessible(true);
             }
-        } catch (IllegalAccessException ex) {
-            LOG.warn("get rocksdb storePath failed", ex);
+
+            if (name.equals("localRocksDbDirectories")) {
+                Object value = field.get(backend);
+                File[] localRocksDbDirectories = (File[]) value;
+                rocksdbStorePaths = getDbStoragePaths(localRocksDbDirectories);
+            } else if (name.equals("numberOfTransferThreads")) {
+                numberOfTransferThreads = (int) field.get(backend);
+            } else if (name.equals("memoryConfiguration")) {
+                rocksDBMemoryConfiguration = (RocksDBMemoryConfiguration) field.get(backend);
+            }
+        }
+
+        stateBackendManagedMemoryFraction = tempStreamConfig.getManagedMemoryFractionOperatorUseCaseOfSlot(
+                ManagedMemoryUseCase.STATE_BACKEND,
+                taskManagerConfiguration.getConfiguration(),
+                cl
+        );
+
+        if (stateBackendManagedMemoryFraction == 0.0) {
+            LOG.warn("stateBackendManagedMemoryFraction is 0, maybe state backend {} is not used in task {}.",
+                    stateBackend, taskName);
+        } else {
+            stateBackendManagedMemorySize = memoryManager.computeMemorySize(stateBackendManagedMemoryFraction);
         }
     }
 
@@ -223,6 +241,54 @@ public class TaskInformationPOJO {
         this.rocksdbStorePaths = rocksdbStorePaths;
     }
 
+    public int getNumberOfTransferThreads() {
+        return numberOfTransferThreads;
+    }
+
+    public void setNumberOfTransferThreads(int numberOfTransferThreads) {
+        this.numberOfTransferThreads = numberOfTransferThreads;
+    }
+
+    public RocksDBMemoryConfiguration getRocksDBMemoryConfiguration() {
+        return rocksDBMemoryConfiguration;
+    }
+
+    public void setRocksDBMemoryConfiguration(RocksDBMemoryConfiguration rocksDBMemoryConfiguration) {
+        this.rocksDBMemoryConfiguration = rocksDBMemoryConfiguration;
+    }
+
+    public double getStateBackendManagedMemoryFraction() {
+        return stateBackendManagedMemoryFraction;
+    }
+
+    public void setStateBackendManagedMemoryFraction(double stateBackendManagedMemoryFraction) {
+        this.stateBackendManagedMemoryFraction = stateBackendManagedMemoryFraction;
+    }
+
+    public double getStateBackendManagedMemorySize() {
+        return stateBackendManagedMemorySize;
+    }
+
+    public void setStateBackendManagedMemorySize(long stateBackendManagedMemorySize) {
+        this.stateBackendManagedMemorySize = stateBackendManagedMemorySize;
+    }
+
+    public long getWriteBufferManagerAddr() {
+        return writeBufferManagerAddr;
+    }
+
+    public void setWriteBufferManagerAddr(long writeBufferManagerAddr) {
+        this.writeBufferManagerAddr = writeBufferManagerAddr;
+    }
+
+    public long getCacheAddr() {
+        return cacheAddr;
+    }
+
+    public void setCacheAddr(long cacheAddr) {
+        this.cacheAddr = cacheAddr;
+    }
+
     public int getTaskType() {
         return taskType;
     }
@@ -246,14 +312,6 @@ public class TaskInformationPOJO {
         this.executionCheckpointConfig = executionCheckpointConfig;
     }
 
-    public int getNumberOfTransferThreads() {
-        return numberOfTransferThreads;
-    }
-
-    public void setNumberOfTransferThreads(int numberOfTransferThreads) {
-        this.numberOfTransferThreads = numberOfTransferThreads;
-    }
-
     public String getTmpWorkingDirectory() {
         return tmpWorkingDirectory;
     }
@@ -269,7 +327,7 @@ public class TaskInformationPOJO {
     public void setLocalRecoveryConfig(String localRecoveryConfig) {
         this.localRecoveryConfig = localRecoveryConfig;
     }
-    
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

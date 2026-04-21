@@ -36,6 +36,7 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.contrib.streaming.state.RocksDBSharedResources;
 import org.apache.flink.contrib.streaming.state.RocksDBStateUploader;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FileSystemSafetyNet;
@@ -85,6 +86,7 @@ import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.jobgraph.tasks.TaskInvokable;
 import org.apache.flink.runtime.jobgraph.tasks.TaskOperatorEventGateway;
 import org.apache.flink.runtime.memory.MemoryManager;
+import org.apache.flink.runtime.memory.OpaqueMemoryResource;
 import org.apache.flink.runtime.metrics.groups.InternalOperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorEvent;
@@ -203,6 +205,8 @@ public class OmniTask extends Task {
 
     // temporarily use public for easy access from OmniTaskWrapper
     public RuntimeEnvironment checkpointingEnv;
+
+    private OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources;
     
     /**
      * <b>IMPORTANT:</b> This constructor may not start any work that would need to be undone in the
@@ -367,6 +371,16 @@ public class OmniTask extends Task {
                 LOG.error("Error during metrics de-registration of task {} ({}).", taskNameWithSubtask, executionId,
                         t);
             }
+
+            // if rocksDBSharedResources was created in java, we need to close them
+            try {
+                if (rocksDBSharedResources != null) {
+                    rocksDBSharedResources.close();
+                }
+            } catch (Throwable t) {
+                LOG.error("Error during closing rocksDBSharedResources of task {} ({}).", taskNameWithSubtask, executionId, t);
+            }
+
             deleteNativeTask(nativeTaskRef);
         }
     }
@@ -1358,6 +1372,11 @@ public class OmniTask extends Task {
     public void setTaskOperatorGatewayWrapper(TaskOperatorGatewayWrapper taskOperatorGatewayWrapper) {
         this.taskOperatorGatewayWrapper = taskOperatorGatewayWrapper;
     }
+
+    public void setRocksDBSharedResources(OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources) {
+        this.rocksDBSharedResources = rocksDBSharedResources;
+    }
+
     private native long cancelTask(long nativeTaskRef);
     private native void abortCpp(long nativeTaskRef,long checkpointId,long latestCompletedCheckpointId);
     private native void completeCpp(long nativeTaskRef,long checkpointId, long isRunning);

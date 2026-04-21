@@ -42,6 +42,10 @@ import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.contrib.streaming.state.RocksDBMemoryConfiguration;
+import org.apache.flink.contrib.streaming.state.RocksDBOperationUtils;
+import org.apache.flink.contrib.streaming.state.RocksDBSharedResources;
+import org.apache.flink.core.memory.ManagedMemoryUseCase;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.blob.TaskExecutorBlobService;
 import org.apache.flink.runtime.checkpoint.CheckpointException;
@@ -61,6 +65,7 @@ import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.jobgraph.tasks.TaskOperatorEventGateway;
 import org.apache.flink.runtime.jobmaster.JobMasterId;
 import org.apache.flink.runtime.memory.MemoryManager;
+import org.apache.flink.runtime.memory.OpaqueMemoryResource;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.metrics.MetricNames;
 import org.apache.flink.runtime.metrics.groups.TaskManagerJobMetricGroup;
@@ -330,24 +335,18 @@ public class OmniTaskExecutor extends TaskExecutor {
             Collection<URL> requiredClasspaths = jobInformation.getRequiredClasspathURLs();
             UserCodeClassLoader codeClassLoader = createUserCodeClassloader(classLoaderHandle,
                 requiredJarFiles, requiredClasspaths);
+            MemoryManager memoryManager = taskSlotTable.getTaskMemoryManager(tdd.getAllocationId());
             Configuration conf = taskInformation.getTaskConfiguration();
             StreamConfig streamConfig = new StreamConfig(conf);
             StreamConfigPOJO streamConfigPOJO = new StreamConfigPOJO(streamConfig, codeClassLoader.asClassLoader());
-            LOG.info("StreamConfigPOJO is {}", streamConfigPOJO);
-            LOG.info("StreamConfigPOJO JSON is {}", JsonHelper.toJson(streamConfigPOJO));
 
             // task information pojo
             TaskInformationPOJO taskInformationPOJO = new TaskInformationPOJO(taskInformation,
-                codeClassLoader.asClassLoader(), task.getTaskInfo().getIndexOfThisSubtask(), taskManagerConfiguration);
-
-            LOG.info("TaskInformationPOJO is {}", taskInformationPOJO);
-            LOG.info("TaskInformationPOJO JSON is {}", JsonHelper.toJson(taskInformationPOJO));
+                codeClassLoader.asClassLoader(), task.getTaskInfo().getIndexOfThisSubtask(), taskManagerConfiguration, memoryManager);
 
             // job information POJO
             JobInformationPOJO jobInformationPOJO = new JobInformationPOJO(
                 jobInformation, codeClassLoader.asClassLoader());
-            LOG.info("JobInformationPOJO is {}", jobInformationPOJO);
-            LOG.info("JobInformationPOJO JSON is {}", JsonHelper.toJson(jobInformationPOJO));
 
             // tdd pojo
             TaskDeploymentDescriptorPOJO tddPojo = getTaskDeploymentDescriptorPOJO(tdd);
@@ -374,11 +373,42 @@ public class OmniTaskExecutor extends TaskExecutor {
                 getLocalRecoveryConfig(new TaskParam(tdd, tdd.getJobId(), taskInformation, jobInformation));
             taskInformationPOJO.setLocalRecoveryConfig(Objects.toString(localRecoveryConfig, ""));
 
-            OmniTaskWrapper omniTaskWrapper=new OmniTaskWrapper(task);
-            long nativeTaskAddress = submitTaskNativeWithCheckpointing(this.nativeTaskExecutorReference, JsonHelper.toJson(jobInformationPOJO),
-                    JsonHelper.toJson(taskInformationPOJO), JsonHelper.toJson(tddPojo), task.getTaskStateManagerWrapper(),omniTaskWrapper,task.getTaskOperatorGatewayWrapper());
-            ((OmniTask) task).bindNativeTask(nativeTaskAddress);
-            ((OmniTask) task).setJobType(JobType.fromValue(jobType));
+            OmniTaskWrapper omniTaskWrapper = new OmniTaskWrapper(task);
+
+            OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources = null;
+            try {
+                rocksDBSharedResources = allocateNativeRocksDBSharedResources(
+                        taskInformationPOJO,
+                        codeClassLoader.asClassLoader(),
+                        memoryManager,
+                        taskInformationPOJO.getRocksDBMemoryConfiguration()
+                );
+                if (rocksDBSharedResources != null) {
+                    taskInformationPOJO.setCacheAddr(rocksDBSharedResources.getResourceHandle().getCache().getNativeHandle());
+                    taskInformationPOJO.setWriteBufferManagerAddr(rocksDBSharedResources.getResourceHandle().getWriteBufferManager().getNativeHandle());
+                }
+            } catch (Throwable e) {
+                LOG.warn("Failed to create RocksDBSharedResources in JAVA, the RocksDBSharedResources is temporarily created in C++.", e);
+            }
+
+            String streamConfigPOJOJson = JsonHelper.toJson(streamConfigPOJO);
+            LOG.info("StreamConfigPOJO is {}", streamConfigPOJO);
+            LOG.info("StreamConfigPOJO JSON is {}", streamConfigPOJOJson);
+            String taskInformationPOJOJson = JsonHelper.toJson(taskInformationPOJO);
+            LOG.info("TaskInformationPOJO is {}", taskInformationPOJO);
+            LOG.info("TaskInformationPOJO JSON is {}", taskInformationPOJOJson);
+            String jobInformationPOJOJson = JsonHelper.toJson(jobInformationPOJO);
+            LOG.info("JobInformationPOJO is {}", jobInformationPOJO);
+            LOG.info("JobInformationPOJO JSON is {}", jobInformationPOJOJson);
+            String tddPojoJson = JsonHelper.toJson(tddPojo);
+            LOG.info("TaskDeploymentDescriptorPOJO is {}", tddPojo);
+            LOG.info("TaskDeploymentDescriptorPOJO JSON is {}", tddPojoJson);
+
+            long nativeTaskAddress = submitTaskNativeWithCheckpointing(this.nativeTaskExecutorReference, jobInformationPOJOJson,
+                    taskInformationPOJOJson, tddPojoJson, task.getTaskStateManagerWrapper(), omniTaskWrapper, task.getTaskOperatorGatewayWrapper());
+            task.bindNativeTask(nativeTaskAddress);
+            task.setJobType(JobType.fromValue(jobType));
+            task.setRocksDBSharedResources(rocksDBSharedResources);
         } else {
             log.info("Task {} is not an OmniTask, no need to create OmniTask.", task.getExecutionId());
         }
@@ -395,8 +425,6 @@ public class OmniTaskExecutor extends TaskExecutor {
         } else {
             LOG.warn("JobManagerTaskRestore is null in TDD");
         }
-        LOG.info("TaskDeploymentDescriptorPOJO is {}", tddPojo);
-        LOG.info("TaskDeploymentDescriptorPOJO JSON is {}", JsonHelper.toJson(tddPojo));
         return tddPojo;
     }
 
@@ -622,6 +650,33 @@ public class OmniTaskExecutor extends TaskExecutor {
             TaskStateManagerWrapper taskStateManagerWrapper,
             OmniTaskWrapper omniTaskWrapper,
             TaskOperatorGatewayWrapper taskOperatorGatewayWrapper);
+
+
+    private OpaqueMemoryResource<RocksDBSharedResources> allocateNativeRocksDBSharedResources(
+            TaskInformationPOJO taskInformationPOJO,
+            ClassLoader cl,
+            MemoryManager memoryManager,
+            RocksDBMemoryConfiguration rocksDBMemoryConfiguration
+    ) throws IOException {
+
+        if (!"EmbeddedRocksDBStateBackend".equals(taskInformationPOJO.getStateBackend()) || taskInformationPOJO.getStateBackendManagedMemoryFraction() == 0.0) {
+            return null;
+        }
+
+        OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources =
+                RocksDBOperationUtils.allocateSharedCachesIfConfigured(
+                        rocksDBMemoryConfiguration,
+                        memoryManager,
+                        taskInformationPOJO.getStateBackendManagedMemoryFraction(),
+                        LOG
+                );
+
+        if (rocksDBSharedResources == null) {
+            throw new IllegalArgumentException("rocksDBSharedResources is null, OmniStream not support. Please check the configuration.");
+        }
+
+        return rocksDBSharedResources;
+    }
 
 
     // ----------------------------------------------------------------------

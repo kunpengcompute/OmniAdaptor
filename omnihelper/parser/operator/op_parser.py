@@ -138,7 +138,7 @@ class OpParser:
                         if num_match:
                             nodes[node_id]['number_of_output_rows'] = int(num_match.group(1).replace(",", ""))
                     elif 'duration' in metric_content:
-                        dur_match = re.search(r'duration\s*,(.*?),\s*timing', metric_content)
+                        dur_match = re.search(r'\(\s*duration\s*,(.*?),\s*timing', metric_content)
                         if dur_match:
                             time_str = dur_match.group(1)
                             seconds = CommonUtil.parse_time_to_seconds(time_str)
@@ -234,6 +234,7 @@ class OpParser:
                             time_str_parts.append(cluster_time_str)
                 else:
                     total_seconds += node_info['duration_seconds']
+            total_seconds = round(total_seconds, 6)
             time_str_parts.append(f"{total_seconds} s")
 
             analysis_result.append(

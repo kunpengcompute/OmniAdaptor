@@ -11,7 +11,7 @@
 import re
 
 
-from omnihelper.enum.function_enum import FunctionEnum
+from omnihelper.constants.function_enum import FunctionEnum
 from omnihelper.util.func_util import extract_cast_param, strip_outer_parens
 
 # 在函数提取中需要排除的表达式

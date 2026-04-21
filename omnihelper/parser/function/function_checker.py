@@ -10,7 +10,7 @@
 """
 from enum import Enum
 
-from omnihelper.enum.function_enum import FunctionEnum
+from omnihelper.constants.function_enum import FunctionEnum
 from omnihelper.parser.type_matcher import TypeEnum, TypeMatcher, NOT_SUPPORTED_TYPE
 
 

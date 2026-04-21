@@ -13,7 +13,7 @@ class LogParserTestCase(unittest.TestCase):
                 }
             ]
         }
-        physical_plan = ("(6) LogicalRelation"
+        physical_plan = ("(6) LogicalRelation\n"
                          "Arguments: orc, [c_chain#0, user_id#1], `test_db`.`table1`, "
                          "org.apache.hadoop.hive.ql.io.orc.OrcSerde, false")
         column_type = LogParser.get_column_type(table_schema, physical_plan)

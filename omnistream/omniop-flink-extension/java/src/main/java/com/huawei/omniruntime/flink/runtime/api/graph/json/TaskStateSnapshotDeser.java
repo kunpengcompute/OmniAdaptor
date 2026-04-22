@@ -26,6 +26,7 @@ import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.state.*;
 import org.apache.flink.runtime.state.DirectoryStateHandle;
 import org.apache.flink.runtime.state.KeyGroupRangeOffsets;
+import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.KeyGroupsSavepointStateHandle;
 import org.apache.flink.runtime.state.IncrementalKeyedStateHandle;
 import org.apache.flink.runtime.state.IncrementalLocalKeyedStateHandle;
@@ -273,7 +274,8 @@ public class TaskStateSnapshotDeser {
                         stateHandleId
                 );
                 managedKeyedState.add(flinkHandle);
-            } else if ("KeyGroupsSavepointStateHandle".equals(handleType)) {
+            } else if ("KeyGroupsSavepointStateHandle".equals(handleType)
+                    || "KeyGroupsStateHandle".equals(handleType)) {
                 KeyGroupRange keyGroupRange = parseKeyGroupRange(handleNode.get("groupRangeOffsets").get("keyGroupRange"));
                 JsonNode offsetsNode = handleNode.get("groupRangeOffsets").get("offsets");
 
@@ -283,8 +285,13 @@ public class TaskStateSnapshotDeser {
                 }
                 KeyGroupRangeOffsets keyGroupRangeOffsets = new KeyGroupRangeOffsets(keyGroupRange, offsets);
                 StreamStateHandle streamStateHandle = parseStreamStateHandle(handleNode.get("streamStateHandle"));
-                KeyGroupsSavepointStateHandle flinkHandle = new KeyGroupsSavepointStateHandle(keyGroupRangeOffsets, streamStateHandle);
-                managedKeyedState.add(flinkHandle);
+                if ("KeyGroupsSavepointStateHandle".equals(handleType)) {
+                    KeyGroupsSavepointStateHandle flinkHandle = new KeyGroupsSavepointStateHandle(keyGroupRangeOffsets, streamStateHandle);
+                    managedKeyedState.add(flinkHandle);
+                } else {
+                    KeyGroupsStateHandle flinkHandle = new KeyGroupsStateHandle(keyGroupRangeOffsets, streamStateHandle);
+                    managedKeyedState.add(flinkHandle);
+                }
             }
         }
     }
@@ -546,7 +553,36 @@ public class TaskStateSnapshotDeser {
         ArrayNode managedKeyedStateNode = serializeStateObjectCollection(managedKeyedState);
         operatorStateNode.set("managedKeyedState", managedKeyedStateNode);
 
+        // 序列化inputChannelState (空集合也要序列化，C++端需要该字段)
+        ArrayNode inputChannelStateNode = factory.arrayNode();
+        inputChannelStateNode.add("org.apache.flink.runtime.checkpoint.StateObjectCollection");
+        inputChannelStateNode.add(factory.arrayNode());
+        operatorStateNode.set("inputChannelState", inputChannelStateNode);
+
+        // 序列化resultSubpartitionState
+        ArrayNode resultSubpartitionStateNode = factory.arrayNode();
+        resultSubpartitionStateNode.add("org.apache.flink.runtime.checkpoint.StateObjectCollection");
+        resultSubpartitionStateNode.add(factory.arrayNode());
+        operatorStateNode.set("resultSubpartitionState", resultSubpartitionStateNode);
+
+        // 序列化inputRescalingDescriptor
+        operatorStateNode.set("inputRescalingDescriptor", serializeNoRescaleDescriptor());
+
+        // 序列化outputRescalingDescriptor
+        operatorStateNode.set("outputRescalingDescriptor", serializeNoRescaleDescriptor());
+
         return operatorStateNode;
+    }
+
+    private static ObjectNode serializeNoRescaleDescriptor() {
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ObjectNode node = factory.objectNode();
+        node.put("@class", "org.apache.flink.runtime.checkpoint.InflightDataRescalingDescriptor");
+        ArrayNode descriptors = factory.arrayNode();
+        descriptors.add("[Lorg.apache.flink.runtime.checkpoint.InflightDataGateOrPartitionRescalingDescriptor;");
+        descriptors.add(factory.arrayNode());
+        node.set("gateOrPartitionDescriptors", descriptors);
+        return node;
     }
 
     private static ArrayNode serializeStateObjectCollection(StateObjectCollection<KeyedStateHandle> collection) {
@@ -572,12 +608,51 @@ public class TaskStateSnapshotDeser {
             serializeIncrementalLocalKeyedStateHandle((IncrementalLocalKeyedStateHandle) keyedStateHandle, handleNode);
         } else if (keyedStateHandle instanceof IncrementalRemoteKeyedStateHandle) {
             serializeIncrementalRemoteKeyedStateHandle((IncrementalRemoteKeyedStateHandle) keyedStateHandle, handleNode);
-        } else if (keyedStateHandle instanceof DirectoryKeyedStateHandle){
-            // 处理其他类型的KeyedStateHandle
+        } else if (keyedStateHandle instanceof DirectoryKeyedStateHandle) {
             serializeDirectoryKeyedStateHandle((DirectoryKeyedStateHandle) keyedStateHandle, handleNode);
+        } else if (keyedStateHandle instanceof KeyGroupsSavepointStateHandle) {
+            serializeKeyGroupsStateHandle((KeyGroupsSavepointStateHandle) keyedStateHandle,
+                "KeyGroupsSavepointStateHandle", handleNode);
+        } else if (keyedStateHandle instanceof KeyGroupsStateHandle) {
+            serializeKeyGroupsStateHandle((KeyGroupsStateHandle) keyedStateHandle,
+                "KeyGroupsStateHandle", handleNode);
+        } else {
+            LOG.warn("Unsupported KeyedStateHandle type: {}", keyedStateHandle.getClass().getName());
         }
 
         return handleNode;
+    }
+
+    private static void serializeKeyGroupsStateHandle(KeyGroupsStateHandle handle, String stateHandleName,
+                                                       ObjectNode handleNode) {
+        handleNode.put("@class", stateHandleName);
+        handleNode.put("stateHandleName", stateHandleName);
+
+        // 序列化 keyGroupRange
+        KeyGroupRange keyGroupRange = handle.getKeyGroupRange();
+        handleNode.set("keyGroupRange", serializeKeyGroupRange(keyGroupRange));
+
+        // 序列化 groupRangeOffsets
+        KeyGroupRangeOffsets groupRangeOffsets = handle.getGroupRangeOffsets();
+        ObjectNode groupRangeOffsetsNode = JsonNodeFactory.instance.objectNode();
+        groupRangeOffsetsNode.set("keyGroupRange", serializeKeyGroupRange(groupRangeOffsets.getKeyGroupRange()));
+        ArrayNode offsetsArray = JsonNodeFactory.instance.arrayNode();
+        for (int kg = keyGroupRange.getStartKeyGroup(); kg <= keyGroupRange.getEndKeyGroup(); kg++) {
+            offsetsArray.add(groupRangeOffsets.getKeyGroupOffset(kg));
+        }
+        groupRangeOffsetsNode.set("offsets", offsetsArray);
+        handleNode.set("groupRangeOffsets", groupRangeOffsetsNode);
+
+        // 序列化 stateHandle (StreamStateHandle)
+        StreamStateHandle streamStateHandle = handle.getDelegateStateHandle();
+        if (streamStateHandle != null) {
+            handleNode.set("stateHandle", serializeStreamStateHandle(streamStateHandle));
+        }
+
+        // 序列化 stateHandleId
+        ObjectNode stateHandleIdNode = JsonNodeFactory.instance.objectNode();
+        stateHandleIdNode.put("keyString", handle.getStateHandleId().getKeyString());
+        handleNode.set("stateHandleId", stateHandleIdNode);
     }
 
     public static void serializeDirectoryKeyedStateHandle(DirectoryKeyedStateHandle handle, ObjectNode handleNode) {

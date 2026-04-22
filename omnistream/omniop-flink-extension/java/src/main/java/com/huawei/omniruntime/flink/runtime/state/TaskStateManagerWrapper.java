@@ -17,7 +17,9 @@ import com.huawei.omniruntime.flink.runtime.metrics.exception.GeneralRuntimeExce
 import com.huawei.omniruntime.flink.runtime.taskmanager.OmniTask;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
+import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
+import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.state.TaskLocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
@@ -29,6 +31,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.util.Map;
 
 /**
  * TaskStateManagerWrapper
@@ -65,7 +68,11 @@ public class TaskStateManagerWrapper {
         CheckpointMetaData checkpointMetaData = deserializeCheckpointMetaData(checkpointMetaDataJson);
         CheckpointMetrics checkpointMetrics = deserializeCheckpointMetrics(checkpointMetricsJson);
 
-        LOG.debug("acknowledgedStateJson {}", acknowledgedStateJson);
+        // 改为 INFO 方便排查 OS-CP 上报后 state handle 是否真的进了 acknowledgedState。
+        LOG.info("[OS-CP] reportTaskStateSnapshots cp={} acknowledgedStateJson(len={})={}",
+                checkpointMetaData.getCheckpointId(),
+                acknowledgedStateJson == null ? 0 : acknowledgedStateJson.length(),
+                acknowledgedStateJson);
         LOG.debug("localStateJson {}", localStateJson);
 
         // temp mock impl
@@ -78,7 +85,21 @@ public class TaskStateManagerWrapper {
             localState = TaskStateSnapshotDeser.deserializeTaskStateSnapshot(localStateJson, getOmniTask(),
                 checkpointId);
         } catch (GeneralRuntimeException | JsonProcessingException e) {
+            LOG.error("[OS-CP] reportTaskStateSnapshots cp={} deserialize failed", checkpointId, e);
             throw new FlinkRuntimeException(e);
+        }
+        // 关键诊断：看每个 operator 的 managedKeyedState 数量，定位 state handle 是否被 Java 端静默丢弃。
+        if (acknowledgedState != null && acknowledgedState.getSubtaskStateMappings() != null) {
+            for (Map.Entry<OperatorID, OperatorSubtaskState> entry : acknowledgedState.getSubtaskStateMappings()) {
+                OperatorSubtaskState st = entry.getValue();
+                int mks = (st == null || st.getManagedKeyedState() == null) ? 0 : st.getManagedKeyedState().size();
+                int rks = (st == null || st.getRawKeyedState() == null) ? 0 : st.getRawKeyedState().size();
+                int mos = (st == null || st.getManagedOperatorState() == null) ? 0 : st.getManagedOperatorState().size();
+                LOG.info("[OS-CP] reportTaskStateSnapshots cp={} operator={} managedKeyedState={} rawKeyedState={} managedOperatorState={}",
+                        checkpointId, entry.getKey(), mks, rks, mos);
+            }
+        } else {
+            LOG.warn("[OS-CP] reportTaskStateSnapshots cp={} acknowledgedState is null OR has no subtaskStateMappings", checkpointId);
         }
         taskStateManager.reportTaskStateSnapshots(checkpointMetaData, checkpointMetrics, acknowledgedState, localState);
     }

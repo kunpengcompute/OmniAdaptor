@@ -49,6 +49,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.util.RexNodeUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.utils.JavaScalaConversionUtil;
+import org.apache.flink.table.planner.utils.TableConfigUtils;
 import org.apache.flink.table.runtime.operators.CodeGenOperatorFactory;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -58,6 +59,7 @@ import org.apache.flink.util.jackson.JacksonMapperFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -102,6 +104,9 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
     @JsonIgnore
     private final boolean retainHeader;
 
+    @JsonIgnore
+    private static ZoneId localTimeZone = null;
+
     protected CommonExecCalc(
             int id,
             ExecNodeContext context,
@@ -120,6 +125,10 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
         this.condition = condition;
         this.operatorBaseClass = checkNotNull(operatorBaseClass);
         this.retainHeader = retainHeader;
+    }
+
+    public static ZoneId getZoneId() {
+        return localTimeZone;
     }
 
     private String getExtraDescription(String oldDescription, Transformation<RowData> inputTransform) {
@@ -237,6 +246,7 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
                 substituteStreamOperator,
                 InternalTypeInfo.of(getOutputType()),
                 inputTransform.getParallelism());
+        localTimeZone = TableConfigUtils.getLocalTimeZone(config);
         String oldDescription = transformation.getDescription();
         transformation.setDescription(getExtraDescription(oldDescription, inputTransform));
         return transformation;

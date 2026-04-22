@@ -27,6 +27,7 @@ import org.apache.flink.FlinkVersion;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonCreator;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonIgnore;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonInclude;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
@@ -48,6 +49,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecSink;
 import org.apache.flink.table.planner.plan.nodes.exec.spec.DynamicTableSinkSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.util.RexNodeUtil;
+import org.apache.flink.table.planner.utils.TableConfigUtils;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.runtime.typeutils.TypeCheckUtils;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -57,6 +59,9 @@ import org.apache.flink.util.jackson.JacksonMapperFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -105,6 +110,9 @@ public class StreamExecSink extends CommonExecSink implements StreamExecNode<Obj
     @JsonProperty(FIELD_NAME_INPUT_UPSERT_KEY)
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     private final int[] inputUpsertKey;
+
+    @JsonIgnore
+    private static ZoneId localTimeZone = null;
 
     public StreamExecSink(
             ReadableConfig tableConfig,
@@ -203,6 +211,7 @@ public class StreamExecSink extends CommonExecSink implements StreamExecNode<Obj
                 upsertMaterialize,
                 inputUpsertKey);
 
+        localTimeZone = TableConfigUtils.getLocalTimeZone(config);
         String oldDescription = transformation.getDescription();
         transformation.setDescription(getExtraDescription(oldDescription, inputTransform));
 
@@ -260,6 +269,8 @@ public class StreamExecSink extends CommonExecSink implements StreamExecNode<Obj
         jsonMap.put("originDescription", oldDescription);
         jsonMap.put("inputTypes", inputTypeList);
         jsonMap.put("outputTypes", outputTypeList);
+        ZoneOffset offset = localTimeZone.getRules().getOffset(Instant.now());
+        jsonMap.put("zoneOffsetSeconds", offset.getTotalSeconds());
         String jsonString = "";
         try {
             jsonString = objectMapper.writeValueAsString(jsonMap);

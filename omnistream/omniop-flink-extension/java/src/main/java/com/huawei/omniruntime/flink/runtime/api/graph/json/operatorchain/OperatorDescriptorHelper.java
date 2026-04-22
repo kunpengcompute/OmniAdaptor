@@ -112,6 +112,20 @@ public class OperatorDescriptorHelper {
         fillBasicOperatorDescriptions(opDesc, operatorFactory, operatorConfig, userCodeClassloader);
         if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SimpleInputFormatOperatorFactory) {
             LOG.info("operatorFactory is {}", operatorFactory.getClass().getCanonicalName());
+            // Add format field for VALUES-based sources to prevent native crash
+            // when the source description is sent to OmniStream native code
+            String currentDesc = opDesc.getDescription();
+            if (currentDesc != null && !currentDesc.isEmpty()) {
+                try {
+                    org.json.JSONObject descJson = new org.json.JSONObject(currentDesc);
+                    if (!descJson.has("format")) {
+                        descJson.put("format", "values");
+                        opDesc.setDescription(descJson.toString());
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Failed to add format field to VALUES source description", e);
+                }
+            }
         } else if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SourceOperatorFactory) {
             handleSimpleSourceOperatorFactory(operatorFactory, userCodeClassloader, operatorConfig, opDesc);
         } else if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SimpleUdfStreamOperatorFactory

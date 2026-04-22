@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 public class RexNodeUtil {
     public static final Map<String, Integer> RexTypeToIdMap = new HashMap<>();
     public static final Map<String, SpecialExprType> specialOperatorMap = new HashMap<>();
+    public static final Map<String, SpecialExprType> udfOperatorMap = new HashMap<>();
     public static final Map<String, UnaryExprType> unaryOperatorMap = new HashMap<>();
     public static final Map<String, BinaryExprType> binaryOperatorMap = new HashMap<>();
     private static final Logger LOG = LoggerFactory.getLogger(RexNodeUtil.class);
@@ -90,6 +91,12 @@ public class RexNodeUtil {
         specialOperatorMap.put("OR", SpecialExprType.OR);
         specialOperatorMap.put("IF", SpecialExprType.IF);
         specialOperatorMap.put("JSON_VALUE", SpecialExprType.JSON_VALUE);
+        specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);
+    }
+
+    static {
+        // Map UDF registration names to their corresponding SpecialExprType
+        udfOperatorMap.put("jsontest", SpecialExprType.JSON_SPLIT);
     }
 
     static {
@@ -165,7 +172,8 @@ public class RexNodeUtil {
         AND,
         OR,
         IF,
-        JSON_VALUE
+        JSON_VALUE,
+        JSON_SPLIT
     }
 
 
@@ -250,8 +258,11 @@ public class RexNodeUtil {
                 jsonMap.put("operator", unaryType.name());
                 jsonMap.put("expr", childMap);
                 return jsonMap;
-            } else if (specialOperatorMap.containsKey(operator.getName())) {
-                SpecialExprType specialType = specialOperatorMap.get(operator.getName());
+            } else if (udfOperatorMap.containsKey(operator.getName())
+                    || specialOperatorMap.containsKey(operator.getName())) {
+                SpecialExprType specialType = udfOperatorMap.containsKey(operator.getName())
+                        ? udfOperatorMap.get(operator.getName())
+                        : specialOperatorMap.get(operator.getName());
                 switch (specialType){
                     case SWITCH: // This is the more general switch
                     case IF:
@@ -312,6 +323,41 @@ public class RexNodeUtil {
                         
                         jsonMap.put("arguments", jsonArgs);
                         LOG.info("The JSON_VALUE expression is {} ", rexCall.toString());
+                        break;
+                    case JSON_SPLIT:
+                        // JsonSplit is a ScalarFunction: eval(String input) -> String
+                        // Signature: 1 argument of type STRING, returns STRING
+                        // The UDF registration name is "jsontest", which is mapped to JSON_SPLIT here
+                        if (operands.size() != 1) {
+                            LOG.warn("JSON_SPLIT expects exactly 1 argument, but got {}", operands.size());
+                            jsonMap.put("exprType", "INVALID");
+                            break;
+                        }
+                        // Validate input type is STRING (VARCHAR)
+                        SqlTypeName inputType = operands.get(0).getType().getSqlTypeName();
+                        if (inputType != SqlTypeName.VARCHAR && inputType != SqlTypeName.CHAR) {
+                            LOG.warn("JSON_SPLIT expects STRING input, but got {}", inputType);
+                            jsonMap.put("exprType", "INVALID");
+                            break;
+                        }
+                        // Validate return type is STRING (VARCHAR)
+                        SqlTypeName jsonSplitReturnType = rexCall.getType().getSqlTypeName();
+                        if (jsonSplitReturnType != SqlTypeName.VARCHAR && jsonSplitReturnType != SqlTypeName.CHAR) {
+                            LOG.warn("JSON_SPLIT expects STRING return type, but got {}", jsonSplitReturnType);
+                            jsonMap.put("exprType", "INVALID");
+                            break;
+                        }
+
+                        jsonMap.put("exprType", "FUNCTION");
+                        setDataType(rexCall, jsonMap, "returnType");
+                        jsonMap.put("function_name", "json_split");
+
+                        List<Map<String, Object>> splitArgs = new ArrayList<>();
+                        splitArgs.add(buildJsonMap(operands.get(0))); // json array input
+
+                        jsonMap.put("arguments", splitArgs);
+
+                        LOG.info("The JSON_SPLIT expression is {} ", rexCall.toString());
                         break;
                     case SPLIT_INDEX:
                         jsonMap.put("exprType", "FUNCTION");

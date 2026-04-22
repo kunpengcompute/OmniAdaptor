@@ -37,6 +37,7 @@ import org.apache.flink.streaming.api.graph.StreamEdge;
 import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamNode;
 import org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator;
+import org.apache.flink.streaming.api.operators.SimpleInputFormatOperatorFactory;
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.SourceOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
@@ -663,7 +664,7 @@ public final class OmniGraphOverride {
     private static boolean validateOperatorByNameForOmniTask(String operatorName, String operatorDescription,
                                                              StreamOperatorFactory operatorFactory) {
         if (isSource(operatorName)) {
-            return validateSource(operatorDescription);
+            return validateSource(operatorDescription, operatorFactory);
         } else if (isSink(operatorName)) {
             return validateSink(operatorName, operatorFactory);
         } else if (isConstraintEnforcer(operatorName)) {
@@ -720,8 +721,14 @@ public final class OmniGraphOverride {
         return "JsonRowDataSerializationSchema".equals(valueSerializationSchema.getClass().getSimpleName());
     }
 
-    private static boolean validateSource(String operatorDescription) {
+    private static boolean validateSource(String operatorDescription, StreamOperatorFactory operatorFactory) {
         if (!isSourceSupportNative) {
+            return false;
+        }
+        // VALUES-based sources (SimpleInputFormatOperatorFactory) are not supported
+        // in native SQL execution because OmniStream does not handle them
+        if (operatorFactory instanceof SimpleInputFormatOperatorFactory) {
+            LOG.info("validateSource: VALUES-based source (SimpleInputFormatOperatorFactory) is not supported for native execution");
             return false;
         }
         if (!operatorDescription.contains("originDescription")) {

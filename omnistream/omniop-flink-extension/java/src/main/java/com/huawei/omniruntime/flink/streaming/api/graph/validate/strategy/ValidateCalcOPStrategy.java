@@ -278,6 +278,30 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                     return false;
                 }
 
+                // Validate json_split function signature: 1 STRING argument, STRING return type
+                String functionName = (String) exprMap.get("function_name");
+                if ("json_split".equals(functionName)) {
+                    Object argumentsObj = exprMap.get("arguments");
+                    if (!(argumentsObj instanceof List)) {
+                        LOG.info("ERROR: json_split arguments is not a list");
+                        return false;
+                    }
+                    List<?> args = (List<?>) argumentsObj;
+                    if (args.size() != 1) {
+                        LOG.info("ERROR: json_split expects exactly 1 argument, but got {}", args.size());
+                        return false;
+                    }
+                    // Validate return type is VARCHAR (15) or CHAR (16)
+                    Object returnTypeVal = exprMap.get("returnType");
+                    if (returnTypeVal instanceof Integer) {
+                        int retType = (Integer) returnTypeVal;
+                        if (retType != 15 && retType != 16) { // 15=VARCHAR, 16=CHAR
+                            LOG.info("ERROR: json_split expects STRING return type, but got typeId {}", retType);
+                            return false;
+                        }
+                    }
+                }
+
                 return validateReturnTypeAndArguments(exprMap, inputSize);
 
             case "SWITCH_GENERAL":

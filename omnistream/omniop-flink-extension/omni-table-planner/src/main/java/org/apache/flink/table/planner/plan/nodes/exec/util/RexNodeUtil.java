@@ -525,18 +525,6 @@ public class RexNodeUtil {
                         if (!argMap1.getOrDefault("dataType", 2).equals(2)) {
                             argMap1.put("value", "INVALID");
                         }
-                        if (operands.get(0).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
-                            jsonMap.put("function_name", "from_unixtime_with_tz");
-                            Map<String, Object> argMap3 = new LinkedHashMap<>();
-                            argMap3.put("dataType", 2);
-                            argMap3.put("exprType", "LITERAL");
-                            argMap3.put("isNull", false);
-                            ZoneOffset offset = CommonExecCalc.getZoneId().getRules().getOffset(Instant.now());
-                            argMap3.put("value", offset.getTotalSeconds());
-                            argumentsList.add(argMap3);
-                        } else {
-                            jsonMap.put("function_name", "from_unixtime_without_tz");
-                        }
                         argMap1.put("dataType", 2);
                         argumentsList.add(argMap1);
                         Map<String, Object> argMap2 = buildJsonMap(operands.get(1));
@@ -548,6 +536,18 @@ public class RexNodeUtil {
                             argMap2.put("value", "%H:%M");
                         } else {
                             argMap2.put("value", "INVALID");
+                        }
+                        if (operands.get(0).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+                            jsonMap.put("function_name", "from_unixtime_with_tz");
+                            Map<String, Object> argMap3 = new LinkedHashMap<>();
+                            argMap3.put("dataType", 2);
+                            argMap3.put("exprType", "LITERAL");
+                            argMap3.put("isNull", false);
+                            ZoneOffset offset = CommonExecCalc.getZoneId().getRules().getOffset(Instant.now());
+                            argMap3.put("value", offset.getTotalSeconds());
+                            argumentsList.add(argMap3);
+                        } else {
+                            jsonMap.put("function_name", "from_unixtime_without_tz");
                         }
                         jsonMap.put("arguments", argumentsList);
                         break;

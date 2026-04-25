@@ -375,22 +375,6 @@ public class OmniTaskExecutor extends TaskExecutor {
 
             OmniTaskWrapper omniTaskWrapper = new OmniTaskWrapper(task);
 
-            OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources = null;
-            try {
-                rocksDBSharedResources = allocateNativeRocksDBSharedResources(
-                        taskInformationPOJO,
-                        codeClassLoader.asClassLoader(),
-                        memoryManager,
-                        taskInformationPOJO.getRocksDBMemoryConfiguration()
-                );
-                if (rocksDBSharedResources != null) {
-                    taskInformationPOJO.setCacheAddr(rocksDBSharedResources.getResourceHandle().getCache().getNativeHandle());
-                    taskInformationPOJO.setWriteBufferManagerAddr(rocksDBSharedResources.getResourceHandle().getWriteBufferManager().getNativeHandle());
-                }
-            } catch (Throwable e) {
-                LOG.warn("Failed to create RocksDBSharedResources in JAVA, the RocksDBSharedResources is temporarily created in C++.", e);
-            }
-
             String streamConfigPOJOJson = JsonHelper.toJson(streamConfigPOJO);
             LOG.info("StreamConfigPOJO is {}", streamConfigPOJO);
             LOG.info("StreamConfigPOJO JSON is {}", streamConfigPOJOJson);
@@ -408,7 +392,6 @@ public class OmniTaskExecutor extends TaskExecutor {
                     taskInformationPOJOJson, tddPojoJson, task.getTaskStateManagerWrapper(), omniTaskWrapper, task.getTaskOperatorGatewayWrapper());
             task.bindNativeTask(nativeTaskAddress);
             task.setJobType(JobType.fromValue(jobType));
-            task.setRocksDBSharedResources(rocksDBSharedResources);
         } else {
             log.info("Task {} is not an OmniTask, no need to create OmniTask.", task.getExecutionId());
         }

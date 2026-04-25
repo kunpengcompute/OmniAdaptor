@@ -66,7 +66,7 @@ public abstract class AbstractValidateOperatorStrategy {
         RexTypeToIdMap.put("TIME_WITHOUT_TIME_ZONE", 19); // TODO: Is this the same as TIME?
         RexTypeToIdMap.put("TIMESTAMP_WITHOUT_TIME_ZONE", 20); // TODO: Omni's TIMESTAMP uses int64_t, Flink has the possibility of accuracy>3
         RexTypeToIdMap.put("TIMESTAMP_TZ", 21); // TIMESTAMP_WITH_TIMEZONE
-        RexTypeToIdMap.put("TIMESTAMP_WITH_LOCAL_TIME_ZONE", 22);
+        RexTypeToIdMap.put("TIMESTAMP_WITH_LOCAL_TIME_ZONE", 24);
         RexTypeToIdMap.put("ARRAY", 23);
         RexTypeToIdMap.put("MULTISET", 24);
         RexTypeToIdMap.put("MAP", 25);

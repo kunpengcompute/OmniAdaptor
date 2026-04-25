@@ -217,6 +217,7 @@ public class OperatorChainDescriptorHelper {
                     csvFormatPOJO.setFields(fields);
                     csvFormatPOJO.setFormat("csv");
                     csvFormatPOJO.setFilePath(inputPaths[0].toString());
+                    csvFormatPOJO.setNullValue(csvSchema.getNullValueString());
                     csvFormatPOJO.setSelectFields(csvSelectFieldToProjectFieldMapping);
                     csvFormatPOJO.setCsvSelectFieldToProjectFieldMapping(csvSelectFieldToProjectFieldMapping);
                     csvFormatPOJO.setCsvSelectFieldToCsvFieldMapping(csvSelectFieldToCsvFieldMapping);

@@ -19,6 +19,7 @@ public class CSVFormatPOJO {
     private String format; // "csv"
     private String delimiter; // only support default comma
     private String filePath; // local file path
+    private String nullValue;
     private List<TypeDescriptionPOJO> fields; // csv field type
     private int[] selectFields;
     private int[] csvSelectFieldToProjectFieldMapping;
@@ -29,10 +30,13 @@ public class CSVFormatPOJO {
     }
 
     // Full argument constructor
-    public CSVFormatPOJO(String format, String delimiter, String filePath, List<TypeDescriptionPOJO> fields, int[] selectFields, int[] csvSelectFieldToProjectFieldMapping, int[] csvSelectFieldToCsvFieldMapping) {
+    public CSVFormatPOJO(String format, String delimiter, String filePath, String nullValue,
+            List<TypeDescriptionPOJO> fields, int[] selectFields,
+            int[] csvSelectFieldToProjectFieldMapping, int[] csvSelectFieldToCsvFieldMapping) {
         this.format = format;
         this.delimiter = delimiter;
         this.filePath = filePath;
+        this.nullValue = nullValue;
         this.fields = fields;
         this.selectFields = selectFields;
         this.csvSelectFieldToProjectFieldMapping = csvSelectFieldToProjectFieldMapping;
@@ -62,6 +66,14 @@ public class CSVFormatPOJO {
 
     public void setFilePath(String filePath) {
         this.filePath = filePath;
+    }
+
+    public String getNullValue() {
+        return nullValue;
+    }
+
+    public void setNullValue(String nullValue) {
+        this.nullValue = nullValue;
     }
 
     public List<TypeDescriptionPOJO> getFields() {
@@ -103,6 +115,7 @@ public class CSVFormatPOJO {
                 + "format='" + format + '\'' +
                 ", delimiter='" + delimiter + '\'' +
                 ", filePath='" + filePath + '\'' +
+            ", nullValue='" + nullValue + '\'' +
                 ", fields=" + fields
                 + ", selectFields=" + Arrays.toString(selectFields) +
                 ", csvSelectFieldToProjectFieldMapping=" + Arrays.toString(csvSelectFieldToProjectFieldMapping)

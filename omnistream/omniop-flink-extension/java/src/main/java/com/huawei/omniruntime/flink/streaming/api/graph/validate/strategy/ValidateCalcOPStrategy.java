@@ -432,7 +432,8 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                 }
                 return true;
             case "PROCTIME" :
-                return true;
+                return exprMap.containsKey("returnType")
+                        && RexTypeToIdMap.get("TIMESTAMP_WITH_LOCAL_TIME_ZONE").equals(exprMap.get("returnType"));
             default:
                 LOG.info("Invalid expr type: {}", exprType);
                 return false; // Invalid expr type

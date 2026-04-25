@@ -246,21 +246,6 @@ public final class OmniGraphOverride {
         LOG.info("validateVertexForOmniTask : vertexID is {}, and vertexName {}",
                 vertexID, vertexConfig.getOperatorName());
 
-        // Optional debug hook: if OMNI_DEBUG_WAIT=1 in environment, sleep briefly to allow debugger attach
-        try {
-            String omniWait = System.getenv("OMNI_DEBUG_WAIT");
-            if ("1".equals(omniWait)) {
-                LOG.info("OMNI_DEBUG_WAIT=1 detected, sleeping 120000ms to allow debugger attach for vertex {}", vertexID);
-                try {
-                    Thread.sleep(120000);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-        } catch (Throwable t) {
-            // ignore any issues retrieving env or sleeping
-        }
-
         JobVertex jobVertex = vertexEntry.getValue();
 
         if (validateVertexChainInfoForOmniTask(vertexID, chainInfos, chainedConfigs, jobVertex, vertexConfigs, jobType)) {

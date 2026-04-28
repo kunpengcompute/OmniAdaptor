@@ -80,6 +80,8 @@ public class RexNodeUtil {
         specialOperatorMap.put("CASE", SpecialExprType.SWITCH);
         specialOperatorMap.put("REGEXP_EXTRACT", SpecialExprType.REGEXP_EXTRACT);
         specialOperatorMap.put("SPLIT_INDEX", SpecialExprType.SPLIT_INDEX);
+        specialOperatorMap.put("CHAR_LENGTH", SpecialExprType.CHAR_LENGTH);
+        specialOperatorMap.put("CHARACTER_LENGTH", SpecialExprType.CHAR_LENGTH);
         specialOperatorMap.put("count_char", SpecialExprType.COUNT_CHAR);
         specialOperatorMap.put("SEARCH", SpecialExprType.SEARCH);
         specialOperatorMap.put("LOWER", SpecialExprType.LOWER);
@@ -89,6 +91,7 @@ public class RexNodeUtil {
         specialOperatorMap.put("PROCTIME", SpecialExprType.PROCTIME);
         specialOperatorMap.put("EXTRACT", SpecialExprType.EXTRACT);
         specialOperatorMap.put("DATE_FORMAT", SpecialExprType.DATE_FORMAT);
+        specialOperatorMap.put("TO_TIMESTAMP_LTZ", SpecialExprType.TO_TIMESTAMP_LTZ);
         specialOperatorMap.put("CAST", SpecialExprType.CAST);
         specialOperatorMap.put("AND", SpecialExprType.AND);
         specialOperatorMap.put("OR", SpecialExprType.OR);
@@ -167,10 +170,12 @@ public class RexNodeUtil {
         LOWER,
         HASH_CODE,
         SPLIT_INDEX,
+        CHAR_LENGTH,
         IS_NOT_NULL,
         PROCTIME,
         EXTRACT,
         DATE_FORMAT,
+        TO_TIMESTAMP_LTZ,
         COUNT_CHAR,
         CAST,
         OTHERS,
@@ -547,6 +552,14 @@ public class RexNodeUtil {
                         lowerArgList.add(buildJsonMap(operands.get(0)));
                         jsonMap.put("arguments", lowerArgList);
                         break;
+                    case CHAR_LENGTH:
+                        jsonMap.put("exprType", "FUNCTION");
+                        setDataType(rexCall, jsonMap, "returnType");
+                        jsonMap.put("function_name", "char_length");
+                        List<Map<String, Object>> charLengthArgList = new ArrayList<>();
+                        charLengthArgList.add(buildJsonMap(operands.get(0)));
+                        jsonMap.put("arguments", charLengthArgList);
+                        break;
                     case IS_NOT_NULL:
                         jsonMap.put("exprType", "IS_NOT_NULL");
                         setDataType(rexCall,jsonMap, "returnType");
@@ -554,6 +567,16 @@ public class RexNodeUtil {
                         List<Map<String, Object>> notnullArgList = new ArrayList<>();
                         notnullArgList.add(buildJsonMap(operands.get(0)));
                         jsonMap.put("arguments", notnullArgList);
+                        break;
+                    case TO_TIMESTAMP_LTZ:
+                        jsonMap.put("exprType", "FUNCTION");
+                        setDataType(rexCall, jsonMap, "returnType");
+                        jsonMap.put("function_name", "to_timestamp_ltz");
+                        List<Map<String, Object>> toTimestampLtzArgList = new ArrayList<>();
+                        for (int i = 0; i < operands.size(); i++) {
+                            toTimestampLtzArgList.add(buildJsonMap(operands.get(i)));
+                        }
+                        jsonMap.put("arguments", toTimestampLtzArgList);
                         break;
                     case PROCTIME:
                         jsonMap.put("exprType", SpecialExprType.PROCTIME);

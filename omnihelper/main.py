@@ -111,6 +111,35 @@ def _create_flink_parser(subparsers):
         help='Skip SSL certificate verification (default: False, i.e., verify SSL by default)'
     )
 
+    auth_group = flink_parser.add_argument_group('Authentication Options')
+
+    auth_group.add_argument(
+        '--kerberos',
+        action='store_true',
+        default=False,
+        help='Enable Kerberos authentication for Flink REST API requests (default: False)'
+    )
+
+    auth_group.add_argument(
+        '--kerberos-mutual-auth',
+        type=str,
+        choices=['OPTIONAL', 'REQUIRED', 'DISABLED'],
+        default='OPTIONAL',
+        help='Kerberos mutual authentication mode (default: OPTIONAL). '
+             'OPTIONAL: server may request mutual auth; '
+             'REQUIRED: server must request mutual auth; '
+             'DISABLED: never do mutual auth'
+    )
+
+    auth_group.add_argument(
+        '--header', '-H',
+        type=str,
+        action='append',
+        default=None,
+        help='Custom HTTP header in "Key: Value" format. Can be specified multiple times. '
+             'Example: --header "Authorization: Bearer token" --header "X-Custom: value"'
+    )
+
     return flink_parser
 
 

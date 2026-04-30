@@ -9,16 +9,13 @@
    See the Mulan PSL v2 for more details.
 """
 import time
-import requests
-import json
-import re
-from collections import defaultdict
 from json import JSONDecodeError
+
+import requests
 
 from urllib.parse import urljoin
 import logging
 
-# 日志配置
 logging.basicConfig(
     filename="parse_flink.log",
     level=logging.INFO,
@@ -33,13 +30,42 @@ class FlinkRequester:
     Requester Layer: Network Communication
     """
 
-    def __init__(self, url, timeout=5, ssl_verify=True, interval=100, max_retries=3):
+    def __init__(self, url, timeout=5, ssl_verify=True, interval=100,
+                 max_retries=3, kerberos=False, kerberos_mutual_auth="OPTIONAL",
+                 headers=None):
         self.base_url = url
         self.session = requests.Session()
         self.timeout = int(timeout) if timeout else 5
         self.max_retries = max_retries  # 最大尝试次数
         self.ssl_verify = ssl_verify  # 校验SSL证书
         self.interval = interval  # 接口调用间隔
+        self.custom_headers = headers or {}
+
+        if kerberos:
+            try:
+                from requests_kerberos import HTTPKerberosAuth, OPTIONAL, REQUIRED, DISABLED
+                mutual_auth_map = {
+                    "OPTIONAL": OPTIONAL,
+                    "REQUIRED": REQUIRED,
+                    "DISABLED": DISABLED,
+                }
+                mutual_auth_value = mutual_auth_map.get(
+                    kerberos_mutual_auth.upper(), OPTIONAL
+                )
+                self.session.auth = HTTPKerberosAuth(
+                    mutual_authentication=mutual_auth_value
+                )
+                logger.info("Kerberos authentication enabled (mutual_auth=%s)",
+                            kerberos_mutual_auth)
+            except ImportError:
+                raise ImportError(
+                    "requests-kerberos is required for Kerberos authentication. "
+                    "Install it with: pip install omnihelper[kerberos]"
+                )
+
+        if self.custom_headers:
+            self.session.headers.update(self.custom_headers)
+            logger.info("Custom headers applied: %s", list(self.custom_headers.keys()))
 
     def _get_json(self, endpoint, params=None):
         url = urljoin(self.base_url, endpoint.lstrip('/'))

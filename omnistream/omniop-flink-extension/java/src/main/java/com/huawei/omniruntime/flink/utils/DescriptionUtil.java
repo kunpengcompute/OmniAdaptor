@@ -11,11 +11,7 @@
 
 package com.huawei.omniruntime.flink.utils;
 
-import org.apache.flink.table.types.logical.DecimalType;
-import org.apache.flink.table.types.logical.LogicalType;
-import org.apache.flink.table.types.logical.LogicalTypeRoot;
-import org.apache.flink.table.types.logical.TimestampType;
-import org.apache.flink.table.types.logical.VarCharType;
+import org.apache.flink.table.types.logical.*;
 
 /**
  * manage the system's configuration information
@@ -45,6 +41,10 @@ public class DescriptionUtil {
             // Cast to TimestampType to access precision
             if (fieldType instanceof TimestampType) {
                 int precision = ((TimestampType) fieldType).getPrecision();
+                typeName += "(" + precision + ")";
+            }
+            if (fieldType instanceof LocalZonedTimestampType) {
+                int precision = ((LocalZonedTimestampType) fieldType).getPrecision();
                 typeName += "(" + precision + ")";
             }
         }

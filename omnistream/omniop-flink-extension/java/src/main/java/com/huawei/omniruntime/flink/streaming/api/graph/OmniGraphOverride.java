@@ -196,7 +196,10 @@ public final class OmniGraphOverride {
             "VARCHAR(2000)",
             "VARCHAR(9)",
             "STRING",
-            "TIMESTAMP_WITH_LOCAL_TIME_ZONE"));
+            "TIMESTAMP_WITH_LOCAL_TIME_ZONE(0)",
+            "TIMESTAMP_WITH_LOCAL_TIME_ZONE(1)",
+            "TIMESTAMP_WITH_LOCAL_TIME_ZONE(2)",
+            "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));
 
     private static final Set<String> SINK_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
@@ -211,7 +214,7 @@ public final class OmniGraphOverride {
             "STRING",
             "DECIMAL64",
             "DECIMAL128",
-            "TIMESTAMP_WITH_LOCAL_TIME_ZONE"));
+            "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));
 
     /**
      * setStateBackend

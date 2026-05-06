@@ -39,7 +39,7 @@ public abstract class AbstractValidateOperatorStrategy {
             "BOOLEAN",
             "DECIMAL64",
             "DECIMAL128",
-            "TIMESTAMP_WITH_LOCAL_TIME_ZONE"));
+            "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));
     private static final Logger LOG = LoggerFactory.getLogger(AbstractValidateOperatorStrategy.class);
 
     static {

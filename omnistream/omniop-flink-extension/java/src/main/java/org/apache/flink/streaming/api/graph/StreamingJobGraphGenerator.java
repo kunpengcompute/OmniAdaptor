@@ -616,8 +616,10 @@ public class StreamingJobGraphGenerator {
         }
 
         boolean validateRes = true;
+        boolean checkpointingEnabled = streamGraph.getCheckpointConfig().isCheckpointingEnabled();
         for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
-            boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos, this.chainedConfigs, this.vertexConfigs, jobType);
+            boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos,
+                    this.chainedConfigs, this.vertexConfigs, jobType, checkpointingEnabled);
             if (!vertexValidateRes && jobType.equals(JobType.SQL)) {
                 validateRes = false;
             }
@@ -680,8 +682,8 @@ public class StreamingJobGraphGenerator {
                 LOG.warn("Unsupported StateBackend in native DataStream and will roll back to Original plan.");
                 return true;
             }
-            if (containOperator.getRight() && !"EmbeddedRocksDBStateBackend".equals(backendName) && !"HashMapStateBackend".equals(backendName)) {
-                LOG.warn("Fallback to native plan: Non-Rocksdb backend or Non-Heap backend.");
+            if (containOperator.getRight() && !"EmbeddedRocksDBStateBackend".equals(backendName)) {
+                LOG.warn("Fallback to native plan: Non-Rocksdb backend conflicts with a Rocksdb-only operator.");
                 return true;
             }
             if (containOperator.getLeft() && !"HashMapStateBackend".equals(backendName)) {

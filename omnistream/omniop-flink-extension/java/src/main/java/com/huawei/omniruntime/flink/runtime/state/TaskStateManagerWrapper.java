@@ -68,8 +68,7 @@ public class TaskStateManagerWrapper {
         CheckpointMetaData checkpointMetaData = deserializeCheckpointMetaData(checkpointMetaDataJson);
         CheckpointMetrics checkpointMetrics = deserializeCheckpointMetrics(checkpointMetricsJson);
 
-        // 改为 INFO 方便排查 OS-CP 上报后 state handle 是否真的进了 acknowledgedState。
-        LOG.info("[OS-CP] reportTaskStateSnapshots cp={} acknowledgedStateJson(len={})={}",
+        LOG.debug("[OS-CP] reportTaskStateSnapshots cp={} acknowledgedStateJson(len={})={}",
                 checkpointMetaData.getCheckpointId(),
                 acknowledgedStateJson == null ? 0 : acknowledgedStateJson.length(),
                 acknowledgedStateJson);
@@ -95,7 +94,7 @@ public class TaskStateManagerWrapper {
                 int mks = (st == null || st.getManagedKeyedState() == null) ? 0 : st.getManagedKeyedState().size();
                 int rks = (st == null || st.getRawKeyedState() == null) ? 0 : st.getRawKeyedState().size();
                 int mos = (st == null || st.getManagedOperatorState() == null) ? 0 : st.getManagedOperatorState().size();
-                LOG.info("[OS-CP] reportTaskStateSnapshots cp={} operator={} managedKeyedState={} rawKeyedState={} managedOperatorState={}",
+                LOG.debug("[OS-CP] reportTaskStateSnapshots cp={} operator={} managedKeyedState={} rawKeyedState={} managedOperatorState={}",
                         checkpointId, entry.getKey(), mks, rks, mos);
             }
         } else {

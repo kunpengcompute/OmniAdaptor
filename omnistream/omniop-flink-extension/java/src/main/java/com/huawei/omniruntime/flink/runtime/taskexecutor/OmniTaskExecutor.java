@@ -394,7 +394,7 @@ public class OmniTaskExecutor extends TaskExecutor {
                     restore.getTaskStateSnapshot());
                 tddPojo.setTaskStateSnapshot(restoreJson);
                 tddPojo.setRestoreCheckpointId(restore.getRestoreCheckpointId());
-                LOG.info("TaskStateSnapshot JSON is {}", restoreJson);
+                LOG.debug("TaskStateSnapshot JSON is {}", restoreJson);
             } catch (Exception e) {
                 LOG.error("Failed to serialize TaskStateSnapshot, falling back to JsonHelper", e);
                 String restoreJson = JsonHelper.toJsonWithAllFields(restore.getTaskStateSnapshot());

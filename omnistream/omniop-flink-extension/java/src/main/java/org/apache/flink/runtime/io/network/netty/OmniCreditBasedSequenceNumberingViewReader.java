@@ -501,9 +501,6 @@ public class OmniCreditBasedSequenceNumberingViewReader
         NativeBufferRecycler.unRegisterInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
         NativeNetworkBufferRecycler.unRegisterInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
 
-        if (nativeCreditBasedSequenceNumberingViewReaderRef != -1) {
-            destroyNativeNettyBufferPool(nativeCreditBasedSequenceNumberingViewReaderRef);
-        }
         LOG.info("OmniCreditBasedSequenceNumberingViewReader of {}## {} and native ref = {}"
                         + "............................is stopped......................................",
                 taskName.substring(0, 15), subPartitionIndex, nativeCreditBasedSequenceNumberingViewReaderRef);
@@ -622,11 +619,5 @@ public class OmniCreditBasedSequenceNumberingViewReader
      */
     public native void firstDataAvailableNotification(long nativeCreditBasedSequenceNumberingViewReaderRef);
 
-    /**
-     * destroyNativeNettyBufferPool
-     *
-     * @param nativeCreditBasedSequenceNumberingViewReaderRef nativeCreditBasedSequenceNumberingViewReaderRef
-     */
-    private native void destroyNativeNettyBufferPool(long nativeCreditBasedSequenceNumberingViewReaderRef);
     private native void resumeConsumption(long nativeCreditBasedSequenceNumberingViewReaderRef);
 }

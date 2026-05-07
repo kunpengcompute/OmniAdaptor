@@ -800,6 +800,8 @@ public class TaskStateSnapshotDeser {
             handleNode.put("stateSize", relativeFileStateHandle.getStateSize());
             String relativePath = relativeFileStateHandle.getRelativePath();
             handleNode.put("relativePath", relativePath);
+            Path filePath = relativeFileStateHandle.getFilePath();
+            handleNode.put("filePath", filePath.toString());
         } else if (streamStateHandle instanceof FileStateHandle) {
             FileStateHandle fileStateHandle = (FileStateHandle)streamStateHandle;
             handleNode.put("@class","FileStateHandle");

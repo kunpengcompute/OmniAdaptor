@@ -16,6 +16,8 @@ import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.ListSerializer;
 import org.apache.flink.api.common.typeutils.base.MapSerializer;
+import org.apache.flink.api.java.tuple.Tuple;
+import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.api.java.typeutils.runtime.PojoSerializer;
 import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
@@ -105,6 +107,23 @@ public abstract class OmniParseFactory {
         } else if (OmniSerializerType.POJO.equals(info.getSerializerType())) {
             return Types.POJO(info.getElementTypeClazz());
         } else if (OmniSerializerType.TUPLE.equals(info.getSerializerType())) {
+            // 优先用 C++ 端递归传过来的 fieldSerializers 重建带具体字段类型的 TupleTypeInfo；
+            // 走 TypeExtractor.createTypeInfo(Tuple2.class) 会因为 raw type 拿到 GenericType，
+            // 字段子序列化器与 C++ 端不匹配 → restore 出来的字节解析错位。
+            List<OmniNativeSerializerJsonInfo> fieldInfos = info.getFieldSerializers();
+            if (fieldInfos != null && !fieldInfos.isEmpty()) {
+                TypeInformation<?>[] fieldTypes = new TypeInformation[fieldInfos.size()];
+                for (int i = 0; i < fieldInfos.size(); i++) {
+                    fieldTypes[i] = buildTypeInformationBy(fieldInfos.get(i), depth + DEPTH_INTERVAL);
+                }
+                Class<?> tupleClass = info.getElementTypeClazz();
+                if (tupleClass == null) {
+                    // C++ 端漏传 element_type 时按 arity 兜底到 TupleN.class
+                    tupleClass = Tuple.getTupleClass(fieldTypes.length);
+                }
+                return new TupleTypeInfo(tupleClass, fieldTypes);
+            }
+            // 兼容老 JSON：无 fieldSerializers 时退回基于 raw class 的解析
             return TypeExtractor.createTypeInfo(info.getElementTypeClazz());
         } else if (OmniSerializerType.VOID_NAMESPACE.equals(info.getSerializerType())) {
             return new VoidNamespaceTypeInfo();

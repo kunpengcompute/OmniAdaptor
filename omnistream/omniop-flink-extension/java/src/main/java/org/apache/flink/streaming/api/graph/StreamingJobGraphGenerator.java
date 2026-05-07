@@ -616,8 +616,10 @@ public class StreamingJobGraphGenerator {
         }
 
         boolean validateRes = true;
+        boolean checkpointingEnabled = streamGraph.getCheckpointConfig().isCheckpointingEnabled();
         for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
-            boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos, this.chainedConfigs, this.vertexConfigs, jobType);
+            boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos,
+                    this.chainedConfigs, this.vertexConfigs, jobType, checkpointingEnabled);
             if (!vertexValidateRes && jobType.equals(JobType.SQL)) {
                 validateRes = false;
             }
@@ -639,9 +641,13 @@ public class StreamingJobGraphGenerator {
             LOG.warn("SQL Unsupported Checkpoint in native side and will roll back to Original plan.");
             return true;
         }
-        if (!containKeyCoProcessOperator().getRight()){
+        Pair<Boolean, Boolean> statefulOps = containKeyCoProcessOperator();
+        if (!statefulOps.getLeft() && !statefulOps.getRight()) {
+            LOG.warn("DataStream job with checkpoint contains no supported stateful operator "
+            + "(StreamGroupedReduceOperator / KeyedCoProcessOperator) and will roll back to Original plan.");
             return true;
         }
+
         CheckpointConfigPOJO checkpointConfigPOJO = new CheckpointConfigPOJO(streamGraph.getConfiguration(), streamGraph);
         ExecutionCheckpointConfigPOJO executionCheckpointConfigPOJO =
                 new ExecutionCheckpointConfigPOJO(streamGraph.getCheckpointConfig(), streamGraph.getConfiguration());

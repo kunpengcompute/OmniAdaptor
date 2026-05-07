@@ -37,7 +37,10 @@ public enum OmniSerializerType {
     LIST(OmniSerializerCategory.LIST, null, ListSerializer.class, 1),
     MAP(OmniSerializerCategory.MAP, null, MapSerializer.class, 6),
     POJO(OmniSerializerCategory.POJO, null, PojoSerializer.class, 7),
-    TUPLE(OmniSerializerCategory.TUPLE, null, TupleSerializer.class, -1),
+    // code 13 必须与 OmniStream C++ 端 SerializerType::TUPLE 对齐；
+    // 改前为 -1，导致 OmniSerializerType.get(int) 永远查不到 TUPLE，
+    // C++ Tuple state 元数据无法 round-trip。
+    TUPLE(OmniSerializerCategory.TUPLE, null, TupleSerializer.class, 13),
     VOID_NAMESPACE(OmniSerializerCategory.VOID_NAMESPACE, VoidNamespace.class, VoidNamespaceSerializer.class, 11),
     TIMER(OmniSerializerCategory.TIMER, TimerHeapInternalTimer.class, TimerSerializer.class, 12),
 

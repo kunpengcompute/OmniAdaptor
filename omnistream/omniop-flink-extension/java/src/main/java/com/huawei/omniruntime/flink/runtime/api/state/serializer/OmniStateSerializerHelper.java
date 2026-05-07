@@ -26,7 +26,9 @@ import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -194,9 +196,31 @@ public class OmniStateSerializerHelper {
             }
         }
 
-        // value is null, not deal
-        // fieldNames
-        // fieldSerializers
+        // C++ TupleSerializer/PojoSerializer.toJson() 把每个 field 的子序列化器递归 dump 成
+        // 内嵌 JSON 字符串，作为 List<String> 形式存在 "fieldSerializers" 键下。这里把它们再
+        // 递归 convert 回 OmniNativeSerializerJsonInfo，供 OmniParseFactory 在 TUPLE/POJO
+        // 分支重建带泛型字段类型的 TupleTypeInfo。无字段则跳过，保留旧行为。
+        Object fieldSers = map.get(OmniSerializerJson.FIELD_SERIALIZERS.getKey());
+        if (fieldSers instanceof List) {
+            List<OmniNativeSerializerJsonInfo> fieldList = new ArrayList<>();
+            for (Object item : (List<?>) fieldSers) {
+                if (item instanceof String && StringUtils.isNotEmpty((String) item)) {
+                    fieldList.add(convert((String) item, userCodeClassLoader, depth + DEPTH_INTERVAL));
+                } else {
+                    fieldList.add(null);
+                }
+            }
+            info.setFieldSerializers(fieldList);
+        }
+
+        Object fieldNamesObj = map.get(OmniSerializerJson.FIELD_NAMES.getKey());
+        if (fieldNamesObj instanceof List) {
+            List<String> nameList = new ArrayList<>();
+            for (Object item : (List<?>) fieldNamesObj) {
+                nameList.add(item == null ? null : item.toString());
+            }
+            info.setFieldNames(nameList);
+        }
 
         return info;
     }

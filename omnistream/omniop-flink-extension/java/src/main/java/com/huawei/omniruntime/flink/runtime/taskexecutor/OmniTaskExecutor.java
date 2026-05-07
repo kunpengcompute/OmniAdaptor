@@ -25,6 +25,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 
 import com.huawei.omniruntime.flink.runtime.api.graph.json.JobInformationPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
+import com.huawei.omniruntime.flink.runtime.api.graph.json.TaskStateSnapshotDeser;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.StreamConfigPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.TaskInformationPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.descriptor.TaskDeploymentDescriptorPOJO;
@@ -401,10 +402,18 @@ public class OmniTaskExecutor extends TaskExecutor {
         TaskDeploymentDescriptorPOJO tddPojo = new TaskDeploymentDescriptorPOJO(tdd);
         JobManagerTaskRestore restore = tdd.getTaskRestore();
         if (restore != null) {
-            String restoreJson = JsonHelper.toJsonWithAllFields(restore.getTaskStateSnapshot());
-            tddPojo.setTaskStateSnapshot(restoreJson);
-            tddPojo.setRestoreCheckpointId(restore.getRestoreCheckpointId());
-            LOG.info("TaskStateSnapshot JSON is {}", restoreJson);
+            try {
+                String restoreJson = TaskStateSnapshotDeser.serializeTaskStateSnapshot(
+                    restore.getTaskStateSnapshot());
+                tddPojo.setTaskStateSnapshot(restoreJson);
+                tddPojo.setRestoreCheckpointId(restore.getRestoreCheckpointId());
+                LOG.debug("TaskStateSnapshot JSON is {}", restoreJson);
+            } catch (Exception e) {
+                LOG.error("Failed to serialize TaskStateSnapshot, falling back to JsonHelper", e);
+                String restoreJson = JsonHelper.toJsonWithAllFields(restore.getTaskStateSnapshot());
+                tddPojo.setTaskStateSnapshot(restoreJson);
+                tddPojo.setRestoreCheckpointId(restore.getRestoreCheckpointId());
+            }
         } else {
             LOG.warn("JobManagerTaskRestore is null in TDD");
         }

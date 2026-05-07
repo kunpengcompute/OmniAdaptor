@@ -1,0 +1,90 @@
+{
+  "Calc": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "GroupAggregate": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "LocalGroupAggregate": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "GlobalGroupAggregate": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "IncrementalGroupAggregate": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "Join": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "LookupJoin": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "WindowAggregate": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "WindowJoin": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "GroupWindowAggregate": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "Deduplicate": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "Expand": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "GlobalWindowAggregate": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "LocalWindowAggregate": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "WatermarkAssigner": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "Rank": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "StreamRecordTimestampInserter": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "ConstraintEnforcer": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "Sink": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "Csv Source": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "KafKa Source": {
+    "supported_list": [],
+    "not_supported_list": []
+  },
+  "Kafka Sink": {
+    "supported_list": [],
+    "not_supported_list": []
+  }
+}

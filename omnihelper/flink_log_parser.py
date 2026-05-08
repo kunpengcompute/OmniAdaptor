@@ -16,6 +16,7 @@ import pandas as pd
 
 from omnihelper.util.common_util import CommonUtil
 from omnihelper.util.flink_excel_util import FlinkExcelWriterWithStyle
+from omnihelper.flink.op_parse import FlinkRequester
 
 
 class FlinkLogParser:
@@ -51,6 +52,12 @@ class FlinkLogParser:
 
         # 处理 SSL 验证参数
         self.args.ssl_verify = not getattr(self.args, 'no_ssl_verify', False)
+
+        # 解析自定义请求头
+        self.args.parsed_headers = self._parse_headers()
+        if self.args.parsed_headers is None:
+            return False
+
         return True
 
     def _validate_url(self):
@@ -124,6 +131,25 @@ class FlinkLogParser:
                 return False
         return True
 
+    def _parse_headers(self):
+        """解析 --header 参数为字典"""
+        raw_headers = getattr(self.args, 'header', None)
+        if not raw_headers:
+            return {}
+        headers = {}
+        for h in raw_headers:
+            if ':' not in h:
+                print(f"Error: Invalid header format: '{h}'. Expected 'Key: Value'.")
+                return None
+            key, _, value = h.partition(':')
+            key = key.strip()
+            value = value.strip()
+            if not key:
+                print(f"Error: Invalid header format: '{h}'. Header key cannot be empty.")
+                return None
+            headers[key] = value
+        return headers
+
     def print_arguments(self):
         # 打印配置信息
         print("=" * 60)
@@ -134,6 +160,9 @@ class FlinkLogParser:
         print(f"API Call Interval: {self.args.interval} ms")
         print(f"API Call Timeout: {self.args.timeout} s")
         print(f"SSL Verify: {self.args.ssl_verify}")
+        print(f"Kerberos Auth: {getattr(self.args, 'kerberos', False)}")
+        if getattr(self.args, 'kerberos', False):
+            print(f"Kerberos Mutual Auth: {getattr(self.args, 'kerberos_mutual_auth', 'OPTIONAL')}")
         print(f"Output Directory: {os.path.realpath(self.args.output_dir)}")
         print(f"Show Op Details: {self.args.show_op_details}")
         print("-" * 60)
@@ -146,10 +175,21 @@ class FlinkLogParser:
         if not self.args_valid:
             print("Error: Invalid arguments. Please check your input and try again.")
             return
+
+        self.requester = FlinkRequester(
+            url=self.args.url,
+            timeout=self.args.timeout,
+            ssl_verify=self.args.ssl_verify,
+            interval=self.args.interval,
+            kerberos=getattr(self.args, 'kerberos', False),
+            kerberos_mutual_auth=getattr(self.args, 'kerberos_mutual_auth', 'OPTIONAL'),
+            headers=getattr(self.args, 'parsed_headers', {}),
+        )
         
         # 检查是否提供了 jobid
         if not self.args.jobid:
             print("No jobid provided, trying to get from API...")
+            print(self.requester.get_jobs_overview())
         else:
             print(f"Using provided jobids: {self.args.jobid}")
             self.analysis_result = []

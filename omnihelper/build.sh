@@ -1,4 +1,5 @@
 #!/bin/bash
+source /etc/profile
 
 set -ex
 
@@ -44,17 +45,26 @@ ARCH=$(get_architecture)
 if command -v pyinstaller > /dev/null; then
     echo "pyinstaller 已安装"
 else
-    echo "未检测到pyinstaller"
+    echo "install dependencies"
     python3 -m venv build_venv
     source build_venv/bin/activate
-    pip3 install ${SCRIPT_DIR}[dev]
+    if [ "$(uname -m)" == "aarch64" ]; then
+        pip3 install ${SCRIPT_DIR}[dev,kerberos] -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+    else
+        # CentOS7 x86_64 gssapi
+        CFLAGS="-std=c99" pip3 install ${SCRIPT_DIR}[dev,kerberos] -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+    fi
 fi
+
 # 使用绝对路径
 pyinstaller --onefile \
             --name "omnihelper" \
             --distpath "${SCRIPT_DIR}/dist" \
             --workpath "${SCRIPT_DIR}/build" \
             --specpath "${SCRIPT_DIR}" \
+            --hidden-import=gssapi \
+            --hidden-import=gssapi.raw.cython_converters \
+            --collect-all=gssapi \
             "${SCRIPT_DIR}/main.py"
 
 resources_src="${SCRIPT_DIR}/resources"

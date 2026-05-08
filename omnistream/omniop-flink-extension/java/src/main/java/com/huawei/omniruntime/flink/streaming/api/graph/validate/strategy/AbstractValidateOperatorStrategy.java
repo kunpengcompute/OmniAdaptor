@@ -88,7 +88,11 @@ public abstract class AbstractValidateOperatorStrategy {
                         type = "DECIMAL128";
                         LOG.info("converted to DECIMAL128");
                     }
-                    return SUPPORT_DATA_TYPE.contains(type);
+                    if (!SUPPORT_DATA_TYPE.contains(type)) {
+                        LOG.info("The data type {} is not supported.", type);
+                        return false;
+                    }
+                    return true;
                 });
     }
 

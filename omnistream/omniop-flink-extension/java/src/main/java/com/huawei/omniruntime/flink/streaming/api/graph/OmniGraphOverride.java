@@ -691,6 +691,7 @@ public final class OmniGraphOverride {
             String opSimpleName = extractOperatorName(operatorName);
 
             if (!SUPPORT_OP_NAME.contains(opSimpleName)) {
+                LOG.info("The operator name {} is not supported.", opSimpleName);
                 return false;
             }
             if (operatorDescription.contains("INVALID")) {

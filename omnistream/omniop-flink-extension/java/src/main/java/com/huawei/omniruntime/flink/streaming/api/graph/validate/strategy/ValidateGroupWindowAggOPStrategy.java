@@ -56,6 +56,7 @@ public class ValidateGroupWindowAggOPStrategy extends AbstractValidateOperatorSt
         }
         String windowType = windowInfo.substring(0, windowInfo.indexOf("("));
         if (!SUPPORT_WINDOW_TYPE.contains(windowType)) {
+            LOG.info("The window type {} is not supported.", windowType);
             return false;
         }
 
@@ -79,6 +80,7 @@ public class ValidateGroupWindowAggOPStrategy extends AbstractValidateOperatorSt
             String argType = inputTypeList.get(argIndex);
             List<String> supportDataTypes = SUPPORT_AGG_FUNCTION_DATATYPE.get(functionName);
             if (!supportDataTypes.contains(argType)) {
+                LOG.info("The aggregate data type {} is not supported in aggregate function {}.", argType, functionName);
                 return false;
             }
         }

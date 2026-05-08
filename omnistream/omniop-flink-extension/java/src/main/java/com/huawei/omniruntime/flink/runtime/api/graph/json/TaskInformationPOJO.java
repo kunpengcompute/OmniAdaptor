@@ -15,6 +15,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 
 import com.huawei.omniruntime.flink.runtime.api.graph.json.configuration.StreamConfigHelper;
 
+import org.apache.flink.contrib.streaming.state.EmbeddedRocksDBStateBackend;
 import org.apache.flink.contrib.streaming.state.RocksDBMemoryConfiguration;
 import org.apache.flink.core.memory.ManagedMemoryUseCase;
 import org.apache.flink.runtime.executiongraph.TaskInformation;
@@ -67,6 +68,7 @@ public class TaskInformationPOJO {
     private long stateBackendManagedMemorySize;
     private long cacheAddr;
     private long writeBufferManagerAddr;
+    private String priorityQueueStateType;
 
     private int taskType;
 
@@ -148,6 +150,8 @@ public class TaskInformationPOJO {
         } else {
             stateBackendManagedMemorySize = memoryManager.computeMemorySize(stateBackendManagedMemoryFraction);
         }
+
+        priorityQueueStateType = ((EmbeddedRocksDBStateBackend) backend).getPriorityQueueStateType().toString();
     }
 
     private String[] getDbStoragePaths(File[] localRocksDbDirectories) {
@@ -287,6 +291,14 @@ public class TaskInformationPOJO {
 
     public void setCacheAddr(long cacheAddr) {
         this.cacheAddr = cacheAddr;
+    }
+
+    public String getPriorityQueueStateType() {
+        return priorityQueueStateType;
+    }
+
+    public void setPriorityQueueStateType(String priorityQueueStateType) {
+        this.priorityQueueStateType = priorityQueueStateType;
     }
 
     public int getTaskType() {

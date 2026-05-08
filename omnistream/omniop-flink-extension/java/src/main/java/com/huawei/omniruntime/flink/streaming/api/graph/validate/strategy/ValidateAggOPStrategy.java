@@ -82,6 +82,7 @@ public class ValidateAggOPStrategy extends AbstractValidateOperatorStrategy {
             String argType = inputTypeList.get(argIndex);
             List<String> supportDataTypes = SUPPORT_AGG_FUNCTION_DATATYPE.get(functionName);
             if (!supportDataTypes.contains(argType)) {
+                LOG.info("The aggregate data type {} is not supported in aggregate function {}.", argType, functionName);
                 return false;
             }
             List<Integer> uniqueKeys = (ArrayList<Integer>) operatorInfoMap.get("grouping");
@@ -89,6 +90,7 @@ public class ValidateAggOPStrategy extends AbstractValidateOperatorStrategy {
                 for (int uniqueKey : uniqueKeys) {
                     String keyType = inputTypeList.get(uniqueKey);
                     if (!SUPPORT_GROUP_KEY_TYPES.contains(keyType)) {
+                        LOG.info("The group key type {} is not supported.", keyType);
                         return false;
                     }
                 }

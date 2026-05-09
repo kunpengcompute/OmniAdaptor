@@ -68,7 +68,7 @@ public class TaskInformationPOJO {
     private long stateBackendManagedMemorySize;
     private long cacheAddr;
     private long writeBufferManagerAddr;
-    private String priorityQueueStateType;
+    private String priorityQueueStateType = "";
 
     private int taskType;
 

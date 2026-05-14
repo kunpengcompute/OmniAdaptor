@@ -27,57 +27,57 @@ class FlinkFunctionParser:
     """
 
     def __init__(self):
-        self.function_list = []  # 函数字典列表
-        self.omni_functions = []  # 函数名列表
-        self.func_pattern = None  # 预编译的正则表达式（匹配函数调用 func(...)）
-        self.keywords_pattern = None  # 预编译的正则表达式（匹配关键字/操作符）
-        self.func_support_map = {}  # 函数支持映射 {func_name: is_support_func}
-        self.load_func_list()
-
-    @staticmethod
-    def load_json_file(file_path):
-        """加载JSON文件"""
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.warning(f"Failed to load {file_path}: {e}")
-            return None
-
-    @staticmethod
-    def find_config_file(base_paths, filename):
-        """查找配置文件"""
-        for base_path in base_paths:
-            file_path = os.path.join(base_path, filename)
-            if os.path.exists(file_path):
-                return file_path
-        return None
+        self.function_list = []  # 存储字典文件中的所有函数对象列表
+        self.omni_functions = []  # 仅存储函数名（字符串）的列表
+        self.func_pattern = None  # 正则：匹配函数调用 func(...)
+        self.keywords_pattern = None  # 正则：匹配关键字/操作符
+        self.func_support_map = {}  # 字典 {函数名: is_support_func}
+        self.load_func_list()  # 构造函数实例后立即加载字典
 
     def load_func_list(self):
         """加载函数字典配置并构建匹配模式"""
-        base_paths = [
-            os.path.join(CommonUtil.get_execute_path(), "resources"),
-        ]
+        base_path = os.path.join(CommonUtil.get_execute_path(), "resources")
+        dictionary_path = os.path.join(base_path, "flink_function_dictionary.json")
 
-        dictionary_path = self.find_config_file(base_paths, "flink_function_dictionary.json")
-        if dictionary_path:
-            self.function_list = self.load_json_file(dictionary_path) or []
-            logger.info(f"Loaded {len(self.function_list)} functions from {dictionary_path}")
-        else:
-            logger.warning(f"Flink function dictionary not found in any of: {base_paths}")
+        # 检查文件是否存在
+        if not os.path.exists(dictionary_path):
+            logger.warning(f"Flink function dictionary not found: {dictionary_path}")
             self.function_list = []
+            self.omni_functions = []
+            self.func_support_map = {}
+            return
 
-        # 提取所有函数名，转小写
-        self.omni_functions = [func.get("func_name", "").lower() for func in self.function_list if
-                               func.get("func_name")]
+        # 加载JSON文件
+        try:
+            with open(dictionary_path, "r", encoding="utf-8") as f:
+                self.function_list = json.load(f)
+            logger.info(f"Loaded {len(self.function_list)} functions from {dictionary_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load {dictionary_path}: {e}")
+            self.function_list = []
+            self.omni_functions = []
+            self.func_support_map = {}
+            return
 
-        # 构建函数支持映射
-        self.func_support_map = {
-            func.get("func_name", "").lower(): func.get("is_support_func", False)
-            for func in self.function_list
-        }
+        # 1. 初始化两个空容器
+        self.omni_functions = []  # 用于存储所有函数名（列表）
+        self.func_support_map = {}  # 用于存储函数名 → 是否支持的映射（字典）
 
-        # 构建两种正则表达式模式
+        # 2. 遍历函数列表
+        for func in self.function_list:
+            # 3. 获取当前函数的名称
+            func_name = func.get("func_name")
+            # 4. 如果函数名为空，跳过这条记录
+            if not func_name:
+                continue
+            # 5. 转成小写（实现大小写不敏感匹配）
+            func_name_lower = func_name.lower()
+            # 6. 将小写函数名加入列表
+            self.omni_functions.append(func_name_lower)
+            # 7. 将函数名和是否支持的信息存入字典
+            self.func_support_map[func_name_lower] = func.get("is_support_func", False)
+
+        # 构建正则表达式模式
         self.build_patterns()
 
     def build_patterns(self):
@@ -94,9 +94,7 @@ class FlinkFunctionParser:
 
         # 定义应该被识别为关键字/操作符的判断规则
         keyword_keywords = {
-            'and', 'or', 'not', 'like', 'between', 'is', 'exists',
-            'null', 'true', 'false', 'unknown', 'distinct', 'similar',
-            'json', 'else', 'then', 'case', 'end', 'when'
+            'or', 'and', 'like', 'between' ,'case' ,'array','map'
         }
 
         # 分类函数
@@ -115,9 +113,6 @@ class FlinkFunctionParser:
             # 如果函数名在我们的关键字列表中，也识别为关键字
             elif func.lower() in keyword_keywords:
                 is_keyword = True
-            # 如果是单字母或双字母的逻辑操作符
-            elif func.upper() in {'AND', 'OR', 'NOT', 'IN', 'IS', 'LIKE', 'BETWEEN', 'EXISTS'}:
-                is_keyword = True
 
             if is_keyword:
                 keyword_patterns.append(func)
@@ -128,7 +123,7 @@ class FlinkFunctionParser:
         if func_call_patterns:
             escaped_funcs = [re.escape(f) for f in func_call_patterns]
             self.func_pattern = re.compile(
-                r"({})\s*\(".format("|".join(escaped_funcs)),
+                 r"\b({})\s*\(".format("|".join(escaped_funcs)),
                 re.I
             )
             logger.info(f"Created function call pattern for {len(func_call_patterns)} functions")
@@ -171,67 +166,6 @@ class FlinkFunctionParser:
                 funcs.append({"func": keyword, "params": [], "type": "keyword"})
 
         return funcs
-
-    def extract_expressions_from_plan(self, plan):
-        """
-        从完整的物理计划中提取所有表达式
-
-        :param plan: Flink 作业的 plan 节点（字典格式）
-        :return: 函数调用列表
-        """
-        expressions = []
-
-        if not isinstance(plan, dict):
-            return expressions
-
-        nodes = plan.get("nodes", [])
-        for node in nodes:
-            description = node.get("description", "")
-            if description:
-                funcs = self.parse_plan_description(description)
-                for func in funcs:
-                    expressions.append({
-                        "node_id": node.get("id"),
-                        "node_name": node.get("name"),
-                        "description": description,
-                        **func
-                    })
-
-        return expressions
-
-    def parse_operator_chain(self, operator_chain_str):
-        """
-        解析运算符链字符串
-
-        :param operator_chain_str: 运算符链字符串，如 "Map -> Calc -> Sink"
-        :return: 运算符列表
-        """
-        if not operator_chain_str:
-            return []
-
-        operators = []
-        parts = operator_chain_str.split(' -> ')
-        for part in parts:
-            part = part.strip()
-            if not part:
-                continue
-            match = re.match(r'([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\((.*)\))?', part)
-            if not match:
-                continue
-            op_name = match.group(1)
-            op_params = match.group(2) if match.group(2) else ""
-
-            # 解析函数
-            parsed_funcs = self.parse_plan_description(op_params)
-            funcs = [f["func"] for f in parsed_funcs]
-
-            operators.append({
-                "operator_name": op_name,
-                "parameters": op_params,
-                "functions": funcs
-            })
-
-        return operators
 
     def analyze_unsupported_functions(self, description):
         """

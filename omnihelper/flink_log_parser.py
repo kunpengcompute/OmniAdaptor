@@ -18,6 +18,7 @@ from omnihelper.util.log import logger
 from omnihelper.util.flink_excel_util import FlinkExcelWriterWithStyle
 from omnihelper.flink.flink_request import FlinkRequester
 from omnihelper.flink.operator.op_parse import FlinkParser
+from omnihelper.constants.flink_constants import TaskStatus, ExcelColumns, MetricType
 
 
 class FlinkLogParser:
@@ -26,15 +27,11 @@ class FlinkLogParser:
 
     def __init__(self, args):
         self.args = args  # 存储命令行参数
+        self.requester = None
         self.excel_writer = FlinkExcelWriterWithStyle()  # 用于表格写
         self.analysis_result = []  # 存储最终的分析结果，用于表格写入
         self.parser = FlinkParser()
-        self.target_metrics = [
-            ".numRecordsIn", ".numRecordsInPerSecond",
-            ".numRecordsOut", ".numRecordsOutPerSecond",
-            ".numBytesIn", ".numBytesInPerSecond",
-            ".numBytesOut", ".numBytesOutPerSecond",
-        ]
+        self.target_metrics = MetricType.get_target_metrics()
         self.args_valid = self._get_arguments()  # 解析命令行并校验参数
         if self.args_valid:
             self.print_arguments()  # 打印初始化页面及参数
@@ -174,6 +171,7 @@ class FlinkLogParser:
             print(f"Kerberos Mutual Auth: {getattr(self.args, 'kerberos_mutual_auth', 'OPTIONAL')}")
         print(f"Output Directory: {os.path.realpath(self.args.output_dir)}")
         print(f"Show Op Details: {self.args.show_op_details}")
+        print(f"DDD CSV Path: {getattr(self.args, 'input_data', 'Not provided')}")
         print("-" * 60)
 
     def fetch_metrics(self, jid, vid, metrics, batch_size=10):
@@ -185,10 +183,10 @@ class FlinkLogParser:
                 results.extend(metric_values)
         return results
 
-    def _get_job_ids(self, jids):
-        if jids is not None:
-            logger.info(f"Using provided job IDS: {jids}")
-            return jids
+    def _get_job_ids(self, job_ids):
+        if job_ids is not None:
+            logger.info(f"Using provided job IDS: {job_ids}")
+            return job_ids
         overview = self.requester.get_jobs_overview()
         if not overview:
             logger.warning("No jobs overview data received")
@@ -199,7 +197,7 @@ class FlinkLogParser:
     def _process_job(self, jid):
         detail = self.requester.get_job_detail(jid)
         if not detail:
-            logger.warning(f"Failed to get detail for job {jid}")
+            logger.warning(f"Failed to get detail for job {jid}, error: {self.requester.last_error}")
             return None
         plan = detail.get("plan", "")
         if not plan:
@@ -207,28 +205,54 @@ class FlinkLogParser:
             return None
         job_name = detail.get('name', 'Unknown')
         plan_nodes = {node['id']: node for node in plan.get('nodes', [])}
+
         vertices = {
             vertex["id"]: self._process_vertex(vertex["id"], vertex, plan_nodes, jid, detail)
             for vertex in detail.get("vertices", [])
         }
         return {
             "job_name": job_name,
-            "vertices": {k: v for k, v in vertices.items() if v is not None}
+            "vertices": {k: v for k, v in vertices.items() if v is not None},
         }
 
     def _process_vertex(self, vid, vertex, plan_nodes, jid, detail):
+        """处理单个 vertex 的解析"""
         metrics = self._get_vertex_metrics(vid, jid)
+
         if not metrics:
-            return None
-        stats = self.parser.parse_performance_stats(vid, metrics["values"],
-                                                    self.parser.get_description(detail, jid))
-        description = plan_nodes.get(vid, {}).get('description', '')
-        op_chain = self.parser.parse_operator_chain(description, stats)
+            return self._create_vertex_result(vid, jid, vertex,
+                                              TaskStatus.VERTEX_METRICS_FAILED,
+                                              "", {"operators": {}, "summary": {}, "analysis": {}})
+
+        description = self._get_description(vid, plan_nodes)
+
+        try:
+            stats = self._parse_performance_stats(vid, metrics["values"], detail, jid)
+            status = TaskStatus.SUCCESS
+        except Exception as e:
+            logger.error(f"Failed to parse performance stats for vertex {vid}: {e}")
+            stats = {"operators": {}, "summary": {}, "analysis": {}}
+            status = TaskStatus.OPERATOR_PARSE_FAILED
+
+        return self._create_vertex_result(vid, jid, vertex, status, description, stats)
+
+    def _get_description(self, vid, plan_nodes):
+        """获取节点描述信息"""
+        return plan_nodes.get(vid, {}).get('description', '')
+
+    def _parse_performance_stats(self, vid, metrics_values, detail, jid):
+        """解析性能统计数据"""
+        return self.parser.parse_performance_stats(vid, metrics_values,
+                                                   self.parser.get_description(detail, jid))
+
+    def _create_vertex_result(self, vid, jid, vertex, status, description, stats):
+        """创建 vertex 处理结果"""
+        if status != TaskStatus.SUCCESS:
+            logger.warning(f"Vertex {vid} in job {jid} status: {status}")
 
         return {
-            "status": vertex.get('status'),
+            "status": status,
             "vertex_name": vertex.get("name"),
-            "operator_chain": op_chain,
             "logic_metadata": {
                 "full_description": description
             },
@@ -238,9 +262,11 @@ class FlinkLogParser:
     def _get_vertex_metrics(self, vid, jid):
         available = self.requester.get_vertex_metrics(jid, vid)
         if not available:
-            logger.warning(f"No metrics available for vertex {vid} in job {jid}")
+            logger.warning(f"No metrics available for vertex {vid} in job {jid}, error: {self.requester.last_error}")
             return None
         needed_ids = self.parser.filter_num_data(available, self.target_metrics)
+        if not needed_ids:
+            logger.warning(f"No needed metrics found for vertex {vid} in job {jid}")
         return {
             "ids": needed_ids,
             "values": self.fetch_metrics(jid, vid, needed_ids) if needed_ids else []
@@ -282,47 +308,61 @@ class FlinkLogParser:
             print("Result is empty, No data to display.")
             return
 
-        # 定义列顺序，确保与表头配置一致
-        columns = [
-            'jobid', 'taskid', '状态',
-            '算子名称', 'Input', 'Output', '出现频次', '运行时间(s)', '输入数据量', '输出数据量',
-            '表达式/内置函数名称', 'Input', '嵌套内容', '出现频次'
+        # 定义输出列顺序（包含重复列名）
+        output_columns = [
+            ExcelColumns.JOB_ID, ExcelColumns.TASK_ID, ExcelColumns.STATUS,
+            ExcelColumns.OPERATOR_NAME, ExcelColumns.INPUT, ExcelColumns.OUTPUT,
+            ExcelColumns.FREQUENCY, ExcelColumns.RUNTIME, ExcelColumns.INPUT_DATA_SIZE,
+            ExcelColumns.OUTPUT_DATA_SIZE, ExcelColumns.FUNC_NAME, ExcelColumns.INPUT,
+            ExcelColumns.NESTED_CONTENT, ExcelColumns.FREQUENCY
         ]
 
-        # 处理重复列名的情况
-        # 为第二个 Input 和 出现频次 列添加临时后缀
+        # 处理重复列名：临时列名映射
         temp_columns = [
-            'jobid', 'taskid', '状态',
-            '算子名称', 'Input', 'Output', '出现频次', '运行时间(s)', '输入数据量', '输出数据量',
-            '表达式/内置函数名称', 'Input_2', '嵌套内容', '出现频次_2'
+            ExcelColumns.JOB_ID, ExcelColumns.TASK_ID, ExcelColumns.STATUS,
+            ExcelColumns.OPERATOR_NAME, ExcelColumns.INPUT, ExcelColumns.OUTPUT,
+            ExcelColumns.FREQUENCY, ExcelColumns.RUNTIME, ExcelColumns.INPUT_DATA_SIZE,
+            ExcelColumns.OUTPUT_DATA_SIZE, ExcelColumns.FUNC_NAME,
+            f"{ExcelColumns.INPUT}_2", ExcelColumns.NESTED_CONTENT,
+            f"{ExcelColumns.FREQUENCY}_2"
         ]
 
-        # 创建一个新的列表，将数据中的 '表达式Input' 和 '表达式出现频次' 映射到临时列名
-        processed_data = []
-        for item in self.analysis_result:
-            processed_item = {
-                'jobid': item.get('jobid'),
-                'taskid': item.get('taskid'),
-                '状态': item.get('状态'),
-                '算子名称': item.get('算子名称'),
-                'Input': item.get('Input'),
-                'Output': item.get('Output'),
-                '出现频次': item.get('出现频次'),
-                '运行时间(s)': item.get('运行时间(s)'),
-                '输入数据量': item.get('输入数据量'),
-                '输出数据量': item.get('输出数据量'),
-                '表达式/内置函数名称': item.get('表达式/内置函数名称'),
-                'Input_2': item.get('表达式Input'),
-                '嵌套内容': item.get('嵌套内容'),
-                '出现频次_2': item.get('表达式出现频次')
-            }
-            processed_data.append(processed_item)
+        # 数据字段映射：原始字段 -> 临时列名
+        field_mapping = [
+            (ExcelColumns.JOB_ID, ExcelColumns.JOB_ID),
+            (ExcelColumns.TASK_ID, ExcelColumns.TASK_ID),
+            (ExcelColumns.STATUS, ExcelColumns.STATUS),
+            (ExcelColumns.OPERATOR_NAME, ExcelColumns.OPERATOR_NAME),
+            (ExcelColumns.INPUT, ExcelColumns.INPUT),
+            (ExcelColumns.OUTPUT, ExcelColumns.OUTPUT),
+            (ExcelColumns.FREQUENCY, ExcelColumns.FREQUENCY),
+            (ExcelColumns.RUNTIME, ExcelColumns.RUNTIME),
+            (ExcelColumns.INPUT_DATA_SIZE, ExcelColumns.INPUT_DATA_SIZE),
+            (ExcelColumns.OUTPUT_DATA_SIZE, ExcelColumns.OUTPUT_DATA_SIZE),
+            (ExcelColumns.FUNC_NAME, ExcelColumns.FUNC_NAME),
+            (ExcelColumns.FUNC_INPUT, f"{ExcelColumns.INPUT}_2"),
+            (ExcelColumns.NESTED_CONTENT, ExcelColumns.NESTED_CONTENT),
+            (ExcelColumns.FUNC_FREQUENCY, f"{ExcelColumns.FREQUENCY}_2"),
+        ]
+
+        # 处理数据
+        processed_data = self._process_report_data(field_mapping)
 
         # 创建 DataFrame
         df = pd.DataFrame(processed_data, columns=temp_columns)
 
         # 重命名列，将临时后缀去掉，实现重复列名
-        df.columns = columns
+        df.columns = output_columns
 
         output_excel_path = os.path.join(self.args.output_dir, f"Omni_Analysis_All_Report_{self.TIMESTAMP}.xlsx")
         self.excel_writer.write_to_excel(df, output_excel_path)
+
+    def _process_report_data(self, field_mapping):
+        """处理报告数据，按照字段映射转换"""
+        processed_data = []
+        for item in self.analysis_result:
+            processed_item = {}
+            for source_field, target_field in field_mapping:
+                processed_item[target_field] = item.get(source_field)
+            processed_data.append(processed_item)
+        return processed_data

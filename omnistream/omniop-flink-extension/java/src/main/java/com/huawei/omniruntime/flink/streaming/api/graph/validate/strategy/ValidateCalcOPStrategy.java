@@ -321,6 +321,18 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                             return false;
                         }
                     }
+                    if (exprMap.containsKey("wrapperBehavior")
+                            && !validateJsonQueryWrapper(exprMap.get("wrapperBehavior"))) {
+                        return false;
+                    }
+                    if (exprMap.containsKey("emptyBehavior")
+                            && !validateJsonQueryBehavior(exprMap.get("emptyBehavior"), "emptyBehavior")) {
+                        return false;
+                    }
+                    if (exprMap.containsKey("errorBehavior")
+                            && !validateJsonQueryBehavior(exprMap.get("errorBehavior"), "errorBehavior")) {
+                        return false;
+                    }
                 }
 
                 return validateReturnTypeAndArguments(exprMap, inputSize);
@@ -480,6 +492,49 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             }
         } else {
             LOG.info("ERROR: Cannot parse the result expr in a CASE expr");
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean validateJsonQueryWrapper(Object wrapperObj) {
+        if (!(wrapperObj instanceof Map)) {
+            LOG.info("ERROR: json_query wrapperBehavior is not an object");
+            return false;
+        }
+        Object wrapperType = ((Map<?, ?>) wrapperObj).get("type");
+        if (!(wrapperType instanceof String)) {
+            LOG.info("ERROR: json_query wrapperBehavior.type is invalid");
+            return false;
+        }
+
+        String wrapperName = (String) wrapperType;
+        if (!"WITHOUT_ARRAY".equalsIgnoreCase(wrapperName)
+                && !"WITH_CONDITIONAL_ARRAY".equalsIgnoreCase(wrapperName)
+                && !"WITH_UNCONDITIONAL_ARRAY".equalsIgnoreCase(wrapperName)) {
+            LOG.info("ERROR: json_query wrapperBehavior {} is not supported", wrapperName);
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean validateJsonQueryBehavior(Object behaviorObj, String behaviorKey) {
+        if (!(behaviorObj instanceof Map)) {
+            LOG.info("ERROR: json_query {} is not an object", behaviorKey);
+            return false;
+        }
+        Object behaviorType = ((Map<?, ?>) behaviorObj).get("type");
+        if (!(behaviorType instanceof String)) {
+            LOG.info("ERROR: json_query {}.type is invalid", behaviorKey);
+            return false;
+        }
+
+        String behaviorName = (String) behaviorType;
+        if (!"NULL".equalsIgnoreCase(behaviorName)
+                && !"ERROR".equalsIgnoreCase(behaviorName)
+                && !"EMPTY_ARRAY".equalsIgnoreCase(behaviorName)
+                && !"EMPTY_OBJECT".equalsIgnoreCase(behaviorName)) {
+            LOG.info("ERROR: json_query {} {} is not supported", behaviorKey, behaviorName);
             return false;
         }
         return true;

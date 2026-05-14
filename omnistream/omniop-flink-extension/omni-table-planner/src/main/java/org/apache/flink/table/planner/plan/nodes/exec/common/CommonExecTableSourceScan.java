@@ -21,6 +21,10 @@
 
 package org.apache.flink.table.planner.plan.nodes.exec.common;
 
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexNode;
 import org.apache.flink.api.common.eventtime.AscendingTimestampsWatermarks;
 import org.apache.flink.api.common.eventtime.BoundedOutOfOrdernessWatermarks;
 import org.apache.flink.api.common.eventtime.NoWatermarksGenerator;
@@ -50,6 +54,8 @@ import org.apache.flink.table.connector.source.SourceProvider;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.connectors.TransformationScanProvider;
 import org.apache.flink.table.planner.delegation.PlannerBase;
+import org.apache.flink.table.planner.plan.abilities.source.SourceAbilitySpec;
+import org.apache.flink.table.planner.plan.abilities.source.WatermarkPushDownSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
@@ -63,6 +69,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.utils.TransformationMetada
 import org.apache.flink.table.planner.plan.utils.ReflectionUtils;
 import org.apache.flink.table.planner.utils.ShortcutUtils;
 import org.apache.flink.table.runtime.connector.source.ScanRuntimeProviderContext;
+import org.apache.flink.table.runtime.generated.GeneratedWatermarkGeneratorSupplier;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
@@ -71,6 +78,7 @@ import org.apache.flink.util.jackson.JacksonMapperFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -283,9 +291,9 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
         boolean hasMetadata = true;
         if (!deserializationSchema.isEmpty()) {
             Object kafkaRecordDeserializationSchema = ReflectionUtils
-                .retrievePrivateField(source, "deserializationSchema");
+                    .retrievePrivateField(source, "deserializationSchema");
             Object kafkaDeserializationSchema = ReflectionUtils.retrievePrivateField(
-                kafkaRecordDeserializationSchema, "kafkaDeserializationSchema");
+                    kafkaRecordDeserializationSchema, "kafkaDeserializationSchema");
             hasMetadata = ReflectionUtils.retrievePrivateField(kafkaDeserializationSchema, "hasMetadata");
         }
         jsonMap.put("hasMetadata", hasMetadata);
@@ -297,8 +305,11 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
         }
 
         jsonMap.put("properties", properties);
-        WatermarkStrategy<?> watermarkStrategy =
-            transformation.getWatermarkStrategy();
+        WatermarkStrategy<?> watermarkStrategy = transformation.getWatermarkStrategy();
+        setWatermarkStrategy(watermarkStrategy, jsonMap);
+    }
+
+    private void setWatermarkStrategy(WatermarkStrategy<?> watermarkStrategy, Map<String, Object> jsonMap) {
         WatermarkGenerator watermarkGenerator = watermarkStrategy.createWatermarkGenerator(null);
         if (watermarkGenerator instanceof NoWatermarksGenerator) {
             jsonMap.put("watermarkStrategy", "no");
@@ -307,12 +318,54 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
         } else if (watermarkGenerator instanceof BoundedOutOfOrdernessWatermarks) {
             jsonMap.put("watermarkStrategy", "bounded");
             long outOfOrdernessMillis = ReflectionUtils.retrievePrivateField(
-                watermarkGenerator, "outOfOrdernessMillis");
+                    watermarkGenerator, "outOfOrdernessMillis");
             jsonMap.put("outOfOrdernessMillis", outOfOrdernessMillis);
-        } else {
-            LOG.warn("Unsupported watermark strategy: "
-                + watermarkGenerator.getClass().getName());
-            jsonMap.put("watermarkStrategy", "");
+        } else if (watermarkGenerator instanceof GeneratedWatermarkGeneratorSupplier.DefaultWatermarkGenerator) {
+            WatermarkPushDownSpec watermarkSpec = null;
+            for (SourceAbilitySpec spec : tableSourceSpec.getSourceAbilities()) {
+                if (spec instanceof WatermarkPushDownSpec) {
+                    watermarkSpec = (WatermarkPushDownSpec) spec;
+                    break;
+                }
+            }
+            if (watermarkSpec == null) {
+                jsonMap.put("watermarkStrategy", "");
+                LOG.warn("Unsupported watermark strategy: {}, WatermarkPushDownSpec not found",
+                        watermarkGenerator.getClass().getName());
+                return;
+            }
+            RexNode watermarkExpr = ReflectionUtils.retrievePrivateField(watermarkSpec, "watermarkExpr");
+            if (!(watermarkExpr instanceof RexCall)) {
+                LOG.warn("Unsupported watermark strategy: {}, watermarkExpr is not RexCall: {}",
+                        watermarkGenerator.getClass().getName(), watermarkExpr);
+                jsonMap.put("watermarkStrategy", "");
+                return;
+            }
+            String opName = ((RexCall) watermarkExpr).getOperator().getName();
+            RexCall call = (RexCall) watermarkExpr;
+            if ("-".equals(opName) && call.getOperands().size() == 2) {
+                RexNode left = call.getOperands().get(0);
+                RexNode right = call.getOperands().get(1);
+                if (left instanceof RexInputRef
+                        && right instanceof RexLiteral
+                        && right.getType().getSqlTypeName().getName().equals("INTERVAL_SECOND")
+                        && ((RexLiteral) right).getValue() instanceof BigDecimal) {
+                    long intervalValue = ((BigDecimal) ((RexLiteral) right).getValue()).longValue();
+                    if (intervalValue == 0) {
+                        jsonMap.put("watermarkStrategy", "ascending");
+                    } else {
+                        jsonMap.put("watermarkStrategy", "bounded");
+                        jsonMap.put("outOfOrdernessMillis", intervalValue);
+                    }
+                } else {
+                    LOG.warn("Unsupported watermark strategy: {}, watermarkExpr is not supported: {}",
+                            watermarkGenerator.getClass().getName(), watermarkExpr);
+                    jsonMap.put("watermarkStrategy", "");
+                }
+            } else {
+                LOG.warn("Unsupported watermark strategy: {}", watermarkGenerator.getClass().getName());
+                jsonMap.put("watermarkStrategy", "");
+            }
         }
     }
 

@@ -44,6 +44,8 @@ def replace_predicate_partition(args):
     return [supported] * len(args)
 
 def strip_outer_parens(expr):
+    if not expr:
+        return ""
     expr = expr.strip()
     if expr.startswith("(") and expr.endswith(")"):
         depth = 0

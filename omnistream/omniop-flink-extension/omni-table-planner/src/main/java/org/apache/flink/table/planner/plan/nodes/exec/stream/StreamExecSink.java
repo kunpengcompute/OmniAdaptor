@@ -269,8 +269,7 @@ public class StreamExecSink extends CommonExecSink implements StreamExecNode<Obj
         jsonMap.put("originDescription", oldDescription);
         jsonMap.put("inputTypes", inputTypeList);
         jsonMap.put("outputTypes", outputTypeList);
-        ZoneOffset offset = localTimeZone.getRules().getOffset(Instant.now());
-        jsonMap.put("zoneOffsetSeconds", offset.getTotalSeconds());
+        jsonMap.put("timeZone", localTimeZone.getId());
         String jsonString = "";
         try {
             jsonString = objectMapper.writeValueAsString(jsonMap);

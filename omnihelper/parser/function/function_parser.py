@@ -192,6 +192,17 @@ class FunctionParser:
 
         update_event_result = []
         for (func_name, sql_hash, input_type), times in counter.items():
+            if not not_supported_line[(func_name, sql_hash, input_type)]:
+                update_event_result.append({
+                    "func_name": func_name,
+                    "sql_hash": sql_hash,
+                    "input": input_type,
+                    "times": times,
+                    "is_udf": True if func_name.lower() in self.user_defined_functions else False,
+                    "not_supported_line": '',
+                    "not_supported_params": not_supported_params[(func_name, sql_hash, input_type)]
+                })
+
             for i, x in enumerate(not_supported_line[(func_name, sql_hash, input_type)]):
                 param = ", ".join(not_supported_params[(func_name, sql_hash, input_type)][i])
                 nested_line = f"{i + 1}. {x} 参数名：{param}"

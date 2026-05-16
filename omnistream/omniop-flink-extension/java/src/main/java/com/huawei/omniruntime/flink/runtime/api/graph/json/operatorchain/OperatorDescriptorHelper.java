@@ -54,13 +54,7 @@ import org.apache.flink.streaming.runtime.operators.sink.SinkWriterOperatorFacto
 import org.apache.flink.table.runtime.typeutils.ExternalSerializer;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
-import org.apache.flink.table.types.logical.BigIntType;
-import org.apache.flink.table.types.logical.DecimalType;
-import org.apache.flink.table.types.logical.LogicalType;
-import org.apache.flink.table.types.logical.LogicalTypeRoot;
-import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.table.types.logical.TimestampType;
-import org.apache.flink.table.types.logical.VarCharType;
+import org.apache.flink.table.types.logical.*;
 import org.apache.flink.util.function.SerializableFunction;
 import org.apache.flink.util.function.SerializableSupplier;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
@@ -228,6 +222,10 @@ public class OperatorDescriptorHelper {
             // Cast to TimestampType to access precision
             if (fieldType instanceof TimestampType) {
                 int precision = ((TimestampType) fieldType).getPrecision();
+                typeName += "(" + precision + ")";
+            }
+            if (fieldType instanceof LocalZonedTimestampType) {
+                int precision = ((LocalZonedTimestampType) fieldType).getPrecision();
                 typeName += "(" + precision + ")";
             }
         }

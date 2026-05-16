@@ -14,12 +14,7 @@ package org.apache.flink.table.planner.plan.nodes.exec.util;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.flink.table.functions.UserDefinedFunction;
 import org.apache.flink.table.planner.plan.utils.AggregateInfo;
-import org.apache.flink.table.types.logical.DecimalType;
-import org.apache.flink.table.types.logical.LogicalType;
-import org.apache.flink.table.types.logical.LogicalTypeRoot;
-import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.table.types.logical.TimestampType;
-import org.apache.flink.table.types.logical.VarCharType;
+import org.apache.flink.table.types.logical.*;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -69,6 +64,10 @@ public class DescriptionUtil {
             // Cast to TimestampType to access precision
             if (fieldType instanceof TimestampType) {
                 int precision = ((TimestampType) fieldType).getPrecision();
+                typeName += "(" + precision + ")";
+            }
+            if (fieldType instanceof LocalZonedTimestampType) {
+                int precision = ((LocalZonedTimestampType) fieldType).getPrecision();
                 typeName += "(" + precision + ")";
             }
         }

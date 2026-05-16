@@ -62,11 +62,7 @@ import org.apache.flink.table.runtime.operators.aggregate.MiniBatchGroupAggFunct
 import org.apache.flink.table.runtime.operators.bundle.KeyedMapBundleOperator;
 import org.apache.flink.table.runtime.types.LogicalTypeDataTypeConverter;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
-import org.apache.flink.table.types.logical.LogicalType;
-import org.apache.flink.table.types.logical.LogicalTypeRoot;
-import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.table.types.logical.TimestampType;
-import org.apache.flink.table.types.logical.VarCharType;
+import org.apache.flink.table.types.logical.*;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
 
 import org.slf4j.Logger;
@@ -264,6 +260,10 @@ public class StreamExecGroupAggregate extends StreamExecAggregateBase {
                     int precision = ((TimestampType) fieldType).getPrecision();
                     typeName += "(" + precision + ")";
                 }
+                if (fieldType instanceof LocalZonedTimestampType) {
+                    int precision = ((LocalZonedTimestampType) fieldType).getPrecision();
+                    typeName += "(" + precision + ")";
+                }
             }
             outputTypeList.add(typeName);
         }
@@ -289,6 +289,10 @@ public class StreamExecGroupAggregate extends StreamExecAggregateBase {
                 // Cast to TimestampType to access precision
                 if (fieldType instanceof TimestampType) {
                     int precision = ((TimestampType) fieldType).getPrecision();
+                    typeName += "(" + precision + ")";
+                }
+                if (fieldType instanceof LocalZonedTimestampType) {
+                    int precision = ((LocalZonedTimestampType) fieldType).getPrecision();
                     typeName += "(" + precision + ")";
                 }
             }

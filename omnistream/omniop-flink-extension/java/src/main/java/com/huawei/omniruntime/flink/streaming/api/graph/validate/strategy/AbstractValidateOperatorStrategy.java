@@ -33,6 +33,7 @@ public abstract class AbstractValidateOperatorStrategy {
             "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(9)",
+            "VARCHAR",
             "VARCHAR(2147483647)",
             "VARCHAR(2000)",
             "VARCHAR(9)",
@@ -40,7 +41,7 @@ public abstract class AbstractValidateOperatorStrategy {
             "BOOLEAN",
             "DECIMAL64",
             "DECIMAL128",
-            "TIMESTAMP_WITH_LOCAL_TIME_ZONE"));
+            "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));
     private static final Logger LOG = LoggerFactory.getLogger(AbstractValidateOperatorStrategy.class);
 
     static {
@@ -80,6 +81,11 @@ public abstract class AbstractValidateOperatorStrategy {
                 // match DECIMAL64 and DECIMAL128
                 .flatMap(List::stream)
                 .allMatch(type -> {
+                    if (type.matches("^VARCHAR\\([^)]*\\)$")) {
+                        type = "VARCHAR";
+                        LOG.info("converted to VARCHAR");
+                    }
+
                     if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
                         type = "DECIMAL64";
                         LOG.info("converted to DECIMAL64");

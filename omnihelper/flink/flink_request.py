@@ -9,20 +9,11 @@
    See the Mulan PSL v2 for more details.
 """
 import time
-from json import JSONDecodeError
-
 import requests
-
+from json import JSONDecodeError
 from urllib.parse import urljoin
-import logging
-
-logging.basicConfig(
-    filename="parse_flink.log",
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+from omnihelper.util.log import logger
+from omnihelper.constants.flink_constants import TaskStatus
 
 
 class FlinkRequester:
@@ -40,6 +31,7 @@ class FlinkRequester:
         self.ssl_verify = ssl_verify  # 校验SSL证书
         self.interval = interval  # 接口调用间隔
         self.custom_headers = headers or {}
+        self.last_error = None  # 最近一次错误信息
 
         if kerberos:
             try:
@@ -74,20 +66,31 @@ class FlinkRequester:
                 time.sleep(self.interval / 1000)
                 resp = self.session.get(url, params=params, timeout=self.timeout, verify=self.ssl_verify)
                 if resp.status_code == 200:
+                    self.last_error = None
                     return resp.json()
                 logger.warning(f"[API Error] {endpoint} Status: {resp.status_code}")
+                self.last_error = f"HTTP {resp.status_code}"
                 if attempt < self.max_retries - 1:
                     logger.info(f"Retrying {endpoint} (attempt {attempt + 1})")
+            except requests.exceptions.Timeout as e:
+                logger.error(f"[Timeout Error] {endpoint} Failed: {e}")
+                self.last_error = TaskStatus.REQUEST_TIMEOUT
+                if attempt < self.max_retries - 1:
+                    logger.info(f"Retrying {endpoint} (attempt {attempt + 1})")
+                continue
             except requests.exceptions.RequestException as e:
                 logger.error(f"[Network Error] {endpoint} Failed: {e}")
+                self.last_error = TaskStatus.NETWORK_ERROR
                 if attempt < self.max_retries - 1:
                     logger.info(f"Retrying {endpoint} (attempt {attempt + 1})")
                 continue
             except JSONDecodeError as e:
                 logger.error(f"[JSON Decode Error] {endpoint} Failed: {e}")
+                self.last_error = f"JSON解析失败: {e}"
                 break
             except Exception as e:
                 logger.error(f"[UnException Error] {endpoint} Failed: {e}")
+                self.last_error = f"{TaskStatus.UNKNOWN_ERROR}: {e}"
                 break
         return None
 

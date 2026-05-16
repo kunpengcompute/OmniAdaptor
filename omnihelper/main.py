@@ -78,6 +78,13 @@ def _create_flink_parser(subparsers):
     )
 
     flink_parser.add_argument(
+        '--input_data',
+        type=str,
+        default=None,
+        help='Input DDD CSV file path. The CSV file should contain table_name, field_name, and field_type columns.'
+    )
+
+    flink_parser.add_argument(
         '--interval', '-i',
         type=int,
         default=100,

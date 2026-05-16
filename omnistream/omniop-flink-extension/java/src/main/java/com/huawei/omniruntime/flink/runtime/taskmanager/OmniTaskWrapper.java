@@ -625,6 +625,17 @@ public class OmniTaskWrapper {
         }
     }
 
+    public int readSavepointInputStream(FSDataInputStream inputStream, byte[] buffer, int offset, int length)
+            throws IOException {
+        if (inputStream == null) {
+            return -1;
+        }
+        if (buffer == null) {
+            throw new IOException("readSavepointInputStream target buffer is null.");
+        }
+        return inputStream.read(buffer, offset, length);
+    }
+
     public boolean isUsingKeyGroupCompression(FSDataInputStream inputStream) throws IOException {
         DataInputView in = new DataInputViewStreamWrapper(inputStream);
         int readVersion = in.readInt();

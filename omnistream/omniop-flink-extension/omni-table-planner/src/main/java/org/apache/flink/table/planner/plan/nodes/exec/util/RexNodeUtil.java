@@ -34,6 +34,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -129,6 +130,14 @@ public class RexNodeUtil {
         binaryOperatorMap.put("<=", BinaryExprType.LESS_THAN_OR_EQUAL);
         binaryOperatorMap.put("=", BinaryExprType.EQUAL);
         binaryOperatorMap.put("<>", BinaryExprType.NOT_EQUAL);
+    }
+
+    private static <T> T resolveOperatorType(Map<String, T> operatorMap, String operatorName) {
+        T operatorType = operatorMap.get(operatorName);
+        if (operatorType != null) {
+            return operatorType;
+        }
+        return operatorMap.get(operatorName.toUpperCase(Locale.ROOT));
     }
 
     public enum OperatorExprType {
@@ -247,9 +256,13 @@ public class RexNodeUtil {
             List<RexNode> operands = rexCall.getOperands();
             int numOperands = operands.size();
             SqlOperator operator = rexCall.getOperator();
+            String operatorName = operator.getName();
+            BinaryExprType binaryType = resolveOperatorType(binaryOperatorMap, operatorName);
+            UnaryExprType unaryType = resolveOperatorType(unaryOperatorMap, operatorName);
+            SpecialExprType udfType = resolveOperatorType(udfOperatorMap, operatorName);
+            SpecialExprType specialType = udfType != null ? udfType : resolveOperatorType(specialOperatorMap, operatorName);
             LOG.info("Current rexNode is {}", rexCall.toString());
-            if (rexCall.operands.size() == 2 && binaryOperatorMap.containsKey(operator.getName())) {
-                BinaryExprType binaryType = binaryOperatorMap.get(operator.getName());
+            if (rexCall.operands.size() == 2 && binaryType != null) {
                 jsonMap.put("exprType",  OperatorExprType.BINARY.name());
                 setDataType(rexCall,jsonMap, "returnType");
                 jsonMap.put("operator", binaryType.name());
@@ -258,14 +271,8 @@ public class RexNodeUtil {
                 Map<String, Object> rightMap =  buildJsonMap(operands.get(1));
                 jsonMap.put("right", rightMap);
                 return jsonMap;
-            } else if (rexCall.operands.size() == 1 && unaryOperatorMap.containsKey(operator.getName())) {
+            } else if (rexCall.operands.size() == 1 && unaryType != null) {
                 Map<String, Object> childMap = buildJsonMap(operands.get(0));
-                Integer returnType = RexTypeToIdMap.get(rexCall.getType().getSqlTypeName().toString());
-                Integer childDataType = (Integer) childMap.getOrDefault("dataType", -1);
-                if (childMap.containsKey("returnType")) {
-                    childDataType = (Integer) childMap.get("returnType");
-                }
-                UnaryExprType unaryType = unaryOperatorMap.get(operator.getName());
                 if (unaryType.equals(UnaryExprType.IS_TRUE) ||
                         childMap.containsKey("exprType") && childMap.get("exprType").equals(SpecialExprType.SWITCH)) {
                     return childMap;
@@ -275,17 +282,12 @@ public class RexNodeUtil {
                 jsonMap.put("operator", unaryType.name());
                 jsonMap.put("expr", childMap);
                 return jsonMap;
-            } else if (udfOperatorMap.containsKey(operator.getName())
-                    || specialOperatorMap.containsKey(operator.getName())) {
-                SpecialExprType specialType = udfOperatorMap.containsKey(operator.getName())
-                        ? udfOperatorMap.get(operator.getName())
-                        : specialOperatorMap.get(operator.getName());
+            } else if (specialType != null) {
                 switch (specialType){
                     case SWITCH: // This is the more general switch
                     case IF:
                         jsonMap.put("exprType",  "SWITCH_GENERAL");
                         setDataType(rexCall,jsonMap, "returnType");
-                        List<RexNode> switchOperands = rexCall.getOperands();
                         // SWITCH([input_expr, condition1], 'result1', [input_expr, condition2], 'result2', 'optional other')
                         int numOfCases = (numOperands - 1) / 2;
                         jsonMap.put("numOfCases", numOfCases);
@@ -535,11 +537,11 @@ public class RexNodeUtil {
                             if (operands.get(1).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                                 jsonMap.put("function_name", "get_hour_with_tz");
                                 Map<String, Object> argMap = new LinkedHashMap<>();
-                                argMap.put("dataType", 2);
+                                argMap.put("dataType", 15);
                                 argMap.put("exprType", "LITERAL");
                                 argMap.put("isNull", false);
-                                ZoneOffset offset = CommonExecCalc.getZoneId().getRules().getOffset(Instant.now());
-                                argMap.put("value", offset.getTotalSeconds());
+                                argMap.put("value", CommonExecCalc.getZoneId().getId());
+                                argMap.put("width", CommonExecCalc.getZoneId().getId().length());
                                 args.add(argMap);
                             } else {
                                 jsonMap.put("function_name", "get_hour");
@@ -615,11 +617,11 @@ public class RexNodeUtil {
                         if (operands.get(0).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
                             jsonMap.put("function_name", "from_unixtime_with_tz");
                             Map<String, Object> argMap3 = new LinkedHashMap<>();
-                            argMap3.put("dataType", 2);
+                            argMap3.put("dataType", 15);
                             argMap3.put("exprType", "LITERAL");
                             argMap3.put("isNull", false);
-                            ZoneOffset offset = CommonExecCalc.getZoneId().getRules().getOffset(Instant.now());
-                            argMap3.put("value", offset.getTotalSeconds());
+                            argMap3.put("value", CommonExecCalc.getZoneId().getId());
+                            argMap3.put("width", CommonExecCalc.getZoneId().getId().length());
                             argumentsList.add(argMap3);
                         } else {
                             jsonMap.put("function_name", "from_unixtime_without_tz");
@@ -703,6 +705,9 @@ public class RexNodeUtil {
                         jsonMap.put("arguments", dateAddArgs);
                         LOG.info("The DATE_ADD expression is {} ", rexCall.toString());
                         break;
+                    default:
+                        jsonMap.put("exprType", "INVALID");
+                        break;
                 }
                 return jsonMap;
             } else {
@@ -733,7 +738,6 @@ public class RexNodeUtil {
             } else { // deal with $index
                 RexInputRef  rexInputRef =(RexInputRef) rexNode;
                 jsonMap.put("exprType",  OperatorExprType.FIELD_REFERENCE.name());
-                SqlTypeName dataType= rexInputRef.getType().getSqlTypeName();
                 setDataType(rexInputRef, jsonMap, "dataType");
                 jsonMap.put("colVal", accessIndexMap.getOrDefault(rexInputRef.hashCode(), rexInputRef.hashCode()));
                 // todo: add fields precision and scale for DECIMAL64D and DECIMAL128
@@ -743,7 +747,6 @@ public class RexNodeUtil {
             RexFieldAccess fieldAccess = (RexFieldAccess) rexNode;
             // Create a field access based on accessIndexMap
             jsonMap.put("exprType",  OperatorExprType.FIELD_REFERENCE.name());
-            SqlTypeName dataType= fieldAccess.getType().getSqlTypeName();
             setDataType(fieldAccess, jsonMap, "dataType");
             int colVal = fieldAccess.getReferenceExpr().hashCode();
             int fieldVal = fieldAccess.getField().getIndex();

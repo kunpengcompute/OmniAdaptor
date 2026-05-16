@@ -21,7 +21,7 @@ class CommonUtil:
     def get_execute_path():
         if getattr(sys, 'frozen', False):
             return os.path.dirname(os.path.realpath(sys.executable))
-        return os.path.dirname(__file__)
+        return os.path.dirname(os.path.dirname(__file__))
 
     @staticmethod
     def print_failed_files(failed_files, all_files_length):
@@ -166,7 +166,7 @@ class CommonUtil:
             not_supported_line='',
             not_supported_params='',
             func_times='',
-            is_udf = '',
+            is_udf='',
             spark_version='',
             error_info='',
     ) -> dict:

@@ -43,7 +43,7 @@ class ExcelWriterWithStyle:
              "merged_func_column": self.DEFAULT_VALUE},
             {'main': 'Omni不支持的表达式/内置函数', 'sub': 'Input', "column_width": 35, "merged_func_column": self.DEFAULT_VALUE},
             {'main': 'Omni不支持的表达式/内置函数', 'sub': '嵌套内容', "column_width": 40, "merged_func_column": self.DEFAULT_VALUE},
-            {'main': 'Omni不支持的表达式/内置函数', 'sub': '出现频次', "column_width": 10, "merged_func_column": self.DEFAULT_VALUE},
+            {'main': 'Omni不支持的表达式/内置函数', 'sub': '出现频次', "column_width": 10},
             {'main': 'Omni不支持的表达式/内置函数', 'sub': '是否udf', "column_width": 10, "merged_func_column": self.DEFAULT_VALUE},
             {'main': 'Spark版本', "column_width": 15},
             {'main': '异常信息/备注', "column_width": 30}
@@ -121,7 +121,7 @@ class ExcelWriterWithStyle:
                     control_cols=[1]
                 )
 
-                # 合并相同值的单元格
+                # 合并出现频次
                 self.merge_cells_full(
                     worksheet,
                     data_cache,
@@ -130,6 +130,16 @@ class ExcelWriterWithStyle:
                     linked_cols=self.merged_func_column,
                     control_cols=[1, 2, function_start_column]
                 )
+                # 合并出现频次
+                self.merge_cells_full(
+                    worksheet,
+                    data_cache,
+                    start_row=3,
+                    independent_cols=[],
+                    linked_cols=[function_start_column + 3],
+                    control_cols=[1, 2, function_start_column, function_start_column + 1]
+                )
+
 
             print(f"[SUCCESS] Analysis report has been saved to: {output_excel_path}")
             return True

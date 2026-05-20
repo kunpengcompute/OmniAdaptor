@@ -14,5 +14,7 @@ public enum OmniSerializerCategory {
     POJO,
     VOID_NAMESPACE,
     TIMER,
+    PRIMITIVE_ARRAY,
+    ROW,
     UNKNOWN
 }

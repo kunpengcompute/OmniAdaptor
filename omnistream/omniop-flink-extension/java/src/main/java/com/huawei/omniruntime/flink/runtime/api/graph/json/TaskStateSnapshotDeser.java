@@ -40,6 +40,8 @@ import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.filesystem.FileStateHandle;
 import org.apache.flink.runtime.state.filesystem.RelativeFileStateHandle;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
+import org.apache.flink.runtime.state.OperatorStateHandle.StateMetaInfo;
+import org.apache.flink.runtime.state.OperatorStateHandle.Mode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
@@ -227,6 +229,12 @@ public class TaskStateSnapshotDeser {
             if (rawKeyedStateArray.isArray()) {
                 parseManagedKeyedStateArray(rawKeyedStateArray, rawKeyedState);
             }
+            StateObjectCollection<OperatorStateHandle> managedOperatorState = new StateObjectCollection<>();
+            JsonNode managedOperatorStateArray = operatorStateNode.get("managedOperatorState").get("stateObjects");
+            if (managedOperatorStateArray.isArray()) {
+                parseManagedOperatorStateArray(managedOperatorStateArray, managedOperatorState);
+            }
+
             StateObjectCollection<InputChannelStateHandle> inputChannelState = new StateObjectCollection<>();
             JsonNode inputChannelStateArray = getStateObjectsNode(operatorStateNode.get("inputChannelState"));
 
@@ -248,7 +256,7 @@ public class TaskStateSnapshotDeser {
             builder.setInputChannelState(inputChannelState);
             builder.setResultSubpartitionState(resultSubpartitionState);
             // Empty collections for all other states
-            builder.setManagedOperatorState(StateObjectCollection.empty());
+            builder.setManagedOperatorState(managedOperatorState);
             builder.setRawOperatorState(StateObjectCollection.empty());
             builder.setInputRescalingDescriptor(InflightDataRescalingDescriptor.NO_RESCALE);
             builder.setOutputRescalingDescriptor(InflightDataRescalingDescriptor.NO_RESCALE);
@@ -298,6 +306,34 @@ public class TaskStateSnapshotDeser {
             }
         }
         return null;
+    }
+
+    private static void parseManagedOperatorStateArray(JsonNode managedOperatorStateArray,
+                                                    StateObjectCollection<OperatorStateHandle> managedOperatorState) {
+           for (JsonNode handleNode : managedOperatorStateArray) {
+               String handleType = handleNode.get("stateHandleName").asText();
+               if ("OperatorStreamStateHandle".equals(handleType)) {
+                   StreamStateHandle metaDataState = TaskStateSnapshotDeser.parseStreamStateHandle(handleNode.get("streamStateHandle"));
+                   JsonNode partitionOffsetsNode = handleNode.get("stateNameToPartitionOffsets");
+                   Map<String, OperatorStateHandle.StateMetaInfo> stateMap = new HashMap<>();
+                   Iterator<String> fieldNames = partitionOffsetsNode.fieldNames();
+                   while (fieldNames.hasNext()) {
+                       String stateName = fieldNames.next();
+                        JsonNode stateNode = partitionOffsetsNode.get(stateName);
+                       JsonNode offsetNode = stateNode.get("offsets");
+                       if (offsetNode != null && offsetNode.isArray()) {
+                           long[] offsets = new long[offsetNode.size()];
+                           for (int i = 0; i < offsetNode.size(); i++) {
+                               offsets[i] = offsetNode.get(i).asLong();
+                           }
+                           OperatorStateHandle.StateMetaInfo metaInfo = new OperatorStateHandle.StateMetaInfo(offsets, OperatorStateHandle.Mode.valueOf(stateNode.get("distributionMode").asText()));
+                           stateMap.put(stateName, metaInfo);
+                       }
+                   }
+                   OperatorStreamStateHandle operatorStreamStateHandle = new OperatorStreamStateHandle(stateMap,metaDataState);
+                   managedOperatorState.add(operatorStreamStateHandle);
+               }
+           }
     }
 
     private static void parseManagedKeyedStateArray(JsonNode managedKeyedStateArray,
@@ -625,6 +661,11 @@ public class TaskStateSnapshotDeser {
         ArrayNode rawKeyedStateNode = serializeStateObjectCollection(rawKeyedState);
         operatorStateNode.set("rawKeyedState", rawKeyedStateNode);
 
+        // 序列化managedOperatorState
+        StateObjectCollection<OperatorStateHandle> managedOperatorState = state.getManagedOperatorState();
+        ArrayNode managedOperatorStateNode = serializeOperatorStateObjectCollection(managedOperatorState);
+        operatorStateNode.set("managedOperatorState", managedOperatorStateNode);
+
         // 序列化inputChannelState (空集合也要序列化，C++端需要该字段)
         ArrayNode inputChannelStateNode = factory.arrayNode();
         inputChannelStateNode.add("org.apache.flink.runtime.checkpoint.StateObjectCollection");
@@ -693,6 +734,66 @@ public class TaskStateSnapshotDeser {
         }
 
         return handleNode;
+    }
+
+    private static ArrayNode serializeOperatorStateObjectCollection(StateObjectCollection<OperatorStateHandle> collection) {
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ArrayNode arrayNode = factory.arrayNode();
+        arrayNode.add("org.apache.flink.runtime.checkpoint.StateObjectCollection");
+        ArrayNode stateObjectsArray = factory.arrayNode();
+        for (Object stateHandle : collection) {
+            if (stateHandle instanceof OperatorStateHandle) {
+                ObjectNode handleNode = serializeOperatorStateHandle((OperatorStateHandle) stateHandle);
+                stateObjectsArray.add(handleNode);
+            }
+        }
+        arrayNode.add(stateObjectsArray);
+        return arrayNode;
+    }
+
+    private static ObjectNode serializeOperatorStateHandle(OperatorStateHandle operatorStateHandle) {
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        ObjectNode handleNode = factory.objectNode();
+
+        if (operatorStateHandle instanceof OperatorStreamStateHandle) {
+            serializeOperatorStreamStateHandle((OperatorStreamStateHandle) operatorStateHandle, handleNode);
+        } else {
+            LOG.warn("Unsupported OperatorStateHandle type: {}", operatorStateHandle.getClass().getName());
+        }
+        return handleNode;
+    }
+
+    private static void serializeOperatorStreamStateHandle(OperatorStreamStateHandle handle, ObjectNode handleNode) {
+        handleNode.put("@class", handle.getClass().getName());
+        handleNode.put("stateHandleName", "OperatorStreamStateHandle");
+
+        // 序列化delegateStateHandle
+        // 目前的用例只支持ByteStreamStateHandle, 如果需要支持更多的类型，可继续补充
+        ObjectNode delegate = JsonNodeFactory.instance.objectNode();
+        StreamStateHandle delegateStateHandle = handle.getDelegateStateHandle();
+        if (delegateStateHandle instanceof ByteStreamStateHandle) {
+            ByteStreamStateHandle stateHandle = (ByteStreamStateHandle) delegateStateHandle;
+            delegate.put("@class", stateHandle.getClass().getName());
+            delegate.put("handleName", stateHandle.getHandleName());
+            delegate.put("data", Base64.getEncoder().encodeToString(stateHandle.getData()));
+        }
+        handleNode.set("delegateStateHandle", delegate);
+
+        ObjectNode partition = JsonNodeFactory.instance.objectNode();
+        partition.put("@class", "java.util.HashMap");
+        Map<String, StateMetaInfo> partitionOffsets = handle.getStateNameToPartitionOffsets();
+        for (Map.Entry<String, StateMetaInfo> entry : partitionOffsets.entrySet()) {
+            ObjectNode tmp = JsonNodeFactory.instance.objectNode();
+            ArrayNode offsetsArray = JsonNodeFactory.instance.arrayNode();
+            for (long offset : entry.getValue().getOffsets()) {
+                offsetsArray.add(offset);
+            }
+            tmp.set("offsets", offsetsArray);
+            tmp.put("distributionMode", entry.getValue().getDistributionMode().name());
+            tmp.put("@class", entry.getValue().getClass().getName());
+            partition.set(entry.getKey(), tmp);
+        }
+        handleNode.set("stateNameToPartitionOffsets", partition);
     }
 
     private static void serializeKeyGroupsStateHandle(KeyGroupsStateHandle handle, String stateHandleName,

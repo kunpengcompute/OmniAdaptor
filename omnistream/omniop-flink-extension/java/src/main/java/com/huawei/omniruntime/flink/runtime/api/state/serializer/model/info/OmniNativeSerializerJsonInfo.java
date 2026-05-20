@@ -1,5 +1,6 @@
 package com.huawei.omniruntime.flink.runtime.api.state.serializer.model.info;
 
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonParser;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.SC;
 import com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums.OmniSerializerType;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonInclude;
@@ -25,6 +26,7 @@ public class OmniNativeSerializerJsonInfo implements Serializable {
     private OmniNativeSerializerJsonInfo namespaceSerializer;
     private List<String> fieldNames;
     private List<OmniNativeSerializerJsonInfo> fieldSerializers;
+    private JsonParser logicalType;
 
     public int getType() {
         return type;
@@ -98,6 +100,14 @@ public class OmniNativeSerializerJsonInfo implements Serializable {
         this.fieldSerializers = fieldSerializers;
     }
 
+    public JsonParser getLogicalType() {
+        return logicalType;
+    }
+
+    public void setLogicalType(JsonParser logicalType) {
+        this.logicalType = logicalType;
+    }
+
     @Override
     public String toString() {
         List<String> fieldNameInfoList = new ArrayList<>();
@@ -120,6 +130,7 @@ public class OmniNativeSerializerJsonInfo implements Serializable {
                 + "namespaceSerializer = " + (null == this.namespaceSerializer ? null : this.namespaceSerializer.toString()) + ", "
                 + "fieldNames = [" + String.join(SC.BLANK + SC.COMMA, fieldNameInfoList) + "], "
                 + "fieldSerializers = [" + String.join(SC.BLANK + SC.COMMA, fieldSerializerInfoList) + "]"
+                + "logicalType = " + (null == this.logicalType ? null : this.logicalType.toString()) + ", "
                 + "}";
     }
 }

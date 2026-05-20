@@ -76,13 +76,6 @@ public class StreamNodeOptimized implements StreamNodeExtraDescription {
 
     @SuppressWarnings("unchecked")
     public boolean setExtraDescription(StreamNode streamNode, StreamConfig streamConfig, StreamGraph streamGraph, JobType jobType) throws NoSuchFieldException, IllegalAccessException, IOException, ClassNotFoundException {
-        return setExtraDescription(streamNode, streamConfig, streamGraph, jobType, true);
-    }
-
-    @SuppressWarnings("unchecked")
-    public boolean setExtraDescription(StreamNode streamNode, StreamConfig streamConfig, StreamGraph streamGraph,
-        JobType jobType, boolean checkpointingEnabled) throws NoSuchFieldException, IllegalAccessException,
-        IOException, ClassNotFoundException {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
         Map<String, Object> jsonMap = new LinkedHashMap<>();
 
@@ -129,19 +122,13 @@ public class StreamNodeOptimized implements StreamNodeExtraDescription {
         if (streamNode.getOperatorFactory() instanceof SinkWriterOperatorFactory) {
             Sink sink = ((SinkWriterOperatorFactory<?, ?>) streamNode.getOperatorFactory()).getSink();
             if (!"KafkaSink".equals(sink.getClass().getSimpleName()) || !validateSinkAndSetDesc(sink, jsonMap)) {
-                if (checkpointingEnabled) {
-                    return false;
-                }
-                LOG.info("Checkpoint is disabled, skip sink fallback for operator {}.", streamNode.getOperatorName());
+                return false;
             }
         }
 
         if (streamNode.getOperatorFactory() instanceof SourceOperatorFactory) {
             if (validateSourceAndSetDesc(streamNode, jsonMap)) {
-                if (checkpointingEnabled) {
-                    return false;
-                }
-                LOG.info("Checkpoint is disabled, skip source fallback for operator {}.", streamNode.getOperatorName());
+                return false;
             }
         }
 

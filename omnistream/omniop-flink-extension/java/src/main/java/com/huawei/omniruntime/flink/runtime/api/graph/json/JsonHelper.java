@@ -43,6 +43,10 @@ public class JsonHelper {
                 false); // Handle unknown properties gracefully
     }
 
+    public static ObjectMapper getObjectMapper() {
+        return objectMapper;
+    }
+
     /**
      * toJson
      *

@@ -19,6 +19,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializerSnapshot;
 import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonParser;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperator;
@@ -26,6 +27,7 @@ import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -54,8 +56,7 @@ public class OmniStateSerializerHelper {
     private OmniStateSerializerHelper() {
     }
 
-    public static OmniStateMetaSerializerInfo.Builder buildSerializerInfo(String taskKey,
-                                                                          String stateTableName,
+    public static OmniStateMetaSerializerInfo.Builder buildSerializerInfo(String stateTableName,
                                                                           int typeCode,
                                                                           Map<String, String> serializerMap,
                                                                           ExecutionConfig executionConfig,
@@ -76,7 +77,7 @@ public class OmniStateSerializerHelper {
                 }
                 OmniSerializerKey serializerKey = OmniSerializerKey.get(item.getKey());
                 if (null == serializerKey) {
-                    LOG.warn("method : buildSerializerInfo -> taskKey : {}, stateTableName : {}, key : {} undefined.", taskKey, stateTableName, item.getKey());
+                    LOG.warn("method : buildSerializerInfo -> stateTableName : {}, key : {} undefined.", stateTableName, item.getKey());
                     continue;
                 }
                 if (StringUtils.isEmpty(item.getValue())) {
@@ -87,7 +88,7 @@ public class OmniStateSerializerHelper {
                     }
                     continue;
                 }
-                StateDescriptor<?, ?> stateDescriptor = buildStateDescriptor(taskKey, stateTableName, item.getKey(), item.getValue(), executionConfig, userCodeClassLoader);
+                StateDescriptor<?, ?> stateDescriptor = buildStateDescriptor(stateTableName, item.getKey(), item.getValue(), executionConfig, userCodeClassLoader);
                 if (null == stateDescriptor) {
                     continue;
                 }
@@ -96,14 +97,12 @@ public class OmniStateSerializerHelper {
 
             return builder;
         } catch (Exception e) {
-            LOG.error("method : buildSerializerInfo -> taskKey : {}, stateTableName : {}, exception",
-                    taskKey, stateTableName, e);
+            LOG.error("method : buildSerializerInfo -> stateTableName : {}, exception", stateTableName, e);
             throw new GeneralRuntimeException(e);
         }
     }
 
-    public static StateDescriptor<?, ?> buildStateDescriptor(String taskKey,
-                                                             String stateTableName,
+    public static StateDescriptor<?, ?> buildStateDescriptor(String stateTableName,
                                                              String key,
                                                              String jsonStr,
                                                              ExecutionConfig executionConfig,
@@ -130,15 +129,14 @@ public class OmniStateSerializerHelper {
 
             return stateDescriptor;
         } catch (Exception e) {
-            LOG.error("method : buildStateDescriptor -> taskKey : {}, stateTableName : {}, key : {}, exception",
-                    taskKey, stateTableName, key, e);
+            LOG.error("method : buildStateDescriptor -> stateTableName : {}, key : {}, exception", stateTableName, key, e);
             throw new GeneralRuntimeException(e);
         }
     }
 
     private static OmniNativeSerializerJsonInfo convert(String jsonStr,
                                                         ClassLoader userCodeClassLoader,
-                                                        int depth) {
+                                                        int depth) throws IOException {
         if (depth > DEPTH_MAX) {
             throw new GeneralRuntimeException(String.format("max recursion depth (%s) exceeded. Input may be malformed or malicious.", DEPTH_MAX));
         }
@@ -220,6 +218,14 @@ public class OmniStateSerializerHelper {
                 nameList.add(item == null ? null : item.toString());
             }
             info.setFieldNames(nameList);
+        }
+
+        if (null != map.get(OmniSerializerJson.LOGICAL_TYPE.getKey())) {
+            String logicalTypeStr = JsonHelper.toJson(map.get(OmniSerializerJson.LOGICAL_TYPE.getKey()));
+            if (StringUtils.isNotEmpty(logicalTypeStr)) {
+                JsonParser logicalTypeJsonParser = JsonHelper.getObjectMapper().createParser(logicalTypeStr);
+                info.setLogicalType(logicalTypeJsonParser);
+            }
         }
 
         return info;
@@ -313,23 +319,20 @@ public class OmniStateSerializerHelper {
         return getStateBackendKeySerializer(headOperator);
     }
 
-    public static TypeSerializer<?> getStateBackendKeySerializer(String taskKey,
-                                                                 Map<String, Object> metaInfo,
+    public static TypeSerializer<?> getStateBackendKeySerializer(Map<String, Object> metaInfo,
                                                                  ExecutionConfig executionConfig,
                                                                  ClassLoader userCodeClassLoader) {
         String name = (String) metaInfo.get("name");
         String keySerializerJsonStr = metaInfo.get("keySerializer").toString();
         String key = OmniSerializerKey.KEY_SERIALIZER.getMetaKeyStr();
         StateDescriptor<?, ?> stateDescriptor = OmniStateSerializerHelper.buildStateDescriptor(
-                taskKey,
                 name,
                 OmniSerializerKey.KEY_SERIALIZER.getMetaKeyStr(),
                 keySerializerJsonStr,
                 executionConfig,
                 userCodeClassLoader);
         if (null == stateDescriptor) {
-            LOG.warn("method : getStateBackendKeySerializer -> taskKey : {}, stateTableName : {}, key : {}, stateDescriptor is null.",
-                    taskKey, name, key);
+            LOG.warn("method : getStateBackendKeySerializer -> stateTableName : {}, key : {}, stateDescriptor is null.", name, key);
             return null;
         }
 

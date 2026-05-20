@@ -1,12 +1,15 @@
 package com.huawei.omniruntime.flink.runtime.api.state.serializer.consts.enums;
 
 import org.apache.flink.api.common.typeutils.base.*;
+import org.apache.flink.api.common.typeutils.base.array.BytePrimitiveArraySerializer;
 import org.apache.flink.api.java.typeutils.runtime.PojoSerializer;
 import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.streaming.api.operators.TimerHeapInternalTimer;
 import org.apache.flink.streaming.api.operators.TimerSerializer;
+import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -43,6 +46,8 @@ public enum OmniSerializerType {
     TUPLE(OmniSerializerCategory.TUPLE, null, TupleSerializer.class, 13),
     VOID_NAMESPACE(OmniSerializerCategory.VOID_NAMESPACE, VoidNamespace.class, VoidNamespaceSerializer.class, 11),
     TIMER(OmniSerializerCategory.TIMER, TimerHeapInternalTimer.class, TimerSerializer.class, 12),
+    BYTE_PRIMITIVE_ARRAY(OmniSerializerCategory.PRIMITIVE_ARRAY, byte[].class, BytePrimitiveArraySerializer.class, 14),
+    ROW(OmniSerializerCategory.ROW, RowData.class, RowDataSerializer.class, 15),
 
     UNKNOW(OmniSerializerCategory.UNKNOWN, null, null, 0);
 
@@ -86,6 +91,10 @@ public enum OmniSerializerType {
 
     public boolean isBasic() {
         return OmniSerializerCategory.BASIC.equals(this.category);
+    }
+
+    public boolean isPrimitiveArray() {
+        return OmniSerializerCategory.PRIMITIVE_ARRAY.equals(this.category);
     }
 
     public static OmniSerializerType get(int code) {

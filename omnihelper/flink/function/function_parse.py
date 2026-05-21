@@ -29,13 +29,14 @@ class FlinkFunctionParser:
     """
 
     def __init__(self):
-        self.function_list = []  # 存储字典文件中的所有函数对象列表
-        self.omni_functions = []  # 仅存储函数名（字符串）的列表
-        self.func_pattern = None  # 正则：匹配函数调用 func(...)
-        self.keywords_pattern = None  # 正则：匹配关键字/操作符
-        self.func_support_map = {}  # 字典 {函数名: is_support_func}
+        self.function_list = []
+        self.omni_functions = []
+        self.func_pattern = None
+        self.keywords_pattern = None
+        self.operator_pattern = None
+        self.func_support_map = {}
         self.func_not_supported_types = {}
-        self.load_func_list()  # 构造函数实例后立即加载字典
+        self.load_func_list()
 
     def load_func_list(self):
         """加载函数字典配置并构建匹配模式"""
@@ -49,6 +50,9 @@ class FlinkFunctionParser:
             self.omni_functions = []
             self.func_support_map = {}
             self.func_not_supported_types = {}
+            self.func_pattern = None
+            self.keywords_pattern = None
+            self.operator_pattern = None
             return
 
         # 加载JSON文件
@@ -62,6 +66,9 @@ class FlinkFunctionParser:
             self.omni_functions = []
             self.func_support_map = {}
             self.func_not_supported_types = {}
+            self.func_pattern = None
+            self.keywords_pattern = None
+            self.operator_pattern = None
             return
 
         self.omni_functions = []
@@ -82,34 +89,34 @@ class FlinkFunctionParser:
 
     def build_patterns(self):
         """
-        构建两种正则表达式模式：
+        构建三种正则表达式模式：
         1. func_pattern: 匹配函数调用形式 func(...)
-        2. keywords_pattern: 匹配关键字/操作符形式（如 IS NULL, AND, =, + 等）
+        2. keyword_pattern: 匹配文字关键字（如 IS NULL, AND 等），使用 \\b 单词边界
+        3. operator_pattern: 匹配符号运算符（如 *, <=, >= 等），不使用 \\b
         """
         if not self.omni_functions:
             logger.warning("No functions loaded, patterns are None")
             self.func_pattern = None
             self.keywords_pattern = None
+            self.operator_pattern = None
             return
 
-        # 定义应该被识别为关键字/操作符的判断规则
         keyword_keywords = {
             'or', 'and', 'like', 'between', 'case', 'array', 'map'
         }
 
         func_call_patterns = []
         keyword_patterns = []
+        operator_patterns = []
 
         for func in self.omni_functions:
             is_keyword = False
 
-            # 如果包含空格，认为是关键字（如 "IS NULL", "NOT BETWEEN"）
             if ' ' in func:
                 is_keyword = True
-            # 如果是纯符号操作符（如 =, <>, >=, <=, +, -, *, /, ||, %）
             elif len(func) <= 2 and not any(c.isalpha() for c in func):
-                is_keyword = True
-            # 如果函数名在我们的关键字列表中，也识别为关键字
+                operator_patterns.append(func)
+                continue
             elif func.lower() in keyword_keywords:
                 is_keyword = True
 
@@ -118,7 +125,6 @@ class FlinkFunctionParser:
             else:
                 func_call_patterns.append(func)
 
-        # 构建函数调用模式: 匹配 func( 形式
         if func_call_patterns:
             escaped_funcs = [re.escape(f) for f in func_call_patterns]
             self.func_pattern = re.compile(
@@ -129,7 +135,6 @@ class FlinkFunctionParser:
         else:
             self.func_pattern = None
 
-        # 构建关键字/操作符模式: 匹配独立的关键字
         if keyword_patterns:
             escaped_keywords = [re.escape(f) for f in keyword_patterns]
             self.keywords_pattern = re.compile(
@@ -139,6 +144,16 @@ class FlinkFunctionParser:
             logger.info(f"Created keywords pattern for {len(keyword_patterns)} keywords")
         else:
             self.keywords_pattern = None
+
+        if operator_patterns:
+            sorted_ops = sorted(operator_patterns, key=len, reverse=True)
+            escaped_ops = [re.escape(f) for f in sorted_ops]
+            self.operator_pattern = re.compile(
+                r"({})".format("|".join(escaped_ops))
+            )
+            logger.info(f"Created operator pattern for {len(operator_patterns)} operators: {operator_patterns}")
+        else:
+            self.operator_pattern = None
 
     def is_func_type_supported(self, func_name, param_types):
         """
@@ -171,29 +186,52 @@ class FlinkFunctionParser:
 
         return True, []
 
-    def parse_plan_description(self, description):
-        """
-        解析算子描述，提取所有函数
+    @staticmethod
+    def _strip_html_tags(description):
+        if not description:
+            return description
+        cleaned = re.sub(r'<[^>]+>[\s:*\+\-]*', ' ', description)
+        return cleaned
 
-        :param description: 算子描述字符串
-        :return: 函数列表 [{"func": "upper", "params": [], "type": "func"}, ...]
-        """
+    @staticmethod
+    def _is_operator_false_positive(op, match, description):
+        pos = match.start()
+        op_end = match.end()
+        if op == '=' and op_end < len(description) and description[op_end] == '[':
+            return True
+        if op == '=' and pos > 0 and description[pos - 1].isalpha():
+            return True
+        if op in ('=', '<', '>') and pos > 0 and description[pos - 1] in ('<', '>', '!'):
+            return True
+        if op in ('=', '<', '>') and op_end < len(description) and description[op_end] == '=':
+            return True
+        if op == '*' and pos > 0 and description[pos - 1] == '(' and op_end < len(description) and description[op_end] == ')':
+            return True
+        return False
+
+    def parse_plan_description(self, description):
         if not description:
             return []
 
         funcs = []
 
-        # 匹配函数调用形式 func(...)
         if self.func_pattern:
             for match in self.func_pattern.finditer(description):
                 func_name = match.group(1).lower()
                 funcs.append({"func": func_name, "params": [], "type": "func"})
 
-        # 匹配关键字/操作符形式（如 IS NULL, AND, = 等）
         if self.keywords_pattern:
             for match in self.keywords_pattern.finditer(description):
                 keyword = match.group(1).lower()
                 funcs.append({"func": keyword, "params": [], "type": "keyword"})
+
+        if self.operator_pattern:
+            clean_desc = self._strip_html_tags(description)
+            for match in self.operator_pattern.finditer(clean_desc):
+                op = match.group(1).lower()
+                if self._is_operator_false_positive(op, match, clean_desc):
+                    continue
+                funcs.append({"func": op, "params": [], "type": "operator"})
 
         return funcs
 
@@ -228,10 +266,22 @@ class FlinkFunctionParser:
                     keyword, func_counter, func_unsupported_types, param_types_map
                 )
 
+        clean_desc = self._strip_html_tags(description) if self.operator_pattern else description
+
+        if self.operator_pattern:
+            for match in self.operator_pattern.finditer(clean_desc):
+                op = match.group(1).lower()
+                if self._is_operator_false_positive(op, match, clean_desc):
+                    continue
+                self._check_func_support(
+                    op, func_counter, func_unsupported_types, param_types_map
+                )
+
         # 调试：打印解析到的所有函数
         all_func_matches = list(self.func_pattern.finditer(description)) if self.func_pattern else []
         all_keyword_matches = list(self.keywords_pattern.finditer(description)) if self.keywords_pattern else []
-        all_matches = all_func_matches + all_keyword_matches
+        all_operator_matches = list(self.operator_pattern.finditer(clean_desc)) if self.operator_pattern else []
+        all_matches = all_func_matches + all_keyword_matches + all_operator_matches
         if all_matches:
             matched_funcs = [m.group(1).lower() for m in all_matches]
             logger.info(f"从description解析到的所有函数: {matched_funcs}")

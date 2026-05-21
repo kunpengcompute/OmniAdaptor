@@ -14,6 +14,7 @@
 import json
 import re
 import os
+import html
 from collections import defaultdict
 from json import JSONDecodeError
 from omnihelper.flink.function.function_parse import FlinkFunctionParser
@@ -82,9 +83,11 @@ class FlinkParser:
             if not vertex_id:
                 continue
             description = node.get("description", "")
+            if description:
+                description = html.unescape(description)
             if not description:
                 continue
-            raw_parts = re.split(r"<br/>|\n", description)
+            raw_parts = re.split(r"<br/>[\s:*\+\-]*|\n", description)
             description_data = [
                 parsed_line for line in raw_parts
                 if (parsed_line := FlinkParser.parse_single_description_line(line)) is not None
@@ -394,7 +397,7 @@ class FlinkParser:
 
         if isinstance(description, str):
             desc_data = []
-            for line in re.split(r"<br/>|\n", description):
+            for line in re.split(r"<br/>[\s:*\+\-]*|\n", description):
                 parsed = FlinkParser.parse_single_description_line(line)
                 if parsed is not None:
                     desc_data.append(parsed)
@@ -424,6 +427,17 @@ class FlinkParser:
                         if t == "unknown":
                             nested_content = nested_content or self._expr_to_string(arg)
                         input_types.append(t)
+                elif expr_type == "BINARY" and expr.get("operator", "").lower() == func_name.lower():
+                    left_expr = expr.get("left", {})
+                    right_expr = expr.get("right", {})
+                    left_type = self.type_resolver.resolve_expression_type(left_expr, input_schema)
+                    right_type = self.type_resolver.resolve_expression_type(right_expr, input_schema)
+                    if left_type == "unknown":
+                        nested_content = nested_content or self._expr_to_string(left_expr)
+                    if right_type == "unknown":
+                        nested_content = nested_content or self._expr_to_string(right_expr)
+                    input_types.append(left_type)
+                    input_types.append(right_type)
 
         return input_types, nested_content
 
@@ -431,17 +445,31 @@ class FlinkParser:
         input_types = []
         nested_content = existing_nested
 
-        args_str = self._extract_function_args_text_from_desc(func_name, description)
-        if args_str:
-            args = self._split_function_args(args_str)
-            for arg in args:
-                arg = arg.strip()
-                if not arg:
-                    continue
-                t = self.type_resolver.resolve_expression_type(arg, input_schema)
-                if t == "unknown":
-                    nested_content = nested_content or arg
-                input_types.append(t)
+        if self._is_operator_func(func_name):
+            input_types, nested_content = self._resolve_operator_param_types_from_text(
+                func_name, description, input_schema, existing_nested
+            )
+        else:
+            args_str = self._extract_function_args_text_from_desc(func_name, description)
+            if args_str:
+                if func_name.lower() == "case":
+                    input_types, nested_content = self._resolve_case_param_types_from_text(
+                        args_str, input_schema, nested_content
+                    )
+                elif func_name.lower() in ("cast", "try_cast"):
+                    input_types, nested_content = self._resolve_cast_param_types_from_text(
+                        args_str, input_schema, nested_content
+                    )
+                else:
+                    args = self._split_function_args(args_str)
+                    for arg in args:
+                        arg = arg.strip()
+                        if not arg:
+                            continue
+                        t = self.type_resolver.resolve_expression_type(arg, input_schema)
+                        if t == "unknown":
+                            nested_content = nested_content or arg
+                        input_types.append(t)
 
         if not nested_content:
             full_expr = self._extract_func_expression(func_name, description)
@@ -450,9 +478,159 @@ class FlinkParser:
 
         return input_types, nested_content
 
+    def _resolve_operator_param_types_from_text(self, func_name, description, input_schema, existing_nested):
+        input_types = []
+        nested_content = existing_nested
+
+        left_expr, right_expr = self._extract_operator_operands_from_desc(func_name, description)
+        if left_expr is not None and right_expr is not None:
+            left_type = self.type_resolver.resolve_expression_type(left_expr, input_schema)
+            right_type = self.type_resolver.resolve_expression_type(right_expr, input_schema)
+            if left_type == "unknown":
+                nested_content = nested_content or left_expr
+            if right_type == "unknown":
+                nested_content = nested_content or right_expr
+            input_types.append(left_type)
+            input_types.append(right_type)
+
+        return input_types, nested_content
+
+    def _resolve_case_param_types_from_text(self, args_str, input_schema, existing_nested):
+        input_types = []
+        nested_content = existing_nested
+
+        args = FlinkTypeResolver._split_function_args(args_str)
+        i = 0
+        while i < len(args):
+            if i + 1 < len(args):
+                condition_arg = args[i].strip()
+                condition_arg = self._strip_outer_parens(condition_arg)
+                t = self.type_resolver.resolve_expression_type(condition_arg, input_schema)
+                if t == "unknown":
+                    nested_content = nested_content or condition_arg
+                input_types.append(t)
+                i += 2
+            else:
+                break
+
+        return input_types, nested_content
+
+    def _resolve_cast_param_types_from_text(self, args_str, input_schema, existing_nested):
+        input_types = []
+        nested_content = existing_nested
+
+        original_expr, target_type_str = FlinkTypeResolver._split_alias_from_expr(args_str)
+        if original_expr == args_str and " AS " in args_str.upper():
+            parts = re.split(r'\s+AS\s+', args_str, maxsplit=1, flags=re.I)
+            if len(parts) == 2:
+                original_expr = parts[0].strip()
+                target_type_str = parts[1].strip()
+
+        t = self.type_resolver.resolve_expression_type(original_expr, input_schema)
+        if t == "unknown":
+            nested_content = nested_content or original_expr
+        input_types.append(t)
+
+        return input_types, nested_content
+
+    @staticmethod
+    def _strip_outer_parens(expr_str):
+        expr_str = expr_str.strip()
+        while expr_str.startswith("(") and expr_str.endswith(")"):
+            depth = 0
+            matched = True
+            for idx, ch in enumerate(expr_str):
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                if depth == 0 and idx < len(expr_str) - 1:
+                    matched = False
+                    break
+            if matched:
+                expr_str = expr_str[1:-1].strip()
+            else:
+                break
+        return expr_str
+
+    @staticmethod
+    def _is_operator_func(func_name):
+        if not func_name:
+            return False
+        return len(func_name) <= 2 and not any(c.isalpha() for c in func_name)
+
+    @staticmethod
+    def _extract_operator_operands_from_desc(func_name, description):
+        if not description or not func_name:
+            return None, None
+        clean_desc = re.sub(r'<[^>]+>[\s:*\+\-]*', ' ', description)
+        op_pattern = re.compile(re.escape(func_name))
+        for match in op_pattern.finditer(clean_desc):
+            pos = match.start()
+            op_end = match.end()
+            if func_name == '=' and op_end < len(clean_desc) and clean_desc[op_end] == '[':
+                continue
+            if func_name == '=' and pos > 0 and clean_desc[pos - 1].isalpha():
+                continue
+            if func_name in ('=', '<', '>') and pos > 0 and clean_desc[pos - 1] in ('<', '>', '!'):
+                continue
+            if func_name in ('=', '<', '>') and op_end < len(clean_desc) and clean_desc[op_end] == '=':
+                continue
+            if func_name == '*' and pos > 0 and clean_desc[pos - 1] == '(' and op_end < len(clean_desc) and clean_desc[op_end] == ')':
+                continue
+            left_start = pos - 1
+            depth = 0
+            while left_start >= 0:
+                ch = clean_desc[left_start]
+                if ch in (')', ']', '}'):
+                    depth += 1
+                elif ch in ('(', '[', '{'):
+                    if depth == 0:
+                        left_start += 1
+                        break
+                    depth -= 1
+                elif depth == 0 and ch == '=':
+                    if left_start + 1 < len(clean_desc) and clean_desc[left_start + 1] == '[':
+                        depth += 1
+                        left_start -= 1
+                        continue
+                    left_start += 1
+                    break
+                elif depth == 0 and ch == ',':
+                    left_start += 1
+                    break
+                left_start -= 1
+            else:
+                left_start = 0
+            if left_start < 0:
+                left_start = 0
+            right_end = op_end
+            depth = 0
+            while right_end < len(clean_desc):
+                ch = clean_desc[right_end]
+                if ch in ('(', '[', '{'):
+                    depth += 1
+                elif ch in (')', ']', '}'):
+                    if depth == 0:
+                        break
+                    depth -= 1
+                elif depth == 0 and ch in (',', ')', ']'):
+                    break
+                right_end += 1
+            left_expr = clean_desc[left_start:pos].strip()
+            right_expr = clean_desc[op_end:right_end].strip()
+            if left_expr and right_expr:
+                return left_expr, right_expr
+        return None, None
+
     @staticmethod
     def _extract_function_args_text_from_desc(func_name, description):
         if not description or not func_name:
+            return None
+        if FlinkParser._is_operator_func(func_name):
+            left, right = FlinkParser._extract_operator_operands_from_desc(func_name, description)
+            if left is not None and right is not None:
+                return f"{left},{right}"
             return None
         func_pattern = re.compile(
             re.escape(func_name) + r'\s*\(', re.I
@@ -496,6 +674,11 @@ class FlinkParser:
     def _extract_func_expression(func_name, description):
         if not description:
             return ""
+        if FlinkParser._is_operator_func(func_name):
+            left, right = FlinkParser._extract_operator_operands_from_desc(func_name, description)
+            if left is not None and right is not None:
+                return f"{left} {func_name} {right}"
+            return func_name
         func_pattern = re.compile(
             re.escape(func_name) + r'\s*\(', re.I
         )
@@ -792,15 +975,7 @@ class FlinkParser:
         upstream_context = upstream_context or {}
         schema_chain = self._build_schema_chain_for_vertex(description_data, upstream_context) if description_data else []
 
-        ops = self._collect_valid_operators(operators_metrics)
-        for op in ops:
-            op_type = op["op_type"]
-            input_schema = self._get_input_schema_for_op(op_type, schema_chain)
-            input_str, output_str = self._resolve_operator_io(op_type, description_data, input_schema)
-            op["input_types_str"] = input_str
-            op["output_types_str"] = output_str
-
-        ops = self._aggregate_ops_by_name_and_types(ops)
+        ops = self._build_ops_from_schema_chain(schema_chain, operators_metrics)
 
         func_input_schema = None
         final_alias_map = {}
@@ -825,6 +1000,68 @@ class FlinkParser:
             result["output_schema"] = schema_chain[-1].get("output_schema")
             result["alias_map"] = final_alias_map
         return result if ops or func_list else None
+
+    def _build_ops_from_schema_chain(self, schema_chain, operators_metrics):
+        if not schema_chain:
+            ops = self._collect_valid_operators(operators_metrics)
+            return self._aggregate_ops_by_name_and_types(ops)
+
+        metrics_by_type = {}
+        for op_type, op_list in operators_metrics.items():
+            num_in, num_in_sec, num_out, num_out_sec = FlinkParser.aggregate_metrics(op_list)
+            metrics_by_type[op_type] = {
+                "num_in": num_in,
+                "num_out": num_out,
+                "run_time": FlinkParser.compute_runtime(num_in, num_in_sec, num_out, num_out_sec),
+                "count": len(op_list),
+            }
+
+        type_occurrence = {}
+        ops = []
+        for chain_entry in schema_chain:
+            op_type = chain_entry.get("op_type", "")
+            if op_type == "Upstream":
+                continue
+
+            input_schema = chain_entry.get("input_schema", [])
+            output_schema = chain_entry.get("output_schema", [])
+
+            input_types = [f.get("field_type", "unknown") for f in input_schema] if input_schema else []
+            output_types = [f.get("field_type", "unknown") for f in output_schema] if output_schema else []
+
+            input_str = ",".join(t for t in input_types if t)
+            output_str = ",".join(t for t in output_types if t)
+
+            metrics = metrics_by_type.get(op_type, {})
+            type_occurrence[op_type] = type_occurrence.get(op_type, 0) + 1
+            total_of_type = sum(1 for e in schema_chain if e.get("op_type") == op_type)
+            count = 1 if total_of_type > 1 else metrics.get("count", 1)
+
+            ops.append({
+                "op_type": op_type,
+                "is_supported": self.is_operator_supported(op_type),
+                "num_in": metrics.get("num_in", 0),
+                "num_out": metrics.get("num_out", 0),
+                "run_time": metrics.get("run_time", 0.0),
+                "count": count,
+                "input_types_str": input_str,
+                "output_types_str": output_str,
+            })
+
+        for op_type, metrics in metrics_by_type.items():
+            if not any(e.get("op_type") == op_type for e in schema_chain):
+                ops.append({
+                    "op_type": op_type,
+                    "is_supported": self.is_operator_supported(op_type),
+                    "num_in": metrics["num_in"],
+                    "num_out": metrics["num_out"],
+                    "run_time": metrics["run_time"],
+                    "count": metrics["count"],
+                    "input_types_str": "",
+                    "output_types_str": "",
+                })
+
+        return self._aggregate_ops_by_name_and_types(ops)
 
     def _build_rows_for_task(self, data):
         job_id, task_id, status = data["jobid"], data["taskid"], data["status"]

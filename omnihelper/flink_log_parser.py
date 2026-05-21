@@ -10,6 +10,7 @@
 """
 import os
 import re
+import html
 from datetime import datetime
 import urllib.parse
 import pandas as pd
@@ -279,12 +280,13 @@ class FlinkLogParser:
 
     def _get_description(self, vid, plan_nodes):
         """获取节点描述信息"""
-        return plan_nodes.get(vid, {}).get('description', '')
+        desc = plan_nodes.get(vid, {}).get('description', '')
+        return html.unescape(desc) if desc else ''
 
     def _parse_description_data(self, description):
         if not description:
             return []
-        raw_parts = re.split(r"<br/>|\n", description)
+        raw_parts = re.split(r"<br/>[\s:*\+\-]*|\n", description)
         return [
             parsed_line for line in raw_parts
             if (parsed_line := FlinkParser.parse_single_description_line(line)) is not None

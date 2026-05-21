@@ -366,6 +366,10 @@ class FlinkTypeResolver:
         return UNKNOWN
 
     def _resolve_case_expr_type(self, expr, input_schema, depth):
+        data_type = expr.get("returnType")
+        if data_type:
+            return self._normalize_return_type(data_type)
+
         branch_types = []
         for key in sorted(expr.keys()):
             if key.startswith("Case") and key[4:].isdigit():
@@ -382,8 +386,9 @@ class FlinkTypeResolver:
                 branch_types.append(t)
 
         if branch_types:
-            result = TypeNormalizer.find_common_type_multi(branch_types)
-            return result if result else UNKNOWN
+            common = TypeNormalizer.find_common_type_multi(branch_types)
+            if common and common != UNKNOWN:
+                return common
 
         return_type = expr.get("returnType")
         if return_type is not None:
@@ -447,11 +452,30 @@ class FlinkTypeResolver:
         if alias_resolved and alias_resolved != UNKNOWN:
             return alias_resolved
 
+        comparison_type = self._resolve_comparison_type(expr_str, input_schema, depth)
+        if comparison_type:
+            return comparison_type
+
         func_type = self._resolve_text_function_type(expr_str, input_schema, depth)
         if func_type and func_type != UNKNOWN:
             return func_type
 
         return UNKNOWN
+
+    def _resolve_comparison_type(self, expr_str, input_schema, depth):
+        op_match = re.match(r'^(.+?)\s*(=|<>|!=|>=|<=|>|<)\s*(.+)$', expr_str.strip())
+        if not op_match:
+            return None
+        left = op_match.group(1).strip()
+        op = op_match.group(2)
+        right = op_match.group(3).strip()
+        if not left or not right:
+            return None
+        left_type = self._resolve_text_expr_type(left, input_schema, depth + 1)
+        right_type = self._resolve_text_expr_type(right, input_schema, depth + 1)
+        if left_type != UNKNOWN or right_type != UNKNOWN:
+            return "BOOLEAN"
+        return None
 
     def _resolve_alias(self, param):
         alias_param = re.sub(r"\[\d+\]$", "", param)
@@ -470,6 +494,9 @@ class FlinkTypeResolver:
         if not dict_entry:
             return None
 
+        if func_name == "case":
+            return self._resolve_case_return_type_from_text(expr_str, input_schema, depth)
+
         if not dict_entry.get("need_param_type", False):
             ret = dict_entry.get("return_type", UNKNOWN)
             return ret if ret != UNKNOWN else None
@@ -486,6 +513,31 @@ class FlinkTypeResolver:
             return None
 
         return None
+
+    def _resolve_case_return_type_from_text(self, expr_str, input_schema, depth):
+        args_str = self._extract_function_args_text(expr_str)
+        if not args_str:
+            return UNKNOWN
+
+        args = self._split_function_args(args_str)
+        value_types = []
+        has_else = len(args) % 2 == 1
+        for i, arg in enumerate(args):
+            arg = arg.strip()
+            if i % 2 == 0 and not (has_else and i == len(args) - 1):
+                continue
+            t = self._resolve_text_expr_type(arg, input_schema, depth + 1)
+            if t and t != UNKNOWN:
+                value_types.append(t)
+
+        if not value_types:
+            return UNKNOWN
+
+        common = TypeNormalizer.find_common_type_multi(value_types)
+        if common and common != UNKNOWN:
+            return common
+
+        return UNKNOWN
 
     def _extract_first_arg_type_from_text(self, expr_str, input_schema, depth):
         inner = self._extract_function_args_text(expr_str)
@@ -515,6 +567,29 @@ class FlinkTypeResolver:
                     return expr_str[start + 1 : i]
 
         return expr_str[start + 1 :]
+
+    @staticmethod
+    def _split_function_args(args_str):
+        if not args_str:
+            return []
+        parts = []
+        depth = 0
+        current = []
+        for ch in args_str:
+            if ch == "(":
+                depth += 1
+                current.append(ch)
+            elif ch == ")":
+                depth -= 1
+                current.append(ch)
+            elif ch == "," and depth == 0:
+                parts.append("".join(current))
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            parts.append("".join(current))
+        return parts
 
     def find_json_descriptions(self, description_data):
         results = []

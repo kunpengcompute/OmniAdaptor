@@ -35,7 +35,7 @@ class FlinkFunctionParser:
         self.keywords_pattern = None
         self.operator_pattern = None
         self.func_support_map = {}
-        self.func_not_supported_types = {}
+        self.func_is_supported_types = {}
         self.load_func_list()
 
     def load_func_list(self):
@@ -49,7 +49,7 @@ class FlinkFunctionParser:
             self.function_list = []
             self.omni_functions = []
             self.func_support_map = {}
-            self.func_not_supported_types = {}
+            self.func_is_supported_types = {}
             self.func_pattern = None
             self.keywords_pattern = None
             self.operator_pattern = None
@@ -65,7 +65,7 @@ class FlinkFunctionParser:
             self.function_list = []
             self.omni_functions = []
             self.func_support_map = {}
-            self.func_not_supported_types = {}
+            self.func_is_supported_types = {}
             self.func_pattern = None
             self.keywords_pattern = None
             self.operator_pattern = None
@@ -73,7 +73,7 @@ class FlinkFunctionParser:
 
         self.omni_functions = []
         self.func_support_map = {}
-        self.func_not_supported_types = {}
+        self.func_is_supported_types = {}
 
         for func in self.function_list:
             func_name = func.get("func_name")
@@ -82,7 +82,7 @@ class FlinkFunctionParser:
             func_name_lower = func_name.lower()
             self.omni_functions.append(func_name_lower)
             self.func_support_map[func_name_lower] = func.get("is_support_func", False)
-            self.func_not_supported_types[func_name_lower] = func.get("not_supported_types", [])
+            self.func_is_supported_types[func_name_lower] = func.get("is_supported_type", [])
 
         # 构建正则表达式模式
         self.build_patterns()
@@ -171,14 +171,14 @@ class FlinkFunctionParser:
         if not self.func_support_map[func_name_lower]:
             return False, []
 
-        not_supported = self.func_not_supported_types.get(func_name_lower, [])
-        if not not_supported:
+        is_supported_list = self.func_is_supported_types.get(func_name_lower, [])
+        if not is_supported_list:
             return True, []
 
         unsupported_found = []
         for param_type in (param_types or []):
             normalized = TypeNormalizer.normalize_type(param_type)
-            if normalized in not_supported:
+            if normalized not in is_supported_list:
                 unsupported_found.append(normalized)
 
         if unsupported_found:
@@ -250,9 +250,15 @@ class FlinkFunctionParser:
         func_counter = {}
         func_unsupported_types = {}
 
+        # 初始化列表，用于收集匹配结果（供调试日志使用）
+        all_func_matches = []
+        all_keyword_matches = []
+        all_operator_matches = []
+
         # 匹配函数调用形式 func(...)
         if self.func_pattern:
             for match in self.func_pattern.finditer(description):
+                all_func_matches.append(match)
                 func_name = match.group(1).lower()
                 self._check_func_support(
                     func_name, func_counter, func_unsupported_types, param_types_map
@@ -261,6 +267,7 @@ class FlinkFunctionParser:
         # 匹配关键字/操作符形式（如 IS NULL, AND, = 等）
         if self.keywords_pattern:
             for match in self.keywords_pattern.finditer(description):
+                all_keyword_matches.append(match)
                 keyword = match.group(1).lower()
                 self._check_func_support(
                     keyword, func_counter, func_unsupported_types, param_types_map
@@ -273,14 +280,12 @@ class FlinkFunctionParser:
                 op = match.group(1).lower()
                 if self._is_operator_false_positive(op, match, clean_desc):
                     continue
+                all_operator_matches.append(match)
                 self._check_func_support(
                     op, func_counter, func_unsupported_types, param_types_map
                 )
 
-        # 调试：打印解析到的所有函数
-        all_func_matches = list(self.func_pattern.finditer(description)) if self.func_pattern else []
-        all_keyword_matches = list(self.keywords_pattern.finditer(description)) if self.keywords_pattern else []
-        all_operator_matches = list(self.operator_pattern.finditer(clean_desc)) if self.operator_pattern else []
+        # 调试：打印解析到的所有函数（直接使用已收集的结果，无需重复遍历）
         all_matches = all_func_matches + all_keyword_matches + all_operator_matches
         if all_matches:
             matched_funcs = [m.group(1).lower() for m in all_matches]
@@ -323,8 +328,8 @@ class FlinkFunctionParser:
             func_counter[counter_key] = func_counter.get(counter_key, 0) + 1
             return
 
-        not_supported = self.func_not_supported_types.get(func_name, [])
-        if not not_supported:
+        is_supported_list = self.func_is_supported_types.get(func_name, [])
+        if not is_supported_list:
             logger.debug(f"函数 '{func_name}' 被过滤（is_support_func=True，无类型限制）")
             return
 

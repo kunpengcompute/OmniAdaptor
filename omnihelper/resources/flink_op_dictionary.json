@@ -1,7 +1,23 @@
 {
   "Calc": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "indices",
@@ -15,7 +31,11 @@
   },
   "GroupAggregate": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "INTEGER",
+      "BIGINT",
+      "VARCHAR(2147483647)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "aggInfoList",
@@ -29,7 +49,11 @@
   },
   "LocalGroupAggregate": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "INTEGER",
+      "BIGINT",
+      "VARCHAR(2147483647)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "aggInfoList",
@@ -43,7 +67,11 @@
   },
   "GlobalGroupAggregate": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "INTEGER",
+      "BIGINT",
+      "VARCHAR(2147483647)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "aggInfoList",
@@ -57,7 +85,11 @@
   },
   "IncrementalGroupAggregate": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "INTEGER",
+      "BIGINT",
+      "VARCHAR(2147483647)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "aggInfoList",
@@ -71,7 +103,23 @@
   },
   "Join": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "leftJoinKey",
@@ -85,7 +133,23 @@
   },
   "LookupJoin": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "lookupKeys",
@@ -99,7 +163,23 @@
   },
   "WindowAggregate": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "aggInfoList",
@@ -113,7 +193,23 @@
   },
   "WindowJoin": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "leftJoinKey",
@@ -127,7 +223,23 @@
   },
   "GroupWindowAggregate": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "aggInfoList",
@@ -141,7 +253,23 @@
   },
   "Deduplicate": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "grouping",
@@ -155,7 +283,23 @@
   },
   "Expand": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "projects",
@@ -169,7 +313,23 @@
   },
   "GlobalWindowAggregate": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "aggInfoList",
@@ -183,7 +343,23 @@
   },
   "LocalWindowAggregate": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "aggInfoList",
@@ -197,7 +373,23 @@
   },
   "WatermarkAssigner": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": null,
@@ -211,7 +403,23 @@
   },
   "Rank": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "rankFunction",
@@ -225,7 +433,23 @@
   },
   "StreamRecordTimestampInserter": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": null,
@@ -239,7 +463,21 @@
   },
   "ConstraintEnforcer": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": null,
@@ -253,7 +491,22 @@
   },
   "Sink": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": null,
@@ -281,7 +534,24 @@
   },
   "KafKa Source": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(0)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(1)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(2)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": "outputNames",
@@ -295,40 +565,31 @@
   },
   "Kafka Sink": {
     "is_supported": true,
-    "supported_list": [],
+    "supported_list": [
+      "BOOLEAN",
+      "INTEGER",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
+      "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(0)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(1)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(2)",
+      "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
+    ],
     "not_supported_list": [],
     "io_config": {
       "json_discriminating_key": null,
       "input_source": "field",
       "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
-  },
-  "Source": {
-    "is_supported": true,
-    "supported_list": [],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "outputNames",
-      "input_source": "field",
-      "input_field": "outputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
-  },
-  "TableSourceScan": {
-    "is_supported": true,
-    "supported_list": [],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "outputNames",
-      "input_source": "field",
-      "input_field": "outputTypes",
       "output_source": "field",
       "output_field": "outputTypes",
       "text_input_pattern": "",

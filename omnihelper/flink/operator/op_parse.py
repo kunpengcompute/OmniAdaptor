@@ -49,9 +49,6 @@ class FlinkParser:
         self.type_resolver = FlinkTypeResolver(table_schema, column_type, table_column_type)
         self.schema_chain = {}
 
-    def set_table_schema(self, table_schema, column_type, table_column_type):
-        self.type_resolver = FlinkTypeResolver(table_schema, column_type, table_column_type)
-
     @staticmethod
     def get_resource_path():
         return os.path.join(CommonUtil.get_execute_path(), "resources")
@@ -317,6 +314,256 @@ class FlinkParser:
             ExcelColumns.FUNC_FREQUENCY: func_count
         }
 
+    @staticmethod
+    def _strip_outer_parens(expr_str):
+        expr_str = expr_str.strip()
+        while expr_str.startswith("(") and expr_str.endswith(")"):
+            depth = 0
+            matched = True
+            for idx, ch in enumerate(expr_str):
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                if depth == 0 and idx < len(expr_str) - 1:
+                    matched = False
+                    break
+            if matched:
+                expr_str = expr_str[1:-1].strip()
+            else:
+                break
+        return expr_str
+
+    @staticmethod
+    def _is_operator_func(func_name):
+        if not func_name:
+            return False
+        return len(func_name) <= 2 and not any(c.isalpha() for c in func_name)
+
+    @staticmethod
+    def _extract_operator_operands_from_desc(func_name, description):
+        if not description or not func_name:
+            return None, None
+        clean_desc = re.sub(r'<[^>]+>[\s:*\+\-]*', ' ', description)
+        op_pattern = re.compile(re.escape(func_name))
+        for match in op_pattern.finditer(clean_desc):
+            pos = match.start()
+            op_end = match.end()
+            if func_name == '=' and op_end < len(clean_desc) and clean_desc[op_end] == '[':
+                continue
+            if func_name == '=' and pos > 0 and clean_desc[pos - 1].isalpha():
+                continue
+            if func_name in ('=', '<', '>') and pos > 0 and clean_desc[pos - 1] in ('<', '>', '!'):
+                continue
+            if func_name in ('=', '<', '>') and op_end < len(clean_desc) and clean_desc[op_end] == '=':
+                continue
+            if func_name == '*' and pos > 0 and clean_desc[pos - 1] == '(' and op_end < len(clean_desc) and clean_desc[
+                op_end] == ')':
+                continue
+            left_start = pos - 1
+            depth = 0
+            while left_start >= 0:
+                ch = clean_desc[left_start]
+                if ch in (')', ']', '}'):
+                    depth += 1
+                elif ch in ('(', '[', '{'):
+                    if depth == 0:
+                        left_start += 1
+                        break
+                    depth -= 1
+                elif depth == 0 and ch == '=':
+                    if left_start + 1 < len(clean_desc) and clean_desc[left_start + 1] == '[':
+                        depth += 1
+                        left_start -= 1
+                        continue
+                    left_start += 1
+                    break
+                elif depth == 0 and ch == ',':
+                    left_start += 1
+                    break
+                left_start -= 1
+            else:
+                left_start = 0
+            if left_start < 0:
+                left_start = 0
+            right_end = op_end
+            depth = 0
+            while right_end < len(clean_desc):
+                ch = clean_desc[right_end]
+                if ch in ('(', '[', '{'):
+                    depth += 1
+                elif ch in (')', ']', '}'):
+                    if depth == 0:
+                        break
+                    depth -= 1
+                elif depth == 0 and ch in (',', ')', ']'):
+                    break
+                right_end += 1
+            left_expr = clean_desc[left_start:pos].strip()
+            right_expr = clean_desc[op_end:right_end].strip()
+            if left_expr and right_expr:
+                return left_expr, right_expr
+        return None, None
+
+    @staticmethod
+    def _extract_function_args_text_from_desc(func_name, description):
+        if not description or not func_name:
+            return None
+        if FlinkParser._is_operator_func(func_name):
+            left, right = FlinkParser._extract_operator_operands_from_desc(func_name, description)
+            if left is not None and right is not None:
+                return f"{left},{right}"
+            return None
+        func_pattern = re.compile(
+            re.escape(func_name) + r'\s*\(', re.I
+        )
+        match = func_pattern.search(description)
+        if not match:
+            return None
+        start = match.end()
+        depth = 1
+        for i in range(start, len(description)):
+            if description[i] == "(":
+                depth += 1
+            elif description[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    return description[start:i]
+        return description[start:]
+
+    @staticmethod
+    def _split_function_args(text):
+        args = []
+        current = []
+        depth = 0
+        for char in text:
+            if char == "(":
+                depth += 1
+                current.append(char)
+            elif char == ")":
+                depth -= 1
+                current.append(char)
+            elif char == "," and depth == 0:
+                args.append("".join(current))
+                current = []
+            else:
+                current.append(char)
+        if current:
+            args.append("".join(current))
+        return args
+
+    @staticmethod
+    def _extract_func_expression(func_name, description):
+        if not description:
+            return ""
+        if FlinkParser._is_operator_func(func_name):
+            left, right = FlinkParser._extract_operator_operands_from_desc(func_name, description)
+            if left is not None and right is not None:
+                return f"{left} {func_name} {right}"
+            return func_name
+        func_pattern = re.compile(
+            re.escape(func_name) + r'\s*\(', re.I
+        )
+        match = func_pattern.search(description)
+        if not match:
+            return func_name
+        start = match.start()
+        depth = 0
+        for i in range(match.end() - 1, len(description)):
+            if description[i] == "(":
+                depth += 1
+            elif description[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    return description[start:i + 1]
+        return description[start:]
+
+    @staticmethod
+    def _expr_to_string(expr):
+        if isinstance(expr, str):
+            return expr
+        if isinstance(expr, dict):
+            expr_type = expr.get("exprType", "")
+            if expr_type == "FIELD_REFERENCE":
+                return f"field[{expr.get('colVal', '?')}]"
+            if expr_type == "LITERAL":
+                return str(expr.get("value", "?"))
+            if expr_type == "FUNCTION":
+                name = expr.get("function_name", "?")
+                args = expr.get("arguments", [])
+                args_str = ", ".join(FlinkParser._expr_to_string(a) for a in args)
+                return f"{name}({args_str})"
+            if expr_type == "BINARY":
+                op = expr.get("operator", "?")
+                left = FlinkParser._expr_to_string(expr.get("left", {}))
+                right = FlinkParser._expr_to_string(expr.get("right", {}))
+                return f"{left} {op} {right}"
+            if expr_type == "UNARY":
+                op = expr.get("operator", "?")
+                inner = FlinkParser._expr_to_string(expr.get("expr", {}))
+                return f"{op}({inner})"
+        return str(expr)
+
+    @staticmethod
+    def _topological_sort(vertices):
+        in_degree = {vid: 0 for vid in vertices}
+        for vid, info in vertices.items():
+            for uid in info.get("upstream_ids", []):
+                if uid in in_degree:
+                    in_degree[vid] += 1
+
+        queue = [vid for vid, deg in in_degree.items() if deg == 0]
+        result = []
+        while queue:
+            vid = queue.pop(0)
+            result.append(vid)
+            for other_id, info in vertices.items():
+                if vid in info.get("upstream_ids", []):
+                    in_degree[other_id] -= 1
+                    if in_degree[other_id] == 0:
+                        queue.append(other_id)
+
+        for vid in vertices:
+            if vid not in result:
+                result.append(vid)
+
+        return result
+
+    @staticmethod
+    def _merge_upstream_context(upstream_ids, vertex_context):
+        merged_alias_map = {}
+        merged_output_schema = []
+        for uid in upstream_ids:
+            ctx = vertex_context.get(uid)
+            if not ctx:
+                continue
+            merged_alias_map.update(ctx.get("alias_map", {}))
+            if ctx.get("output_schema"):
+                if not merged_output_schema:
+                    merged_output_schema = list(ctx["output_schema"])
+                else:
+                    merged_output_schema.extend(ctx["output_schema"])
+        return {
+            "alias_map": merged_alias_map,
+            "output_schema": merged_output_schema,
+        }
+
+    @staticmethod
+    def _aggregate_ops_by_name_and_types(ops):
+        aggregated = {}
+        for op in ops:
+            key = (op["op_type"], op["input_types_str"], op["output_types_str"])
+            if key in aggregated:
+                aggregated[key]["count"] += op["count"]
+                aggregated[key]["num_in"] += op["num_in"]
+                aggregated[key]["num_out"] += op["num_out"]
+            else:
+                aggregated[key] = dict(op)
+        return list(aggregated.values())
+
+    def set_table_schema(self, table_schema, column_type, table_column_type):
+        self.type_resolver = FlinkTypeResolver(table_schema, column_type, table_column_type)
+
     def _analyze_operators_functions(self, description, task_id, input_schema=None):
         if not description:
             return []
@@ -533,195 +780,6 @@ class FlinkParser:
 
         return input_types, nested_content
 
-    @staticmethod
-    def _strip_outer_parens(expr_str):
-        expr_str = expr_str.strip()
-        while expr_str.startswith("(") and expr_str.endswith(")"):
-            depth = 0
-            matched = True
-            for idx, ch in enumerate(expr_str):
-                if ch == "(":
-                    depth += 1
-                elif ch == ")":
-                    depth -= 1
-                if depth == 0 and idx < len(expr_str) - 1:
-                    matched = False
-                    break
-            if matched:
-                expr_str = expr_str[1:-1].strip()
-            else:
-                break
-        return expr_str
-
-    @staticmethod
-    def _is_operator_func(func_name):
-        if not func_name:
-            return False
-        return len(func_name) <= 2 and not any(c.isalpha() for c in func_name)
-
-    @staticmethod
-    def _extract_operator_operands_from_desc(func_name, description):
-        if not description or not func_name:
-            return None, None
-        clean_desc = re.sub(r'<[^>]+>[\s:*\+\-]*', ' ', description)
-        op_pattern = re.compile(re.escape(func_name))
-        for match in op_pattern.finditer(clean_desc):
-            pos = match.start()
-            op_end = match.end()
-            if func_name == '=' and op_end < len(clean_desc) and clean_desc[op_end] == '[':
-                continue
-            if func_name == '=' and pos > 0 and clean_desc[pos - 1].isalpha():
-                continue
-            if func_name in ('=', '<', '>') and pos > 0 and clean_desc[pos - 1] in ('<', '>', '!'):
-                continue
-            if func_name in ('=', '<', '>') and op_end < len(clean_desc) and clean_desc[op_end] == '=':
-                continue
-            if func_name == '*' and pos > 0 and clean_desc[pos - 1] == '(' and op_end < len(clean_desc) and clean_desc[op_end] == ')':
-                continue
-            left_start = pos - 1
-            depth = 0
-            while left_start >= 0:
-                ch = clean_desc[left_start]
-                if ch in (')', ']', '}'):
-                    depth += 1
-                elif ch in ('(', '[', '{'):
-                    if depth == 0:
-                        left_start += 1
-                        break
-                    depth -= 1
-                elif depth == 0 and ch == '=':
-                    if left_start + 1 < len(clean_desc) and clean_desc[left_start + 1] == '[':
-                        depth += 1
-                        left_start -= 1
-                        continue
-                    left_start += 1
-                    break
-                elif depth == 0 and ch == ',':
-                    left_start += 1
-                    break
-                left_start -= 1
-            else:
-                left_start = 0
-            if left_start < 0:
-                left_start = 0
-            right_end = op_end
-            depth = 0
-            while right_end < len(clean_desc):
-                ch = clean_desc[right_end]
-                if ch in ('(', '[', '{'):
-                    depth += 1
-                elif ch in (')', ']', '}'):
-                    if depth == 0:
-                        break
-                    depth -= 1
-                elif depth == 0 and ch in (',', ')', ']'):
-                    break
-                right_end += 1
-            left_expr = clean_desc[left_start:pos].strip()
-            right_expr = clean_desc[op_end:right_end].strip()
-            if left_expr and right_expr:
-                return left_expr, right_expr
-        return None, None
-
-    @staticmethod
-    def _extract_function_args_text_from_desc(func_name, description):
-        if not description or not func_name:
-            return None
-        if FlinkParser._is_operator_func(func_name):
-            left, right = FlinkParser._extract_operator_operands_from_desc(func_name, description)
-            if left is not None and right is not None:
-                return f"{left},{right}"
-            return None
-        func_pattern = re.compile(
-            re.escape(func_name) + r'\s*\(', re.I
-        )
-        match = func_pattern.search(description)
-        if not match:
-            return None
-        start = match.end()
-        depth = 1
-        for i in range(start, len(description)):
-            if description[i] == "(":
-                depth += 1
-            elif description[i] == ")":
-                depth -= 1
-                if depth == 0:
-                    return description[start:i]
-        return description[start:]
-
-    @staticmethod
-    def _split_function_args(text):
-        args = []
-        current = []
-        depth = 0
-        for char in text:
-            if char == "(":
-                depth += 1
-                current.append(char)
-            elif char == ")":
-                depth -= 1
-                current.append(char)
-            elif char == "," and depth == 0:
-                args.append("".join(current))
-                current = []
-            else:
-                current.append(char)
-        if current:
-            args.append("".join(current))
-        return args
-
-    @staticmethod
-    def _extract_func_expression(func_name, description):
-        if not description:
-            return ""
-        if FlinkParser._is_operator_func(func_name):
-            left, right = FlinkParser._extract_operator_operands_from_desc(func_name, description)
-            if left is not None and right is not None:
-                return f"{left} {func_name} {right}"
-            return func_name
-        func_pattern = re.compile(
-            re.escape(func_name) + r'\s*\(', re.I
-        )
-        match = func_pattern.search(description)
-        if not match:
-            return func_name
-        start = match.start()
-        depth = 0
-        for i in range(match.end() - 1, len(description)):
-            if description[i] == "(":
-                depth += 1
-            elif description[i] == ")":
-                depth -= 1
-                if depth == 0:
-                    return description[start:i + 1]
-        return description[start:]
-
-    @staticmethod
-    def _expr_to_string(expr):
-        if isinstance(expr, str):
-            return expr
-        if isinstance(expr, dict):
-            expr_type = expr.get("exprType", "")
-            if expr_type == "FIELD_REFERENCE":
-                return f"field[{expr.get('colVal', '?')}]"
-            if expr_type == "LITERAL":
-                return str(expr.get("value", "?"))
-            if expr_type == "FUNCTION":
-                name = expr.get("function_name", "?")
-                args = expr.get("arguments", [])
-                args_str = ", ".join(FlinkParser._expr_to_string(a) for a in args)
-                return f"{name}({args_str})"
-            if expr_type == "BINARY":
-                op = expr.get("operator", "?")
-                left = FlinkParser._expr_to_string(expr.get("left", {}))
-                right = FlinkParser._expr_to_string(expr.get("right", {}))
-                return f"{left} {op} {right}"
-            if expr_type == "UNARY":
-                op = expr.get("operator", "?")
-                inner = FlinkParser._expr_to_string(expr.get("expr", {}))
-                return f"{op}({inner})"
-        return str(expr)
-
     def _load_op_dictionary(self):
         try:
             with open(self.dictionary_path, "r", encoding="utf-8") as f:
@@ -772,19 +830,6 @@ class FlinkParser:
                 "output_types_str": "",
             })
         return ops
-
-    @staticmethod
-    def _aggregate_ops_by_name_and_types(ops):
-        aggregated = {}
-        for op in ops:
-            key = (op["op_type"], op["input_types_str"], op["output_types_str"])
-            if key in aggregated:
-                aggregated[key]["count"] += op["count"]
-                aggregated[key]["num_in"] += op["num_in"]
-                aggregated[key]["num_out"] += op["num_out"]
-            else:
-                aggregated[key] = dict(op)
-        return list(aggregated.values())
 
     def _resolve_operator_io(self, op_type, description_data, input_schema):
         input_types, output_types = self.type_resolver.resolve_operator_io_types(
@@ -921,50 +966,6 @@ class FlinkParser:
         for data in task_data.values():
             result.extend(self._build_rows_for_task(data))
 
-    @staticmethod
-    def _topological_sort(vertices):
-        in_degree = {vid: 0 for vid in vertices}
-        for vid, info in vertices.items():
-            for uid in info.get("upstream_ids", []):
-                if uid in in_degree:
-                    in_degree[vid] += 1
-
-        queue = [vid for vid, deg in in_degree.items() if deg == 0]
-        result = []
-        while queue:
-            vid = queue.pop(0)
-            result.append(vid)
-            for other_id, info in vertices.items():
-                if vid in info.get("upstream_ids", []):
-                    in_degree[other_id] -= 1
-                    if in_degree[other_id] == 0:
-                        queue.append(other_id)
-
-        for vid in vertices:
-            if vid not in result:
-                result.append(vid)
-
-        return result
-
-    @staticmethod
-    def _merge_upstream_context(upstream_ids, vertex_context):
-        merged_alias_map = {}
-        merged_output_schema = []
-        for uid in upstream_ids:
-            ctx = vertex_context.get(uid)
-            if not ctx:
-                continue
-            merged_alias_map.update(ctx.get("alias_map", {}))
-            if ctx.get("output_schema"):
-                if not merged_output_schema:
-                    merged_output_schema = list(ctx["output_schema"])
-                else:
-                    merged_output_schema.extend(ctx["output_schema"])
-        return {
-            "alias_map": merged_alias_map,
-            "output_schema": merged_output_schema,
-        }
-
     def _collect_task_data(self, task_id, task_info, upstream_context=None):
         status = task_info.get("status", "UNKNOWN")
         operators_metrics = task_info.get("summary_metrics", {}).get("operators", {})
@@ -973,7 +974,8 @@ class FlinkParser:
         description_data = task_info.get("description_data", [])
 
         upstream_context = upstream_context or {}
-        schema_chain = self._build_schema_chain_for_vertex(description_data, upstream_context) if description_data else []
+        schema_chain = self._build_schema_chain_for_vertex(description_data,
+                                                           upstream_context) if description_data else []
 
         ops = self._build_ops_from_schema_chain(schema_chain, operators_metrics)
 

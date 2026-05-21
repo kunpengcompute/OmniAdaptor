@@ -43,6 +43,44 @@ class FlinkLogParser:
             self._load_table_schema()
             self.print_arguments()
 
+    @staticmethod
+    def _get_description(vid, plan_nodes):
+        """获取节点描述信息"""
+        desc = plan_nodes.get(vid, {}).get('description', '')
+        return html.unescape(desc) if desc else ''
+
+    @staticmethod
+    def _parse_description_data(description):
+        if not description:
+            return []
+        raw_parts = re.split(r"<br/>[\s:*\+\-]*|\n", description)
+        return [
+            parsed_line for line in raw_parts
+            if (parsed_line := FlinkParser.parse_single_description_line(line)) is not None
+        ]
+
+    @staticmethod
+    def _create_vertex_result(vid, jid, vertex, status, description, stats, description_data=None, upstream_ids=None):
+        if status != TaskStatus.SUCCESS:
+            logger.warning(f"Vertex {vid} in job {jid} status: {status}")
+
+        result = {
+            "status": status,
+            "vertex_name": vertex.get("name"),
+            "logic_metadata": {
+                "full_description": description
+            },
+            "summary_metrics": stats
+        }
+
+        if description_data is not None:
+            result["description_data"] = description_data
+
+        if upstream_ids is not None:
+            result["upstream_ids"] = upstream_ids
+
+        return result
+
     def _load_table_schema(self):
         csv_path = getattr(self.args, 'input_data', None)
         if not csv_path:
@@ -278,52 +316,29 @@ class FlinkLogParser:
 
         return self._create_vertex_result(vid, jid, vertex, status, description, stats, description_data, upstream_ids)
 
-    def _get_description(self, vid, plan_nodes):
-        """获取节点描述信息"""
-        desc = plan_nodes.get(vid, {}).get('description', '')
-        return html.unescape(desc) if desc else ''
-
-    def _parse_description_data(self, description):
-        if not description:
-            return []
-        raw_parts = re.split(r"<br/>[\s:*\+\-]*|\n", description)
-        return [
-            parsed_line for line in raw_parts
-            if (parsed_line := FlinkParser.parse_single_description_line(line)) is not None
-        ]
-
     def _parse_performance_stats(self, vid, metrics_values, detail, jid):
         """解析性能统计数据"""
         return self.parser.parse_performance_stats(vid, metrics_values,
                                                    self.parser.get_description(detail, jid))
-
-    def _create_vertex_result(self, vid, jid, vertex, status, description, stats, description_data=None, upstream_ids=None):
-        if status != TaskStatus.SUCCESS:
-            logger.warning(f"Vertex {vid} in job {jid} status: {status}")
-
-        result = {
-            "status": status,
-            "vertex_name": vertex.get("name"),
-            "logic_metadata": {
-                "full_description": description
-            },
-            "summary_metrics": stats
-        }
-
-        if description_data is not None:
-            result["description_data"] = description_data
-
-        if upstream_ids is not None:
-            result["upstream_ids"] = upstream_ids
-
-        return result
 
     def _get_vertex_metrics(self, vid, jid):
         available = self.requester.get_vertex_metrics(jid, vid)
         if not available:
             logger.warning(f"No metrics available for vertex {vid} in job {jid}, error: {self.requester.last_error}")
             return None
+
         needed_ids = self.parser.filter_num_data(available, self.target_metrics)
+        # 当 show_op_details 为 False 时，过滤掉 runtime、numBytesIn、numBytesOut 相关的指标 ID，减少下游 fetch_metrics 的 API 批量请求
+        if not getattr(self.args, 'show_op_details', True) and needed_ids:
+            # 假设 MetricType 里的 key 或 Flink 原始指标 ID 包含如下特征关键字，将其踢出请求队列
+            exclude_keywords = ["runtime", "BytesIn", "BytesOut"]
+            needed_ids = [
+                m_id for m_id in needed_ids
+                if not any(kw in m_id for kw in exclude_keywords)
+            ]
+            logger.debug(
+                f"Optimization: show-op-details is disabled. Filtered API metrics batch to {len(needed_ids)} items.")
+
         if not needed_ids:
             logger.warning(f"No needed metrics found for vertex {vid} in job {jid}")
         return {
@@ -418,10 +433,21 @@ class FlinkLogParser:
 
     def _process_report_data(self, field_mapping):
         """处理报告数据，按照字段映射转换"""
-        processed_data = []
-        for item in self.analysis_result:
-            processed_item = {}
-            for source_field, target_field in field_mapping:
-                processed_item[target_field] = item.get(source_field)
-            processed_data.append(processed_item)
-        return processed_data
+        show_op_details = getattr(self.args, 'show_op_details', True)
+        # 算子 OUTPUT列数据不输出
+        exclude_fields = {ExcelColumns.OUTPUT}
+        if not show_op_details:
+            exclude_fields.update({
+                ExcelColumns.RUNTIME,
+                ExcelColumns.INPUT_DATA_SIZE,
+                ExcelColumns.OUTPUT_DATA_SIZE,
+            })
+
+        return [
+            {
+                # 如果当前字段在黑名单中，直接赋空字符串 ""，否则从数据对象中正常获取
+                target_field: ("" if source_field in exclude_fields else item.get(source_field))
+                for source_field, target_field in field_mapping
+            }
+            for item in self.analysis_result
+        ]

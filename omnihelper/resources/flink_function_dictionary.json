@@ -315,10 +315,18 @@
   {"func_name": "SHA2", "is_support_func": false},
 
 
-  {"func_name": "COUNT", "is_support_func": false},
-  {"func_name": "AVG", "is_support_func": false},
-  {"func_name": "SUM", "is_support_func": false},
-  {"func_name": "MAX", "is_support_func": false},
+  {"func_name": "COUNT", "is_support_func": false,
+  "is_supported_type": ["BIGINT"]
+  },
+  {"func_name": "AVG", "is_support_func": false,
+  "is_supported_type": ["BIGINT"]
+  },
+  {"func_name": "SUM", "is_support_func": false,
+  "is_supported_type": ["BIGINT"]
+  },
+  {"func_name": "MAX", "is_support_func": false,
+  "is_supported_type": ["BIGINT", "VARCHAR(2147483647)"]
+  },
   {"func_name": "MIN", "is_support_func": false},
   {"func_name": "STDDEV_POP", "is_support_func": false},
   {"func_name": "STDDEV_SAMP", "is_support_func": false},
@@ -357,6 +365,12 @@
    "is_supported_type": []
   },
   {"func_name": "MOD", "func_type": "binary", "is_support_func": true,
+   "is_supported_type": ["BIGINT"]
+  },
+  {"func_name": "SUM0", "is_support_func": true,
    "is_supported_type": ["BIGINT", "INTEGER", "DECIMAL64", "DECIMAL128"]
+  },
+  {"func_name": "LAST_STRING_VALUE_WITHOUT_RETRACT", "is_support_func": true,
+   "is_supported_type": ["VARCHAR(2147483647)"]
   }
 ]

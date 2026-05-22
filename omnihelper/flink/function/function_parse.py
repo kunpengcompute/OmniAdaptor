@@ -102,7 +102,8 @@ class FlinkFunctionParser:
             return
 
         keyword_keywords = {
-            'or', 'and', 'like', 'between', 'case', 'array', 'map'
+             'or', 'and', 'like', 'between', 'not', 'row', 'date', 'time', 'interval', 'localtime',
+              'localtimestamp', 'current_time', 'current_date', 'current_timestamp', 'array', 'map'
         }
 
         func_call_patterns = []
@@ -209,6 +210,13 @@ class FlinkFunctionParser:
             return True
         return False
 
+    def _is_operator_form(self, description, match_start):
+        if match_start <= 3:
+            return False
+        prev_part = description[max(0, match_start - 10):match_start]
+        op_pattern = re.compile(r'\[\d+\]:[A-Za-z]*$')
+        return bool(op_pattern.search(prev_part))
+
     def parse_plan_description(self, description):
         if not description:
             return []
@@ -218,6 +226,9 @@ class FlinkFunctionParser:
         if self.func_pattern:
             for match in self.func_pattern.finditer(description):
                 func_name = match.group(1).lower()
+                match_start = match.start()
+                if self._is_operator_form(description, match_start):
+                    continue
                 funcs.append({"func": func_name, "params": [], "type": "func"})
 
         if self.keywords_pattern:
@@ -258,8 +269,11 @@ class FlinkFunctionParser:
         # 匹配函数调用形式 func(...)
         if self.func_pattern:
             for match in self.func_pattern.finditer(description):
-                all_func_matches.append(match)
                 func_name = match.group(1).lower()
+                match_start = match.start()
+                if self._is_operator_form(description, match_start):
+                    continue
+                all_func_matches.append(match)
                 self._check_func_support(
                     func_name, func_counter, func_unsupported_types, param_types_map
                 )

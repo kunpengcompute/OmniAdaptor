@@ -18,16 +18,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "indices",
-      "input_source": "select",
-      "input_field": "indices",
-      "output_source": "select",
-      "output_field": "indices",
-      "text_input_pattern": "select=\\[(.*?)\\]",
-      "text_output_pattern": "select=\\[(.*?)\\]"
-    }
+    "not_supported_list": []
   },
   "GroupAggregate": {
     "is_supported": true,
@@ -36,16 +27,7 @@
       "BIGINT",
       "VARCHAR(2147483647)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "aggInfoList",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": "groupBy=\\[(.*?)\\]"
-    }
+    "not_supported_list": []
   },
   "LocalGroupAggregate": {
     "is_supported": true,
@@ -54,16 +36,7 @@
       "BIGINT",
       "VARCHAR(2147483647)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "aggInfoList",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "GlobalGroupAggregate": {
     "is_supported": true,
@@ -72,16 +45,7 @@
       "BIGINT",
       "VARCHAR(2147483647)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "aggInfoList",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "IncrementalGroupAggregate": {
     "is_supported": true,
@@ -90,16 +54,7 @@
       "BIGINT",
       "VARCHAR(2147483647)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "aggInfoList",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "Join": {
     "is_supported": true,
@@ -120,16 +75,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "leftJoinKey",
-      "input_source": "field",
-      "input_field": "leftInputTypes,rightInputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "LookupJoin": {
     "is_supported": true,
@@ -150,16 +96,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "lookupKeys",
-      "input_source": "field",
-      "input_field": "inputTypes,lookupInputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "WindowAggregate": {
     "is_supported": true,
@@ -180,16 +117,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "aggInfoList",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "WindowJoin": {
     "is_supported": true,
@@ -210,16 +138,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "leftJoinKey",
-      "input_source": "field",
-      "input_field": "leftInputTypes,rightInputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "GroupWindowAggregate": {
     "is_supported": true,
@@ -240,16 +159,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "aggInfoList",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "Deduplicate": {
     "is_supported": true,
@@ -270,16 +180,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "grouping",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "Expand": {
     "is_supported": true,
@@ -300,16 +201,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "projects",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "GlobalWindowAggregate": {
     "is_supported": true,
@@ -330,16 +222,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "aggInfoList",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "LocalWindowAggregate": {
     "is_supported": true,
@@ -360,16 +243,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "aggInfoList",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "WatermarkAssigner": {
     "is_supported": true,
@@ -390,16 +264,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": null,
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "Rank": {
     "is_supported": true,
@@ -420,16 +285,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "rankFunction",
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "StreamRecordTimestampInserter": {
     "is_supported": true,
@@ -450,16 +306,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": null,
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "ConstraintEnforcer": {
     "is_supported": true,
@@ -478,16 +325,7 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": null,
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "Sink": {
     "is_supported": true,
@@ -507,30 +345,12 @@
       "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": null,
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "Csv Source": {
     "is_supported": true,
     "supported_list": [],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "outputNames",
-      "input_source": "field",
-      "input_field": "outputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "KafKa Source": {
     "is_supported": true,
@@ -552,16 +372,7 @@
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(2)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": "outputNames",
-      "input_source": "field",
-      "input_field": "outputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   },
   "Kafka Sink": {
     "is_supported": true,
@@ -585,15 +396,6 @@
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(2)",
       "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"
     ],
-    "not_supported_list": [],
-    "io_config": {
-      "json_discriminating_key": null,
-      "input_source": "field",
-      "input_field": "inputTypes",
-      "output_source": "field",
-      "output_field": "outputTypes",
-      "text_input_pattern": "",
-      "text_output_pattern": ""
-    }
+    "not_supported_list": []
   }
 }

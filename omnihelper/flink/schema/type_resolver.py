@@ -20,16 +20,6 @@ OMNI_TYPE_ID_MAP = {
     20: "MULTISET",
 }
 
-DEFAULT_IO_CONFIG = {
-    "json_discriminating_key": None,
-    "input_source": "field",
-    "input_field": "inputTypes",
-    "output_source": "field",
-    "output_field": "outputTypes",
-    "text_input_pattern": "",
-    "text_output_pattern": "",
-}
-
 TYPE_PATTERNS = [
     (re.compile(r"^true$|^false$", re.I), "BOOLEAN"),
     (re.compile(r"^NULL$", re.I), "NULL"),
@@ -49,9 +39,7 @@ class FlinkTypeResolver:
         self.table_column_type = table_column_type or {}
         self.alias_map = {}
         self.return_type_dict = {}
-        self._op_io_config = {}
         self._load_return_type_dict()
-        self._load_op_io_config()
 
     @staticmethod
     def _normalize_return_type(return_type):
@@ -78,30 +66,6 @@ class FlinkTypeResolver:
             logger.info(f"Loaded {len(self.return_type_dict)} function return type entries")
         except Exception as e:
             logger.warning(f"Failed to load flink_function_return_type.json: {e}")
-
-    def _load_op_io_config(self):
-        try:
-            dict_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                "resources",
-                "flink_op_dictionary.json",
-            )
-            with open(dict_path, "r", encoding="utf-8") as f:
-                op_dict = json.load(f)
-            self._op_io_config = {
-                op_type: op_info.get("io_config", {})
-                for op_type, op_info in op_dict.items()
-            }
-            logger.info(f"Loaded io_config for {len(self._op_io_config)} operators")
-        except Exception as e:
-            logger.warning(f"Failed to load op io_config: {e}")
-            self._op_io_config = {}
-
-    def _get_io_config(self, op_type):
-        config = self._op_io_config.get(op_type, {})
-        merged = dict(DEFAULT_IO_CONFIG)
-        merged.update({k: v for k, v in config.items() if v is not None})
-        return merged
 
     def update_column_type(self, column_type, table_column_type=None):
         if column_type:
@@ -611,13 +575,6 @@ class FlinkTypeResolver:
         if len(all_json) == 1:
             return all_json[0]
 
-        io_config = self._get_io_config(op_type)
-        discriminating_key = io_config.get("json_discriminating_key")
-        if discriminating_key:
-            for desc in all_json:
-                if discriminating_key in desc:
-                    return desc
-
         op_type_lower = op_type.lower()
         for desc in all_json:
             origin = desc.get("originDescription") or ""
@@ -625,162 +582,6 @@ class FlinkTypeResolver:
                 return desc
 
         return all_json[0] if all_json else None
-
-    def resolve_operator_io_types(self, op_type, description_data, input_schema=None):
-        input_types = []
-        output_types = []
-
-        if not description_data:
-            return input_types, output_types
-
-        io_config = self._get_io_config(op_type)
-        json_desc = self.find_json_desc_for_op(op_type, description_data)
-        if json_desc:
-            return self._resolve_io_from_json(op_type, json_desc, input_schema, io_config)
-
-        return self._resolve_io_from_text(op_type, description_data, input_schema, io_config)
-
-    def _resolve_io_from_json(self, op_type, json_desc, input_schema, io_config):
-        input_types = []
-        output_types = []
-
-        input_source = io_config.get("input_source", "field")
-        if input_source == "none":
-            pass
-        elif input_source == "field":
-            input_field = io_config.get("input_field", "inputTypes")
-            if input_field:
-                for field in [f.strip() for f in input_field.split(",")]:
-                    types_raw = json_desc.get(field, [])
-                    if types_raw:
-                        input_types.extend([TypeNormalizer.normalize_type(t) for t in types_raw])
-            if not input_types and input_schema:
-                input_types = [f.get("field_type", UNKNOWN) for f in input_schema]
-        elif input_source == "select":
-            output_field = io_config.get("output_field", "indices")
-            indices = json_desc.get(output_field, [])
-            for idx_expr in indices:
-                if isinstance(idx_expr, dict):
-                    t = self.resolve_expression_type(idx_expr, input_schema)
-                    input_types.append(t)
-            if not input_types and input_schema:
-                input_types = [f.get("field_type", UNKNOWN) for f in input_schema]
-
-        output_source = io_config.get("output_source", "field")
-        if output_source == "field":
-            output_field = io_config.get("output_field", "outputTypes")
-            if output_field:
-                types_raw = json_desc.get(output_field, [])
-                if types_raw:
-                    output_types = [TypeNormalizer.normalize_type(t) for t in types_raw]
-            if not output_types and io_config.get("json_discriminating_key") == "aggInfoList":
-                output_types = self._resolve_agg_output_types(json_desc, input_schema)
-        elif output_source == "select":
-            output_field = io_config.get("output_field", "indices")
-            indices = json_desc.get(output_field, [])
-            for idx_expr in indices:
-                if isinstance(idx_expr, dict):
-                    t = self.resolve_expression_type(idx_expr, input_schema)
-                    output_types.append(t)
-
-        if not output_types and input_schema:
-            output_types = [f.get("field_type", UNKNOWN) for f in input_schema]
-
-        return input_types, output_types
-
-    def _resolve_agg_output_types(self, json_desc, input_schema):
-        output_types = []
-        grouping = json_desc.get("grouping", [])
-        if grouping and input_schema:
-            for idx in grouping:
-                if 0 <= idx < len(input_schema):
-                    output_types.append(input_schema[idx].get("field_type", UNKNOWN))
-                else:
-                    output_types.append(UNKNOWN)
-
-        agg_info = json_desc.get("aggInfoList", {})
-        agg_value_types = agg_info.get("aggValueTypes", [])
-        if agg_value_types:
-            for t in agg_value_types:
-                output_types.append(TypeNormalizer.normalize_type(t))
-        else:
-            agg_calls = agg_info.get("aggregateCalls", [])
-            for call in agg_calls:
-                agg_func = call.get("aggregationFunction", "")
-                output_type = self._resolve_agg_func_return_type(agg_func, input_schema, call)
-                output_types.append(output_type)
-
-        return output_types
-
-    def _resolve_agg_func_return_type(self, agg_func_name, input_schema, call_info=None):
-        func_lower = agg_func_name.lower()
-
-        simple_name = re.sub(r'aggfunction$', '', func_lower, flags=re.I)
-        dict_entry = self.return_type_dict.get(simple_name)
-        if dict_entry:
-            if not dict_entry.get("need_param_type", False):
-                ret = dict_entry.get("return_type", UNKNOWN)
-                return ret if ret != UNKNOWN else UNKNOWN
-
-        type_map = {
-            "count": "BIGINT",
-            "avg": "DOUBLE",
-            "sum0": "BIGINT",
-            "singlevalue": "ARGUMENT_TYPE",
-            "min": "ARGUMENT_TYPE",
-            "max": "ARGUMENT_TYPE",
-            "firstvalue": "ARGUMENT_TYPE",
-            "lastvalue": "ARGUMENT_TYPE",
-            "listagg": "VARCHAR",
-        }
-
-        mapped = type_map.get(simple_name)
-        if mapped:
-            if mapped == "ARGUMENT_TYPE" and call_info:
-                arg_indexes = call_info.get("argIndexes", [])
-                if arg_indexes and input_schema:
-                    first_idx = arg_indexes[0]
-                    if 0 <= first_idx < len(input_schema):
-                        return input_schema[first_idx].get("field_type", UNKNOWN)
-            return mapped
-
-        return UNKNOWN
-
-    def _resolve_io_from_text(self, op_type, description_data, input_schema, io_config):
-        input_types = []
-        output_types = []
-
-        full_text = " ".join(
-            desc for desc in description_data if isinstance(desc, str)
-        )
-
-        input_source = io_config.get("input_source", "field")
-        if input_source == "none":
-            pass
-        elif input_source == "field":
-            if input_schema:
-                input_types = [f.get("field_type", UNKNOWN) for f in input_schema]
-        elif input_source == "select":
-            text_output_pattern = io_config.get("text_output_pattern", "")
-            if text_output_pattern:
-                match = re.search(text_output_pattern, full_text, re.I)
-                if match:
-                    input_types = self._parse_text_output_types(match.group(1), input_schema)
-            if not input_types and input_schema:
-                input_types = [f.get("field_type", UNKNOWN) for f in input_schema]
-
-        text_output_pattern = io_config.get("text_output_pattern", "")
-        if text_output_pattern:
-            match = re.search(text_output_pattern, full_text, re.I)
-            if match:
-                output_types = self._parse_text_output_types(match.group(1), input_schema)
-        elif input_schema:
-            output_types = [f.get("field_type", UNKNOWN) for f in input_schema]
-
-        if not output_types and input_schema:
-            output_types = [f.get("field_type", UNKNOWN) for f in input_schema]
-
-        return input_types, output_types
 
     def _parse_text_output_types(self, matched_text, input_schema):
         items = [item.strip() for item in matched_text.split(",") if item.strip()]
@@ -910,6 +711,11 @@ class FlinkTypeResolver:
                 if table_name:
                     tables.append(table_name)
 
+                if not output_schema:
+                    fields = self._extract_fields_from_text(desc)
+                    if fields:
+                        output_schema = fields
+
         return tables, output_schema
 
     def _extract_table_name_from_origin(self, origin_desc):
@@ -917,6 +723,7 @@ class FlinkTypeResolver:
             return None
 
         patterns = [
+            r'TableSourceScan\(table=\[\[([\w-]+),\s*([\w-]+),\s*([\w-]+)\]\]',
             r'Source:\s+\[?\w*[\w-]*\]?\s*-\s*\w*[\w-]*\s*(\w+[\w.-]*\w+)',
             r'TableSourceScan\(table=\[\w+\.\w+\],\s*table=\[*(\w+\.\w+)',
             r'Source:\s+\S+\s*-\s*(\w+\.\w+)',
@@ -926,12 +733,16 @@ class FlinkTypeResolver:
         for pattern in patterns:
             match = re.search(pattern, origin_desc, re.I)
             if match:
+                groups = match.groups()
+                if len(groups) == 3:
+                    return f"{groups[0]}.{groups[1]}.{groups[2]}"
                 return match.group(1)
 
         return None
 
     def _extract_table_name_from_text(self, desc):
         patterns = [
+            r'TableSourceScan\(table=\[\[([\w-]+),\s*([\w-]+),\s*([\w-]+)\]\]',
             r'TableSourceScan\(table=\[*(\w+\.\w+)',
             r'Source:\s+\S+\s*-\s*(\w+\.\w+)',
             r'Scan\s+\w+\s+(\w+\.\w+)',
@@ -940,9 +751,43 @@ class FlinkTypeResolver:
         for pattern in patterns:
             match = re.search(pattern, desc, re.I)
             if match:
+                groups = match.groups()
+                if len(groups) == 3:
+                    return f"{groups[0]}.{groups[1]}.{groups[2]}"
                 return match.group(1)
 
         return None
+
+    def _extract_fields_from_text(self, desc):
+        if not desc:
+            return []
+
+        fields_match = re.search(r'fields=\[([^\]]+)\]', desc)
+        if not fields_match:
+            return []
+
+        fields_str = fields_match.group(1)
+        field_names = [f.strip() for f in fields_str.split(',') if f.strip()]
+        if not field_names:
+            return []
+
+        result = []
+        for name in field_names:
+            field_type = self._resolve_field_type_by_name(name)
+            result.append({
+                "field_name": name,
+                "field_type": field_type,
+            })
+        return result
+
+    def _resolve_field_type_by_name(self, field_name):
+        if self.column_type and field_name in self.column_type:
+            return TypeNormalizer.normalize_type(self.column_type[field_name])
+        if self.table_column_type:
+            for key, type_val in self.table_column_type.items():
+                if key.endswith(f".{field_name}"):
+                    return TypeNormalizer.normalize_type(type_val)
+        return "unknown"
 
     def _resolve_field_name_from_expr(self, expr, input_schema, default_index):
         expr_type = expr.get("exprType", "")

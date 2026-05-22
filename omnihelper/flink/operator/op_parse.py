@@ -831,14 +831,6 @@ class FlinkParser:
             })
         return ops
 
-    def _resolve_operator_io(self, op_type, description_data, input_schema):
-        input_types, output_types = self.type_resolver.resolve_operator_io_types(
-            op_type, description_data, input_schema
-        )
-        input_str = ",".join(t for t in input_types if t) if input_types else ""
-        output_str = ",".join(t for t in output_types if t) if output_types else ""
-        return input_str, output_str
-
     def _build_schema_chain_for_vertex(self, description_data, upstream_context=None):
         schema_chain = []
         upstream_context = upstream_context or {}
@@ -1028,11 +1020,9 @@ class FlinkParser:
             input_schema = chain_entry.get("input_schema", [])
             output_schema = chain_entry.get("output_schema", [])
 
-            input_types = [f.get("field_type", "unknown") for f in input_schema] if input_schema else []
-            output_types = [f.get("field_type", "unknown") for f in output_schema] if output_schema else []
-
+            input_types = [f.get("field_type", "unknown") for f in output_schema] if output_schema else []
             input_str = ",".join(t for t in input_types if t)
-            output_str = ",".join(t for t in output_types if t)
+            output_str = ""
 
             metrics = metrics_by_type.get(op_type, {})
             type_occurrence[op_type] = type_occurrence.get(op_type, 0) + 1

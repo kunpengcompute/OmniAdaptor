@@ -101,11 +101,14 @@ public class RexNodeUtil {
         specialOperatorMap.put("JSON_VALUE", SpecialExprType.JSON_VALUE);
         specialOperatorMap.put("JSON_QUERY", SpecialExprType.JSON_QUERY);
         specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);
+        specialOperatorMap.put("CURRENT_TIMESTAMP", SpecialExprType.CURRENT_TIMESTAMP);
+        specialOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
     }
 
     static {
         // Map UDF registration names to their corresponding SpecialExprType
         udfOperatorMap.put("jsontest", SpecialExprType.JSON_SPLIT);
+        udfOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
     }
 
     static {
@@ -194,7 +197,9 @@ public class RexNodeUtil {
         COALESCE,
         JSON_VALUE,
         JSON_QUERY,
-        JSON_SPLIT
+        JSON_SPLIT,
+        CURRENT_TIMESTAMP,
+        DATE_ADD
     }
 
 
@@ -667,6 +672,38 @@ public class RexNodeUtil {
                         jsonMap.put("conditions", cond);
                         LOG.info("List is {}", cond.toString());
                         LOG.info("The expression is {} ", rexCall.toString());
+                        break;
+                    case CURRENT_TIMESTAMP:
+                        jsonMap.put("exprType", "FUNCTION");
+                        setDataType(rexCall, jsonMap, "returnType");
+                        jsonMap.put("function_name", "current_timestamp");
+                        List<Map<String, Object>> currentTimestampArgs = new ArrayList<>();
+                        if (operands.size() > 0) {
+                            for (int i = 0; i < operands.size(); i++) {
+                                currentTimestampArgs.add(buildJsonMap(operands.get(i)));
+                            }
+                        }
+                        jsonMap.put("arguments", currentTimestampArgs);
+                        LOG.info("The CURRENT_TIMESTAMP expression is {} ", rexCall.toString());
+                        break;
+                    case DATE_ADD:
+                        jsonMap.put("exprType", "FUNCTION");
+                        jsonMap.put("returnType", 2);
+                        jsonMap.put("function_name", "date_add_days");
+                        List<Map<String, Object>> dateAddArgs = new ArrayList<>();
+                        for (int i = 0; i < operands.size(); i++) {
+                            Map<String, Object> argMap = buildJsonMap(operands.get(i));
+                            if (i == 0) {
+                                SqlTypeName firstArgType = operands.get(0).getType().getSqlTypeName();
+                                if (firstArgType == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+                                        || SqlTypeName.DATETIME_TYPES.contains(firstArgType)) {
+                                    argMap.put("dataType", 2);
+                                }
+                            }
+                            dateAddArgs.add(argMap);
+                        }
+                        jsonMap.put("arguments", dateAddArgs);
+                        LOG.info("The DATE_ADD expression is {} ", rexCall.toString());
                         break;
                     default:
                         jsonMap.put("exprType", "INVALID");

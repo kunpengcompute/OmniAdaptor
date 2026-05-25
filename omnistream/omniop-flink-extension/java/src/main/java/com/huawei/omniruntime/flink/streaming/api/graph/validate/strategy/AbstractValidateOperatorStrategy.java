@@ -32,6 +32,7 @@ public abstract class AbstractValidateOperatorStrategy {
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
+            "TIMESTAMP_WITHOUT_TIME_ZONE(9)",
             "VARCHAR",
             "VARCHAR(2147483647)",
             "VARCHAR(2000)",

@@ -322,6 +322,38 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                         }
                     }
                 }
+                if ("current_timestamp".equals(functionName)) {
+                    Object returnTypeVal = exprMap.get("returnType");
+                    if (returnTypeVal instanceof Integer) {
+                        int retType = (Integer) returnTypeVal;
+                        if (retType != 2) {
+                            LOG.info("ERROR: current_timestamp expects LONG return type, but got typeId {}", retType);
+                            return false;
+                        }
+                    }
+                }
+
+                if ("date_add_days".equals(functionName)) {
+                    Object returnTypeVal = exprMap.get("returnType");
+                    if (returnTypeVal instanceof Integer) {
+                        int retType = (Integer) returnTypeVal;
+                        if (retType != 2) {
+                            LOG.info("ERROR: date_add_days expects LONG return type, but got typeId {}", retType);
+                            return false;
+                        }
+                    }
+                }
+
+                if ("to_timestamp_ltz".equals(functionName)) {
+                    Object returnTypeVal = exprMap.get("returnType");
+                    if (returnTypeVal instanceof Integer) {
+                        int retType = (Integer) returnTypeVal;
+                        if (retType != 2) {
+                            LOG.info("ERROR: to_timestamp_ltz expects LONG return type, but got typeId {}", retType);
+                            return false;
+                        }
+                    }
+                }
 
                 return validateReturnTypeAndArguments(exprMap, inputSize);
 

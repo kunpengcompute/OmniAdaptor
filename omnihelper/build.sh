@@ -42,18 +42,21 @@ get_architecture() {
 # 获取架构信息
 ARCH=$(get_architecture)
 
-if command -v pyinstaller > /dev/null; then
-    echo "pyinstaller 已安装"
+if [ -d "build_venv" ]; then
+    source build_venv/bin/activate
 else
-    echo "install dependencies"
+    echo "create virtualenv"
     python3 -m venv build_venv
     source build_venv/bin/activate
-    if [ "$(uname -m)" == "aarch64" ]; then
-        pip3 install ${SCRIPT_DIR}[dev,kerberos] -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
-    else
-        # CentOS7 x86_64 gssapi
-        CFLAGS="-std=c99" pip3 install ${SCRIPT_DIR}[dev,kerberos] -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
-    fi
+fi
+
+echo "install dependencies"
+
+if [ "$(uname -m)" == "aarch64" ]; then
+    pip3 install ${SCRIPT_DIR}[dev,kerberos] -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+else
+    # CentOS7 x86_64 gssapi
+    CFLAGS="-std=c99" pip3 install ${SCRIPT_DIR}[dev,kerberos] -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
 fi
 
 # 使用绝对路径

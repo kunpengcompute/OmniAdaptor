@@ -61,7 +61,8 @@ class FlinkParser:
         if not clean_part:
             return None
 
-        if clean_part.startswith(("{", "[")):
+        if (clean_part.startswith('{') and clean_part.endswith('}')) or \
+                (clean_part.startswith('[') and clean_part.endswith(']')):
             try:
                 return json.loads(clean_part)
             except (JSONDecodeError, TypeError) as e:
@@ -296,6 +297,7 @@ class FlinkParser:
     def _create_row(job_id, task_id, status, op=None, func_name="", func_inputs_str="",
                     func_nested="", func_count=""):
         is_supported_str = "是" if op.get("is_supported", False) else "否"
+        task_status = (status == TaskStatus.SUCCESS)
         return {
             ExcelColumns.JOB_ID: job_id,
             ExcelColumns.TASK_ID: task_id,
@@ -305,9 +307,9 @@ class FlinkParser:
             ExcelColumns.INPUT: op.get("input_types_str", ""),
             ExcelColumns.OUTPUT: op.get("output_types_str", ""),
             ExcelColumns.FREQUENCY: op["count"],
-            ExcelColumns.RUNTIME: op["run_time"],
-            ExcelColumns.INPUT_DATA_SIZE: f"{FlinkParser.bytes_to_mb(op['num_in'])}MB",
-            ExcelColumns.OUTPUT_DATA_SIZE: f"{FlinkParser.bytes_to_mb(op['num_out'])}MB",
+            ExcelColumns.RUNTIME: op["run_time"] if task_status else "",
+            ExcelColumns.INPUT_DATA_SIZE: f"{FlinkParser.bytes_to_mb(op['num_in'])}MB" if task_status else "",
+            ExcelColumns.OUTPUT_DATA_SIZE: f"{FlinkParser.bytes_to_mb(op['num_out'])}MB" if task_status else "",
             ExcelColumns.FUNC_NAME: func_name,
             ExcelColumns.FUNC_INPUT: func_inputs_str,
             ExcelColumns.NESTED_CONTENT: func_nested,
@@ -1059,7 +1061,8 @@ class FlinkParser:
         job_id, task_id, status = data["jobid"], data["taskid"], data["status"]
         ops, func_list = data["ops"], data["func_list"]
         if not ops and not func_list:
-            return []
+            # 返回一行仅包含基础信息（Job/Task/Status）的空行，确保 ID 对得上
+            return [self._create_empty_row(job_id, task_id, status)]
         rows, max_len = [], max(len(ops), len(func_list))
         for i in range(max_len):
             row = self._create_empty_row(job_id, task_id, status)

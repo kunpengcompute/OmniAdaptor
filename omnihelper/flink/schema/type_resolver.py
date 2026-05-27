@@ -29,6 +29,7 @@ TYPE_PATTERNS = [
     (re.compile(r"^\d{4}-\d{2}-\d{2}$"), "DATE"),
     (re.compile(r"^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}"), "TIMESTAMP"),
     (re.compile(r"^INTERVAL\s+", re.I), "INTERVAL"),
+    (re.compile(r"^Sarg\[.*\]$",re.I), "VARCHAR")
 ]
 
 

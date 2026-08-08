@@ -219,6 +219,8 @@ public class OmniTask extends Task {
 
     private OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources;
 
+    private boolean deleteNativeTaskInJavaSide = false;
+
     /**
      * <b>IMPORTANT:</b> This constructor may not start any work that would need to be undone in the
      * case of a failing task deployment.
@@ -393,7 +395,10 @@ public class OmniTask extends Task {
                 LOG.error("Error during closing rocksDBSharedResources of task {} ({}).", taskNameWithSubtask, executionId, t);
             }
 
-            //待优化 deleteNativeTask(nativeTaskRef);
+            //待优化
+            if(deleteNativeTaskInJavaSide){
+                deleteNativeTask(nativeTaskRef);
+            }
         }
     }
 
@@ -469,6 +474,9 @@ public class OmniTask extends Task {
         LOG.debug("Registering task at network: {}.", this);
         // action 1, natvie should do similarly operation
         setupPartitionsAndGates(partitionWriters, inputGates);
+        if (partitionWriters.length == 0){
+            deleteNativeTaskInJavaSide = true;
+        }
         if (jobType == JobType.SQL) {
             bindNativeTaskRefToResultPartition(nativeTaskRef, partitionWriters, jobType);
         }

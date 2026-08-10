@@ -46,6 +46,7 @@ import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.core.security.FlinkSecurityManager;
 import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
@@ -226,6 +227,11 @@ public class OmniTask extends Task {
     // From that point nativeTaskRef may dangle at any moment and must not be passed to native code.
     private volatile boolean nativeTaskReleased = false;
 
+    // Flink counters that registerNativeTaskMetrics pointed at native counters owned by the native
+    // task metric group. They must be detached from that memory before the native task is deleted,
+    // or the metric reporter reads freed memory.
+    private List<SimpleCounter> nativeBackedCounters = Collections.emptyList();
+
     /**
      * <b>IMPORTANT:</b> This constructor may not start any work that would need to be undone in the
      * case of a failing task deployment.
@@ -382,6 +388,7 @@ public class OmniTask extends Task {
             // counted as finished when this happens
             // errors here will only be logged
             try {
+                metrics.close();
                 unregisterNativeBackedMetrics();
             } catch (Throwable t) {
                 LOG.error("Error during metrics de-registration of task {} ({}).", taskNameWithSubtask, executionId,
@@ -400,6 +407,14 @@ public class OmniTask extends Task {
             //待优化
             if(deleteNativeTaskInJavaSide){
                 deleteNativeTask(nativeTaskRef);
+            } else if (nativeTaskRef != 0) {
+                // Last thing this task does: hand the native task to the native
+                // ResultPartitionManager, which deletes it once every partition it produced has
+                // been consumed. It must come after the metrics de-registration above, because
+                // from here on the task may be freed at any moment - during this call, or later on
+                // a netty thread - and nothing may read through nativeTaskRef afterwards.
+                nativeTaskReleased = true;
+                notifyNativeTaskRunFinished(nativeTaskRef);
             }
         }
     }
@@ -646,13 +661,6 @@ public class OmniTask extends Task {
             taskManagerActions.updateTaskExecutionState(new TaskExecutionState(executionId, ExecutionState.RUNNING));
             registerEventDispatcher((StreamTask<?, ?>) invokable);
             status = doRunInvokeNativeTask(nativeTaskRef, nativeStreamTask);
-            if (!deleteNativeTaskInJavaSide) {
-                // This task produces partitions, so the native ResultPartitionManager owns its
-                // deletion from here on. It may already be freed, or be freed on a netty thread as
-                // soon as the last consumer releases its view.
-                nativeTaskReleased = true;
-                unregisterNativeBackedMetrics();
-            }
         } else {
             restoreAndInvoke(invokable);
             // mailbox loop ended
@@ -689,7 +697,7 @@ public class OmniTask extends Task {
         StreamConfig streamConfig = new StreamConfig(taskConfiguration);
         Collection<StreamConfig> configs =
                 streamConfig.getTransitiveChainedTaskConfigsWithSelf(userCodeClassLoader.asClassLoader()).values();
-        OmniMetricHelper.registerNativeMetrics(this.metrics, nativeTaskMetricGroupRef, configs);
+        nativeBackedCounters = OmniMetricHelper.registerNativeMetrics(this.metrics, nativeTaskMetricGroupRef, configs);
     }
 
     public void declineCheckpoint(
@@ -1294,7 +1302,12 @@ public class OmniTask extends Task {
             omniTaskMetricGroup.close();
             omniTaskMetricGroup = null;
         }
-        metrics.close();
+        // Detach the Flink counters from native memory. They have no close() to call, but a zero
+        // native ref makes getCount() fall back to the Java count instead of dereferencing.
+        for (SimpleCounter counter : nativeBackedCounters) {
+            counter.setNativeRef(0L);
+        }
+        nativeBackedCounters = Collections.emptyList();
     }
 
     public int getInitialBackoff(Object target) {
@@ -1589,6 +1602,8 @@ public class OmniTask extends Task {
     }
 
     private native void doDeleteNativeTask(long nativeTaskRef);
+
+    private native void notifyNativeTaskRunFinished(long nativeTaskRef);
 
     private native void dispatchOperatorEvent(long nativeTaskRef, String operatorId, String eventDesc);
 

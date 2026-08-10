@@ -31,6 +31,10 @@ public class OmniSimpleCounter extends SimpleCounter implements MetricCloseable 
      * @return count
      */
     public long getCount() {
+        // Once closed the native counter may already be freed, so serve the last value read.
+        if (isClosed) {
+            return originalCount;
+        }
         // jni call to get the count
         originalCount = getNativeCounter(nativeRef);
         return originalCount;

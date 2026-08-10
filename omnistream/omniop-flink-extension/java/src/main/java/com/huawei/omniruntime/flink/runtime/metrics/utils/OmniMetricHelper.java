@@ -252,14 +252,26 @@ public class OmniMetricHelper {
         //the Flink TaskMetricGroup.operators map is empty and cannot be used here). The OperatorID
         //is passed through so the scope mirrors Flink TaskMetricGroup.getOrAddOperator.
         for (Map.Entry<String, OperatorID> entry : operatorNameToId.entrySet()) {
-            new OmniOperatorStateMetricGroup(metrics, nativeRefTaskMetricGroupRef, entry.getKey(),
-                    entry.getValue());
+            OmniOperatorStateMetricGroup omniOperatorStateMetricGroup = new OmniOperatorStateMetricGroup(metrics,
+                    nativeRefTaskMetricGroupRef, entry.getKey(), entry.getValue());
+            omniTaskMetricGroup.addNativeTaskBackedGroup(omniOperatorStateMetricGroup);
         }
         return omniTaskMetricGroup;
     }
 
-    public static void registerNativeMetrics(TaskMetricGroup metrics, long nativeRefTaskMetricGroupRef,
+    /**
+     * Points Flink counters at native counters owned by the task metric group.
+     *
+     * @param metrics the task metric group
+     * @param nativeRefTaskMetricGroupRef native reference of the task metric group
+     * @param chainedConfigs the chained operator configs
+     * @return the counters that were pointed at native memory, so the caller can detach them again
+     *         before the native task that owns those counters is deleted
+     */
+    public static List<SimpleCounter> registerNativeMetrics(TaskMetricGroup metrics,
+                                             long nativeRefTaskMetricGroupRef,
                                              Collection<StreamConfig> chainedConfigs) {
+        List<SimpleCounter> nativeBackedCounters = new ArrayList<>();
         for (StreamConfig chainedConfig : chainedConfigs) {
             if (!chainedConfig.getOperatorName().contains("Source")) {
                 continue;
@@ -269,8 +281,12 @@ public class OmniMetricHelper {
                     "OmniInternalOperatorIOMetricGroup_" + metricsMapKey, MetricNames.IO_NUM_RECORDS_OUT);
             InternalOperatorMetricGroup operatorMetricGroup =
                     metrics.getOrAddOperator(chainedConfig.getOperatorID(), chainedConfig.getOperatorName());
-            ((SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter()).setNativeRef(nativeRef);
+            SimpleCounter counter =
+                    (SimpleCounter) operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter();
+            counter.setNativeRef(nativeRef);
+            nativeBackedCounters.add(counter);
         }
+        return nativeBackedCounters;
     }
 
     private static String getMetricsMapKey(String operatorName, OperatorID operatorID) {

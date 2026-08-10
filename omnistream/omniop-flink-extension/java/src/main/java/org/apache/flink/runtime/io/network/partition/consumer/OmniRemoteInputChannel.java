@@ -103,4 +103,8 @@ public class OmniRemoteInputChannel {
     public void resumeConsumption() throws IOException {
         remoteInputChannel.resumeConsumption();
     }
+
+    public void releaseAllResources() throws IOException {
+        remoteInputChannel.releaseAllResources();
+    }
 }

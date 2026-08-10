@@ -546,7 +546,8 @@ public class OmniCreditBasedSequenceNumberingViewReader
         LOG.info("OmniCreditBasedSequenceNumberingViewReader of {}## {} and native ref = {}"
                         + "............................is stopped......................................",
                 taskName.substring(0, 15), subPartitionIndex, nativeCreditBasedSequenceNumberingViewReaderRef);
-
+        // invoke native to call OmniCreditBasedSequenceNumberingViewReader::releaseAllResources()
+        releaseNativeViewReader(nativeCreditBasedSequenceNumberingViewReaderRef);
         setNativeCreditBasedSequenceNumberingViewReaderRef(-1);
     }
 
@@ -662,4 +663,6 @@ public class OmniCreditBasedSequenceNumberingViewReader
     public native void firstDataAvailableNotification(long nativeCreditBasedSequenceNumberingViewReaderRef);
 
     private native void resumeConsumption(long nativeCreditBasedSequenceNumberingViewReaderRef);
+
+    private native  void releaseNativeViewReader(long nativeCreditBasedSequenceNumberingViewReaderRef);
 }

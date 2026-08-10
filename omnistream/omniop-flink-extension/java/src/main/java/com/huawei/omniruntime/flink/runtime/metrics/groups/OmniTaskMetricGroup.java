@@ -4,7 +4,11 @@
 
 package com.huawei.omniruntime.flink.runtime.metrics.groups;
 
+import com.huawei.omniruntime.flink.runtime.metrics.MetricCloseable;
+
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -19,6 +23,10 @@ public class OmniTaskMetricGroup {
     private Map<String, OmniInternalOperatorIOMetricGroup> operators = new HashMap<>();
 
     private OmniTaskIOMetricGroup ioMetrics;
+
+    // Metric groups whose gauges read through a raw native OmniTask pointer. They must be closed
+    // before that task is deleted, so they are collected here to be reachable from close().
+    private final List<MetricCloseable> nativeTaskBackedGroups = new ArrayList<>();
 
     /**
      * set the task metric group.
@@ -49,6 +57,15 @@ public class OmniTaskMetricGroup {
     }
 
     /**
+     * add a metric group backed by the native task, so that it is closed together with this group.
+     *
+     * @param group the metric group to close
+     */
+    public void addNativeTaskBackedGroup(MetricCloseable group) {
+        nativeTaskBackedGroups.add(group);
+    }
+
+    /**
      * close the metric group.
      */
     public void close() {
@@ -58,5 +75,9 @@ public class OmniTaskMetricGroup {
         if (ioMetrics != null) {
             ioMetrics.close();
         }
+        for (MetricCloseable group : nativeTaskBackedGroups) {
+            group.close();
+        }
+        nativeTaskBackedGroups.clear();
     }
 }

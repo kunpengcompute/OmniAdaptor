@@ -241,9 +241,12 @@ public class OmniMetricHelper {
             omniTaskMetricGroup.addOperator(omniInternalOperatorIOMetricGroup.getMetricGroupName(),
                     omniInternalOperatorIOMetricGroup);
         }
-        //create OmniNettyBufferMetricGroup
+        //create OmniNettyBufferMetricGroup. Both groups read through the raw nativeTaskRef, so they
+        //are handed to omniTaskMetricGroup and closed with it, before the native task can be deleted.
         OmniTaskLocalNettyBufferMetricGroup omniTaskLocalNettyBufferMetricGroup = new OmniTaskLocalNettyBufferMetricGroup(metrics,nativeRefTaskMetricGroupRef,nativeTaskRef);
         VectorBatchBufferPoolMetricGroup vectorBatchBufferPoolMetricGroup = new VectorBatchBufferPoolMetricGroup(metrics, nativeRefTaskMetricGroupRef, nativeTaskRef);
+        omniTaskMetricGroup.addNativeTaskBackedGroup(omniTaskLocalNettyBufferMetricGroup);
+        omniTaskMetricGroup.addNativeTaskBackedGroup(vectorBatchBufferPoolMetricGroup);
         //create per-operator OmniOperatorStateMetricGroup for keyed-state metrics. Operator names
         //and ids come from the task configuration (in OmniStream no Java operators are created, so
         //the Flink TaskMetricGroup.operators map is empty and cannot be used here). The OperatorID

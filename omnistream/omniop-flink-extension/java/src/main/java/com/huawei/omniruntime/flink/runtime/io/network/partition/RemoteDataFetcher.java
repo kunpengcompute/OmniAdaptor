@@ -161,6 +161,7 @@ public class RemoteDataFetcher implements Runnable {
                             if(isEventIdEndOfPartition(byteBuffer)){
                                 //for EndOfPartitionEvent we need to close remote channel
                                 remoteInputChannel.releaseAllResources();
+                                remoteInputChannel.setConnected(false);
                             }
                             LOG.info("Notify remote event buffer available, buffer address: {}, buffer class: {}, buffer type: {}",
                                     buffer.getMemorySegment().getAddress(), buffer.getClass().getSimpleName(), buffer.getDataType().toString());

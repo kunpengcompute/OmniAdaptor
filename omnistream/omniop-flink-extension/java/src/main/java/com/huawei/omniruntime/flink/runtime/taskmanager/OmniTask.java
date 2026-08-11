@@ -414,7 +414,11 @@ public class OmniTask extends Task {
                 // from here on the task may be freed at any moment - during this call, or later on
                 // a netty thread - and nothing may read through nativeTaskRef afterwards.
                 nativeTaskReleased = true;
+                LOG.info("Handing native task {} to the native ResultPartitionManager for task {} ({})",
+                        nativeTaskRef, taskNameWithSubtask, executionId);
                 notifyNativeTaskRunFinished(nativeTaskRef);
+                LOG.info("Handed over native task {} for task {}; it is deleted natively once every "
+                        + "partition it produced has been consumed", nativeTaskRef, taskNameWithSubtask);
             }
         }
     }

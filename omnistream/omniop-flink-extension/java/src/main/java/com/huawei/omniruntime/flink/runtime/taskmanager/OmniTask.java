@@ -68,6 +68,7 @@ import org.apache.flink.runtime.filecache.FileCache;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.TaskEventPublisher;
+import org.apache.flink.runtime.io.network.api.writer.RecordWriterDelegate;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.partition.BufferWritingResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
@@ -356,6 +357,8 @@ public class OmniTask extends Task {
                     originalTaskDataFetcher.finishRunning();
                 }
                 deleteParentTaskInSlotTable();
+                // Must happen before the invokable reference is dropped below.
+                closeJavaRecordWriter();
                 // clear the reference to the invokable. this helps guard against holding references
                 // to the invokable and its structures in cases where this Task object is still
                 // referenced
@@ -1374,6 +1377,38 @@ public class OmniTask extends Task {
             return (ChannelStateWriter) channelStateWriter;
         } else {
             return null;
+        }
+    }
+
+    /**
+     * Closes the Java-side record writer that Flink's StreamTask constructor created.
+     *
+     * <p>Each Flink RecordWriter starts an "OutputFlusher for &lt;task&gt;" daemon thread, and
+     * RecordWriter.close() is what terminates it. On the Java path that happens via
+     * Task.restoreAndInvoke() -> StreamTask.cleanUp(). The native path runs
+     * doRunRestoreNativeTask/doRunInvokeNativeTask instead and never calls restoreAndInvoke, so
+     * without this the flusher threads survive one set per task per job.
+     *
+     * <p>Only the record writer is closed, deliberately: StreamTask.cleanUp() also joins the task's
+     * completion future, which never completes in native mode because the Java mailbox loop never
+     * ran, so calling it here would block forever.
+     */
+    private void closeJavaRecordWriter() {
+        TaskInvokable currentInvokable = this.invokable;
+        if (!(currentInvokable instanceof StreamTask)) {
+            return;
+        }
+        Object writer = getFieldByReflection(StreamTask.class, currentInvokable, "recordWriter");
+        if (!(writer instanceof RecordWriterDelegate)) {
+            LOG.warn("No Java recordWriter found on {}; its OutputFlusher threads may leak",
+                    taskNameWithSubtask);
+            return;
+        }
+        try {
+            ((RecordWriterDelegate<?>) writer).close();
+            LOG.info("Closed Java record writer for task {} ({})", taskNameWithSubtask, executionId);
+        } catch (Exception e) {
+            LOG.error("Error closing Java record writer for task {}", taskNameWithSubtask, e);
         }
     }
 

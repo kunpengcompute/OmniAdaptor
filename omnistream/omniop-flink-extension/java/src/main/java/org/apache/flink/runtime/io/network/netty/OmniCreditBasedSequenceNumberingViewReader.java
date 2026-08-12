@@ -44,7 +44,7 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -82,7 +82,9 @@ public class OmniCreditBasedSequenceNumberingViewReader
     private volatile boolean flushed = false;
     private volatile int numCreditsAvailable;
     private volatile int initialCredit;
-    private Executor executor = Executors.newSingleThreadExecutor();
+    // ExecutorService, not Executor: this must be shut down in stop(), otherwise its worker thread
+    // parks on the task queue forever and one thread leaks per view reader per job.
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Object localChannelLocker = new Object();
 
     OmniCreditBasedSequenceNumberingViewReader(
@@ -549,6 +551,14 @@ public class OmniCreditBasedSequenceNumberingViewReader
         // invoke native to call OmniCreditBasedSequenceNumberingViewReader::releaseAllResources()
         releaseNativeViewReader(nativeCreditBasedSequenceNumberingViewReaderRef);
         setNativeCreditBasedSequenceNumberingViewReaderRef(-1);
+
+        // shutdownNow, not shutdown: the first-data-available task may still be blocked in
+        // localChannelLocker.wait(), and only an interrupt releases it. Without this the worker
+        // thread parks on the task queue forever - one leaked thread per view reader per job.
+        synchronized (localChannelLocker) {
+            localChannelLocker.notifyAll();
+        }
+        executor.shutdownNow();
     }
 
     private synchronized void setNativeCreditBasedSequenceNumberingViewReaderRef(long value) {

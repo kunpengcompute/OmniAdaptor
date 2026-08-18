@@ -228,6 +228,9 @@ public class OmniMetricHelper {
     public static OmniTaskMetricGroup registerOmniMetrics(TaskMetricGroup metrics, long nativeRefTaskMetricGroupRef,
             long nativeTaskRef, Map<String, OperatorID> operatorNameToId) {
         OmniTaskMetricGroup omniTaskMetricGroup = new OmniTaskMetricGroup();
+        // the Omni metrics below replace Flink's inside the MetricQueryService, so the group needs
+        // the Flink group to undo that at close()
+        omniTaskMetricGroup.setFlinkTaskMetricGroup(metrics);
         OmniTaskIOMetricGroup omniTaskIOMetricGroup = registerTaskIOMetrics(metrics, nativeRefTaskMetricGroupRef);
         List<OmniInternalOperatorIOMetricGroup> omniInternalOperatorIOMetricGroups =
                 registerInternalOperatorMetric(metrics, nativeRefTaskMetricGroupRef);
@@ -725,6 +728,47 @@ public class OmniMetricHelper {
                     viewUpdater.notifyOfAddedView((View) metric);
                     viewUpdater.notifyOfRemovedView((View) originalMetric);
                 }
+            }
+        }
+    }
+
+    /**
+     * Undoes what updateOmniMetricsOnMetricQueryService did.
+     *
+     * <p>That method swaps Flink's metric objects out of the MetricQueryService maps and the
+     * ViewUpdater and puts the Omni metrics in their place. Both structures are keyed by object
+     * identity, and Flink's own teardown unregisters the ORIGINAL objects, which are no longer
+     * there. Nothing removes the Omni entries, so without this they stay registered for the life of
+     * the TaskManager, holding their QueryScopeInfo and the whole TaskMetricGroup behind them --
+     * one leaked group per task per job submission, until the metrics RPC no longer fits in heap.
+     *
+     * @param metrics the task metric group whose registry holds the entries
+     * @param omniMetrics the metrics that were swapped in
+     */
+    public static void removeOmniMetricsFromMetricQueryService(TaskMetricGroup metrics,
+            List<Metric> omniMetrics) {
+        if (omniMetrics.isEmpty()) {
+            return;
+        }
+        Map<Counter, Tuple2<QueryScopeInfo, String>> counterMap = getCountersFromQueryService(metrics);
+        Map<Gauge<?>, Tuple2<QueryScopeInfo, String>> gaugeMap = getGaugesFromQueryService(metrics);
+        Map<Meter, Tuple2<QueryScopeInfo, String>> meterMap = getMetersFromQueryService(metrics);
+        Map<Histogram, Tuple2<QueryScopeInfo, String>> histogramMap = getHistogramsFromQueryService(metrics);
+        ViewUpdater viewUpdater = getViewUpdater(metrics);
+        for (Metric metric : omniMetrics) {
+            if (metric instanceof Counter) {
+                counterMap.remove((Counter) metric);
+            } else if (metric instanceof Gauge) {
+                gaugeMap.remove((Gauge<?>) metric);
+            } else if (metric instanceof Meter) {
+                meterMap.remove((Meter) metric);
+            } else if (metric instanceof Histogram) {
+                histogramMap.remove((Histogram) metric);
+            } else {
+                continue;
+            }
+            if (metric instanceof View) {
+                viewUpdater.notifyOfRemovedView((View) metric);
             }
         }
     }

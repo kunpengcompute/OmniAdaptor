@@ -49,6 +49,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 /**
  * Utility class for creating and managing Omni metrics. This class provides methods to create various types of Omni
@@ -58,6 +60,11 @@ import java.util.Optional;
  */
 public class OmniMetricHelper {
     private static final Logger LOG = LoggerFactory.getLogger(OmniMetricHelper.class);
+
+    private static final long METRIC_REGISTRATION_TIMEOUT_MILLIS = 5_000L;
+
+    private static final long METRIC_REGISTRATION_POLL_MILLIS = 200L;
+
     /**
      * Creates an OmniSimpleCounter instance with the specified parameters.
      *
@@ -634,13 +641,51 @@ public class OmniMetricHelper {
      */
     public static void waitMetricRegisteredInMetricQueryService(TaskMetricGroup metrics,
             Map<String, Metric> originalMetricMap) {
-        while (!checkIfMetricRegisteredInMetricQueryService(metrics, originalMetricMap)) {
+        boolean registered = waitForMetricRegistration(
+                () -> checkIfMetricRegisteredInMetricQueryService(metrics, originalMetricMap),
+                METRIC_REGISTRATION_TIMEOUT_MILLIS, METRIC_REGISTRATION_POLL_MILLIS);
+
+        if (!registered) {
+            LOG.warn("Timed out waiting for Flink metrics to reach MetricQueryService. Metrics that are still "
+                    + "absent will keep their original implementations.");
+        }
+    }
+
+    /**
+     * Polls until the registration completes or the timeout elapses. Registration in the MetricQueryService is
+     * asynchronous and may never complete, so task initialization must not block on it indefinitely.
+     *
+     * @param registrationComplete Supplier that reports whether registration has finished.
+     * @param timeoutMillis The maximum time to wait, in milliseconds.
+     * @param pollMillis The interval between checks, in milliseconds.
+     * @return true if registration completed, false on timeout or interruption.
+     */
+    static boolean waitForMetricRegistration(BooleanSupplier registrationComplete, long timeoutMillis,
+            long pollMillis) {
+        if (timeoutMillis < 0 || pollMillis <= 0) {
+            throw new IllegalArgumentException("Metric registration wait values must be positive");
+        }
+
+        long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+
+        while (!registrationComplete.getAsBoolean()) {
+            long remainingNanos = deadlineNanos - System.nanoTime();
+            if (remainingNanos <= 0) {
+                return false;
+            }
+
+            long sleepMillis = Math.min(pollMillis, Math.max(1L, TimeUnit.NANOSECONDS.toMillis(remainingNanos)));
+
             try {
-                Thread.sleep(200);
+                Thread.sleep(sleepMillis);
             } catch (InterruptedException e) {
-                throw new GeneralRuntimeException(e);
+                // Restore the flag so cancellation stays visible to the caller.
+                Thread.currentThread().interrupt();
+                return false;
             }
         }
+
+        return true;
     }
 
     /**

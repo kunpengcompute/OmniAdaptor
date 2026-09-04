@@ -143,7 +143,6 @@ public class RexNodeUtil {
     static {
         unaryOperatorMap.put("-", UnaryExprType.NEGATION);
         unaryOperatorMap.put("IS TRUE", UnaryExprType.IS_TRUE);
-        unaryOperatorMap.put("NOT", UnaryExprType.NOT);
     }
 
     static {
@@ -182,8 +181,7 @@ public class RexNodeUtil {
 
     public enum UnaryExprType {
         NEGATION,
-        IS_TRUE,
-        NOT
+        IS_TRUE
     }
 
 

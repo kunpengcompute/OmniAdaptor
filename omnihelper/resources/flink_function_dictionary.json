@@ -70,7 +70,7 @@
   {"func_name": "OR", "func_type": "binary", "is_support_func": true,
     "is_supported_type": ["BOOLEAN"]
   },
-  {"func_name": "NOT", "is_support_func": true, "is_supported_type": ["BOOLEAN"]},
+  {"func_name": "NOT", "is_support_func": false},
   {"func_name": "IS FALSE", "is_support_func": false},
   {"func_name": "IS NOT FALSE", "is_support_func": false},
   {"func_name": "IS TRUE", "is_support_func": true,

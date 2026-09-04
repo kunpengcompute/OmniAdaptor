@@ -98,8 +98,6 @@ public class RexNodeUtil {
         specialOperatorMap.put("OR", SpecialExprType.OR);
         specialOperatorMap.put("IF", SpecialExprType.IF);
         specialOperatorMap.put("COALESCE", SpecialExprType.COALESCE);
-        // IFNULL reuses the COALESCE native path (equivalent to 2-arg COALESCE)
-        specialOperatorMap.put("IFNULL", SpecialExprType.COALESCE);
         specialOperatorMap.put("JSON_VALUE", SpecialExprType.JSON_VALUE);
         specialOperatorMap.put("JSON_QUERY", SpecialExprType.JSON_QUERY);
         specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);

@@ -178,7 +178,7 @@
   {"func_name": "STR_TO_MAP", "is_support_func": false},
   {"func_name": "SUBSTR", "is_support_func": false},
 
-  {"func_name": "DATE", "is_support_func": true, "is_supported_type": ["VARCHAR", "CHAR"]},
+  {"func_name": "DATE", "is_support_func": false},
   {"func_name": "TIME", "is_support_func": false},
   {"func_name": "TIMESTAMP", "is_support_func": false},
   {"func_name": "INTERVAL", "is_support_func": false},

@@ -240,8 +240,6 @@ public class RexNodeUtil {
             int precision = rexNode.getType().getPrecision();
             jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
             jsonMap.put("width", precision);
-        } else if (rexNode.getType().getSqlTypeName() == SqlTypeName.DATE) {
-            jsonMap.put(keyStr, RexTypeToIdMap.get("DATE"));
         } else if (SqlTypeName.DATETIME_TYPES.contains(rexNode.getType().getSqlTypeName())) {
             jsonMap.put(keyStr, 2);
         } else if (SqlTypeName.INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName())) {

@@ -86,6 +86,10 @@ public class OperatorChainDescriptorHelper {
 
     private static final Logger LOG = LoggerFactory.getLogger(OperatorChainDescriptorHelper.class);
 
+    private static final String NEXMARK_BATCH_SIZE_ENV = "NEXMARK_BATCH_SIZE";
+
+    private static final int DEFAULT_NEXMARK_BATCH_SIZE = 10000;
+
     /**
      * retrieveOperatorChain
      *
@@ -166,7 +170,7 @@ public class OperatorChainDescriptorHelper {
                 LOG.info("parse nexmarkSourceFunction Plan for nexmark 0.3");
                 NexmarkFormatPOJO nexmarkFormatPOJO = new NexmarkFormatPOJO();
                 nexmarkFormatPOJO.setFormat("nexmark");
-                nexmarkFormatPOJO.setBatchSize(10000);
+                nexmarkFormatPOJO.setBatchSize(getNexmarkBatchSize());
                 Map<String, Object> configMap = nexmarkFormatPOJO.getConfigMap();
                 try {
                     getNexmarkConfig(source, configMap);
@@ -241,7 +245,7 @@ public class OperatorChainDescriptorHelper {
             if (functionName.equals("NexmarkSourceFunction")) {
                 NexmarkFormatPOJO nexmarkFormatPOJO = new NexmarkFormatPOJO();
                 nexmarkFormatPOJO.setFormat("nexmark");
-                nexmarkFormatPOJO.setBatchSize(10000);
+                nexmarkFormatPOJO.setBatchSize(getNexmarkBatchSize());
                 Map<String, Object> configMap = nexmarkFormatPOJO.getConfigMap();
                 try {
                     getNexmarkConfigForVersion2(userFunction, configMap);
@@ -253,6 +257,26 @@ public class OperatorChainDescriptorHelper {
             }
         }
         return opDesc;
+    }
+
+    private static int getNexmarkBatchSize() {
+        String configuredBatchSize = System.getenv(NEXMARK_BATCH_SIZE_ENV);
+        if (configuredBatchSize == null || configuredBatchSize.trim().isEmpty()) {
+            return DEFAULT_NEXMARK_BATCH_SIZE;
+        }
+        try {
+            int batchSize = Integer.parseInt(configuredBatchSize.trim());
+            if (batchSize > 0) {
+                return batchSize;
+            }
+        } catch (NumberFormatException exception) {
+            LOG.warn("Invalid value '{}' for environment variable {}, using default value {}",
+                    configuredBatchSize, NEXMARK_BATCH_SIZE_ENV, DEFAULT_NEXMARK_BATCH_SIZE);
+            return DEFAULT_NEXMARK_BATCH_SIZE;
+        }
+        LOG.warn("Environment variable {} must be greater than 0, using default value {}",
+                NEXMARK_BATCH_SIZE_ENV, DEFAULT_NEXMARK_BATCH_SIZE);
+        return DEFAULT_NEXMARK_BATCH_SIZE;
     }
 
     private static void getNexmarkConfig(Source source, Map<String, Object> configMap) throws IllegalAccessException {

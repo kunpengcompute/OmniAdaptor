@@ -23,22 +23,42 @@ import org.apache.flink.runtime.checkpoint.channel.ChannelStateWriter;
 import org.apache.flink.runtime.io.network.TaskEventPublisher;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.ReadOnlySlicedNetworkBuffer;
+import org.apache.flink.runtime.io.network.partition.PartitionNotFoundException;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Timer;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.apache.flink.util.Preconditions.checkState;
+
 public class OmniLocalInputChannel extends LocalInputChannel {
     private static final Logger LOG = LoggerFactory.getLogger(OmniLocalInputChannel.class);
+    private static final Field REQUEST_LOCK_FIELD;
+    private static final Field SUBPARTITION_VIEW_FIELD;
+
+    static {
+        try {
+            REQUEST_LOCK_FIELD = LocalInputChannel.class.getDeclaredField("requestLock");
+            REQUEST_LOCK_FIELD.setAccessible(true);
+            SUBPARTITION_VIEW_FIELD = LocalInputChannel.class.getDeclaredField("subpartitionView");
+            SUBPARTITION_VIEW_FIELD.setAccessible(true);
+        } catch (NoSuchFieldException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
     private LocalInputChannel localInputChannel;
     private long nativeTaskRef;
     private ResultPartitionManager partitionManager;
@@ -48,8 +68,9 @@ public class OmniLocalInputChannel extends LocalInputChannel {
     private Queue<PendingRecycleBuffer> pendingRecycleBuffers = new ConcurrentLinkedQueue<>();
     private AtomicInteger capacity = new AtomicInteger(100);
     private String taskName;
-    
-    
+    /** Issue #81: retrigger must run on this wrapper, not the gate's orphan LocalInputChannel. */
+    private Timer localRetriggerTimer;
+
     public OmniLocalInputChannel(LocalInputChannel localInputChannel, ResultPartitionManager partitionManager,
             long nativeTaskRef, SingleInputGate singleInputGate, int initialBackoff, int maxBackoff,
             Counter numBytesIn, Counter numBuffersIn, TaskEventPublisher taskEventPublisher,
@@ -62,8 +83,88 @@ public class OmniLocalInputChannel extends LocalInputChannel {
         this.nativeTaskRef = nativeTaskRef;
         this.taskName = taskName;
     }
-    
-    
+
+    private Object requestLock() {
+        try {
+            return REQUEST_LOCK_FIELD.get(this);
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private void setSubpartitionView(ResultSubpartitionView view) {
+        try {
+            SUBPARTITION_VIEW_FIELD.set(this, view);
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private void scheduleSelfRetrigger() {
+        synchronized (requestLock()) {
+            if (localRetriggerTimer == null) {
+                localRetriggerTimer = new Timer(true);
+            }
+            retriggerSubpartitionRequest(localRetriggerTimer);
+        }
+    }
+
+    /**
+     * Same bind logic as {@link LocalInputChannel#requestSubpartition()}, but on PartitionNotFound
+     * schedules retry on <b>this</b> Omni wrapper instead of {@code inputGate.retriggerPartitionRequest}
+     * (which looks up the unrelated LocalInputChannel still stored in the gate map).
+     */
+    @Override
+    protected void requestSubpartition() throws IOException {
+        boolean retriggerRequest = false;
+        boolean notifyDataAvailable = false;
+
+        synchronized (requestLock()) {
+            checkState(!isReleased(), "LocalInputChannel has been released already");
+
+            if (getSubpartitionView() == null) {
+                LOG.debug(
+                        "{}: Requesting LOCAL subpartition {} of partition {} (OmniLocalInputChannel).",
+                        this,
+                        consumedSubpartitionIndex,
+                        partitionId);
+
+                try {
+                    ResultSubpartitionView view =
+                            partitionManager.createSubpartitionView(
+                                    partitionId, consumedSubpartitionIndex, this);
+
+                    if (view == null) {
+                        throw new IOException("Error requesting subpartition.");
+                    }
+
+                    setSubpartitionView(view);
+
+                    if (isReleased()) {
+                        view.releaseAllResources();
+                        setSubpartitionView(null);
+                    } else {
+                        notifyDataAvailable = true;
+                    }
+                } catch (PartitionNotFoundException notFound) {
+                    if (increaseBackoff()) {
+                        retriggerRequest = true;
+                    } else {
+                        throw notFound;
+                    }
+                }
+            }
+        }
+
+        if (notifyDataAvailable) {
+            notifyDataAvailable();
+        }
+
+        if (retriggerRequest) {
+            scheduleSelfRetrigger();
+        }
+    }
+
     public boolean changeNativeLocalInputChannel() {
         ResultPartitionIDPOJO resultPartitionIDPOJO = new ResultPartitionIDPOJO(localInputChannel.getPartitionId());
         JSONObject jsonObject = new JSONObject(resultPartitionIDPOJO);
@@ -79,8 +180,7 @@ public class OmniLocalInputChannel extends LocalInputChannel {
             return false;
         }
     }
-    
-    
+
     public void doRequestSubpartition() throws IOException {
         LOG.info("Requesting subpartition for OmniLocalInputChannel, taskName: {}, channelInfo: {}", taskName, localInputChannel.getChannelInfo());
         requestSubpartition();

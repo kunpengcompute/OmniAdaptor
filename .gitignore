@@ -13,3 +13,16 @@ dependency-reduced-pom.xml
 .pre-commit-cache/
 __pycache__/
 *.pyc
+
+# Eclipse / STS / m2e / some VS Code Java plugins
+.project
+.classpath
+.factorypath
+.settings/
+**/.project
+**/.classpath
+**/.factorypath
+**/.settings/
+*.launch
+.metadata/
+bin/

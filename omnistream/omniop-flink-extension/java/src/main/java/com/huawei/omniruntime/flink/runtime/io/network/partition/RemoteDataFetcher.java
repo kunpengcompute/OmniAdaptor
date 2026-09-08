@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -157,6 +158,11 @@ public class RemoteDataFetcher implements Runnable {
                             MemorySegment eventMemorySegment = MemorySegmentFactory.wrapOffHeapMemory(byteBuffer);
                             EventBuffer eventBuffer = new EventBuffer(eventMemorySegment);
                             buffer = eventBuffer;
+                            if(isEventIdEndOfPartition(byteBuffer)){
+                                //for EndOfPartitionEvent we need to close remote channel
+                                remoteInputChannel.releaseAllResources();
+                                remoteInputChannel.setConnected(false);
+                            }
                             LOG.info("Notify remote event buffer available, buffer address: {}, buffer class: {}, buffer type: {}",
                                     buffer.getMemorySegment().getAddress(), buffer.getClass().getSimpleName(), buffer.getDataType().toString());
                         }
@@ -246,6 +252,17 @@ public class RemoteDataFetcher implements Runnable {
                 }
             }
         }
+    }
+
+    private boolean isEventIdEndOfPartition(ByteBuffer eventBuffer){
+        eventBuffer.order(ByteOrder.BIG_ENDIAN);
+        int event = eventBuffer.getInt(0);
+        if(event == 0){
+            return true;
+        }else {
+            return false;
+        }
+
     }
 
     /**

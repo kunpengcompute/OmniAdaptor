@@ -46,6 +46,7 @@ import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.core.security.FlinkSecurityManager;
 import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
@@ -67,6 +68,7 @@ import org.apache.flink.runtime.filecache.FileCache;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.TaskEventPublisher;
+import org.apache.flink.runtime.io.network.api.writer.RecordWriterDelegate;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.partition.BufferWritingResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
@@ -219,6 +221,18 @@ public class OmniTask extends Task {
 
     private OpaqueMemoryResource<RocksDBSharedResources> rocksDBSharedResources;
 
+    private boolean deleteNativeTaskInJavaSide = false;
+
+    // Set once the native run loop has returned and ownership of the native task has passed to the
+    // native ResultPartitionManager, which frees it after all produced partitions are consumed.
+    // From that point nativeTaskRef may dangle at any moment and must not be passed to native code.
+    private volatile boolean nativeTaskReleased = false;
+
+    // Flink counters that registerNativeTaskMetrics pointed at native counters owned by the native
+    // task metric group. They must be detached from that memory before the native task is deleted,
+    // or the metric reporter reads freed memory.
+    private List<SimpleCounter> nativeBackedCounters = Collections.emptyList();
+
     /**
      * <b>IMPORTANT:</b> This constructor may not start any work that would need to be undone in the
      * case of a failing task deployment.
@@ -343,6 +357,8 @@ public class OmniTask extends Task {
                     originalTaskDataFetcher.finishRunning();
                 }
                 deleteParentTaskInSlotTable();
+                // Must happen before the invokable reference is dropped below.
+                closeJavaRecordWriter();
                 // clear the reference to the invokable. this helps guard against holding references
                 // to the invokable and its structures in cases where this Task object is still
                 // referenced
@@ -376,9 +392,7 @@ public class OmniTask extends Task {
             // errors here will only be logged
             try {
                 metrics.close();
-                if (omniTaskMetricGroup != null) {
-                    omniTaskMetricGroup.close();
-                }
+                unregisterNativeBackedMetrics();
             } catch (Throwable t) {
                 LOG.error("Error during metrics de-registration of task {} ({}).", taskNameWithSubtask, executionId,
                         t);
@@ -393,7 +407,22 @@ public class OmniTask extends Task {
                 LOG.error("Error during closing rocksDBSharedResources of task {} ({}).", taskNameWithSubtask, executionId, t);
             }
 
-            //待优化 deleteNativeTask(nativeTaskRef);
+            //待优化
+            if(deleteNativeTaskInJavaSide){
+                deleteNativeTask(nativeTaskRef);
+            } else if (nativeTaskRef != 0) {
+                // Last thing this task does: hand the native task to the native
+                // ResultPartitionManager, which deletes it once every partition it produced has
+                // been consumed. It must come after the metrics de-registration above, because
+                // from here on the task may be freed at any moment - during this call, or later on
+                // a netty thread - and nothing may read through nativeTaskRef afterwards.
+                nativeTaskReleased = true;
+                LOG.info("Handing native task {} to the native ResultPartitionManager for task {} ({})",
+                        nativeTaskRef, taskNameWithSubtask, executionId);
+                notifyNativeTaskRunFinished(nativeTaskRef);
+                LOG.info("Handed over native task {} for task {}; it is deleted natively once every "
+                        + "partition it produced has been consumed", nativeTaskRef, taskNameWithSubtask);
+            }
         }
     }
 
@@ -469,6 +498,9 @@ public class OmniTask extends Task {
         LOG.debug("Registering task at network: {}.", this);
         // action 1, natvie should do similarly operation
         setupPartitionsAndGates(partitionWriters, inputGates);
+        if (partitionWriters.length == 0){
+            deleteNativeTaskInJavaSide = true;
+        }
         if (jobType == JobType.SQL) {
             bindNativeTaskRefToResultPartition(nativeTaskRef, partitionWriters, jobType);
         }
@@ -611,9 +643,9 @@ public class OmniTask extends Task {
             registerNativeTaskMetrics();
             //register omniTask metrics
             omniTaskMetricGroup = registerOmniTaskMetrics();
-            // After nativeTask is deleted, the Java side may still call the native interface to obtain
-            // old metric data (which has been deleted and becomes a dangling pointer), causing
-            // TaskManager to coredump. Therefore, omni metric data is temporarily not registered.
+            // These gauges read through nativeTaskRef, so polling them after the native task is
+            // deleted coredumps the TaskManager. They are unregistered by
+            // unregisterNativeBackedMetrics() as soon as the native run returns.
 
             if (!transitionState(ExecutionState.DEPLOYING, ExecutionState.INITIALIZING)) {
                 throw new CancelTaskException();
@@ -672,7 +704,7 @@ public class OmniTask extends Task {
         StreamConfig streamConfig = new StreamConfig(taskConfiguration);
         Collection<StreamConfig> configs =
                 streamConfig.getTransitiveChainedTaskConfigsWithSelf(userCodeClassLoader.asClassLoader()).values();
-        OmniMetricHelper.registerNativeMetrics(this.metrics, nativeTaskMetricGroupRef, configs);
+        nativeBackedCounters = OmniMetricHelper.registerNativeMetrics(this.metrics, nativeTaskMetricGroupRef, configs);
     }
 
     public void declineCheckpoint(
@@ -693,6 +725,10 @@ public class OmniTask extends Task {
     @Override
     public void cancelExecution() {
         super.cancelExecution();
+        if (!isNativeTaskUsable()) {
+            // The native task already finished and is owned by the native side; nothing left to cancel.
+            return;
+        }
         if (jobType.equals(JobType.SQL)
             && nameOfInvokableClass.equals("org.apache.flink.streaming.runtime.tasks.SourceOperatorStreamTask")) {
             cancelTask(nativeTaskRef);
@@ -759,7 +795,7 @@ public class OmniTask extends Task {
             throw new TaskNotRunningException("Task is not running, but in state " + currentState);
         }
 
-        if (invokable instanceof CoordinatedTask) {
+        if (invokable instanceof CoordinatedTask && isNativeTaskUsable()) {
             String desc = null;
             try {
                 OperatorEvent operatorEvent = evt.deserializeValue(userCodeClassLoader.asClassLoader());
@@ -887,13 +923,17 @@ public class OmniTask extends Task {
             long checkpointId,
             long latestCompletedCheckpointId,
             NotifyCheckpointOperation notifyCheckpointOperation) {
-        if (NotifyCheckpointOperation.ABORT == notifyCheckpointOperation) {
-            abortCpp(nativeTaskRef, checkpointId, latestCompletedCheckpointId);
-        } else if (NotifyCheckpointOperation.COMPLETE == notifyCheckpointOperation) {
-            long inputState = convertExecutionState(executionState);
-            completeCpp(nativeTaskRef, checkpointId, inputState);
-        } else if (NotifyCheckpointOperation.SUBSUME == notifyCheckpointOperation) {
-            subsumedCpp(nativeTaskRef, latestCompletedCheckpointId);
+        // Skipped once the native task is owned by the native side: it has finished, so the
+        // notification is meaningless and nativeTaskRef may already dangle.
+        if (isNativeTaskUsable()) {
+            if (NotifyCheckpointOperation.ABORT == notifyCheckpointOperation) {
+                abortCpp(nativeTaskRef, checkpointId, latestCompletedCheckpointId);
+            } else if (NotifyCheckpointOperation.COMPLETE == notifyCheckpointOperation) {
+                long inputState = convertExecutionState(executionState);
+                completeCpp(nativeTaskRef, checkpointId, inputState);
+            } else if (NotifyCheckpointOperation.SUBSUME == notifyCheckpointOperation) {
+                subsumedCpp(nativeTaskRef, latestCompletedCheckpointId);
+            }
         }
 
         switch (notifyCheckpointOperation) {
@@ -1092,6 +1132,9 @@ public class OmniTask extends Task {
             final long checkpointTimestamp,
             final CheckpointOptions checkpointOptions){
         this.checkpointOptions = checkpointOptions;
+        if (!isNativeTaskUsable()) {
+            return;
+        }
         String checkpointOptionsString=JsonHelper.toJson(checkpointOptions);
         triggerCheckpointCpp(nativeTaskRef,checkpointID,checkpointTimestamp,checkpointOptionsString);
     }
@@ -1248,6 +1291,32 @@ public class OmniTask extends Task {
         return nativeTaskRef!=0;
     }
 
+    /**
+     * Whether nativeTaskRef may still be passed to native code. Unlike isTaskNative(), this turns
+     * false once the native side has taken over deletion of the task.
+     */
+    private boolean isNativeTaskUsable() {
+        return nativeTaskRef != 0 && !nativeTaskReleased;
+    }
+
+    /**
+     * Unregisters every metric that reads through native memory owned by the native task: the omni
+     * gauges built on nativeTaskRef and the native counters hanging off the task metric group.
+     * Idempotent, because it runs both when the native task is handed over and again during cleanup.
+     */
+    private synchronized void unregisterNativeBackedMetrics() {
+        if (omniTaskMetricGroup != null) {
+            omniTaskMetricGroup.close();
+            omniTaskMetricGroup = null;
+        }
+        // Detach the Flink counters from native memory. They have no close() to call, but a zero
+        // native ref makes getCount() fall back to the Java count instead of dereferencing.
+        for (SimpleCounter counter : nativeBackedCounters) {
+            counter.setNativeRef(0L);
+        }
+        nativeBackedCounters = Collections.emptyList();
+    }
+
     public int getInitialBackoff(Object target) {
         Object res = getFieldByReflection(InputChannel.class, target, "initialBackoff");
         if (res instanceof Integer) {
@@ -1308,6 +1377,38 @@ public class OmniTask extends Task {
             return (ChannelStateWriter) channelStateWriter;
         } else {
             return null;
+        }
+    }
+
+    /**
+     * Closes the Java-side record writer that Flink's StreamTask constructor created.
+     *
+     * <p>Each Flink RecordWriter starts an "OutputFlusher for &lt;task&gt;" daemon thread, and
+     * RecordWriter.close() is what terminates it. On the Java path that happens via
+     * Task.restoreAndInvoke() -> StreamTask.cleanUp(). The native path runs
+     * doRunRestoreNativeTask/doRunInvokeNativeTask instead and never calls restoreAndInvoke, so
+     * without this the flusher threads survive one set per task per job.
+     *
+     * <p>Only the record writer is closed, deliberately: StreamTask.cleanUp() also joins the task's
+     * completion future, which never completes in native mode because the Java mailbox loop never
+     * ran, so calling it here would block forever.
+     */
+    private void closeJavaRecordWriter() {
+        TaskInvokable currentInvokable = this.invokable;
+        if (!(currentInvokable instanceof StreamTask)) {
+            return;
+        }
+        Object writer = getFieldByReflection(StreamTask.class, currentInvokable, "recordWriter");
+        if (!(writer instanceof RecordWriterDelegate)) {
+            LOG.warn("No Java recordWriter found on {}; its OutputFlusher threads may leak",
+                    taskNameWithSubtask);
+            return;
+        }
+        try {
+            ((RecordWriterDelegate<?>) writer).close();
+            LOG.info("Closed Java record writer for task {} ({})", taskNameWithSubtask, executionId);
+        } catch (Exception e) {
+            LOG.error("Error closing Java record writer for task {}", taskNameWithSubtask, e);
         }
     }
 
@@ -1540,6 +1641,8 @@ public class OmniTask extends Task {
     }
 
     private native void doDeleteNativeTask(long nativeTaskRef);
+
+    private native void notifyNativeTaskRunFinished(long nativeTaskRef);
 
     private native void dispatchOperatorEvent(long nativeTaskRef, String operatorId, String eventDesc);
 

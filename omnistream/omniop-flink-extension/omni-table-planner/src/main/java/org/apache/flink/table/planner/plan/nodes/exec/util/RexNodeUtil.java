@@ -41,7 +41,6 @@ import java.util.stream.Collectors;
 public class RexNodeUtil {
     public static final Map<String, Integer> RexTypeToIdMap = new HashMap<>();
     public static final Map<String, SpecialExprType> specialOperatorMap = new HashMap<>();
-    public static final Map<SpecialExprType, String> simpleFunctionNameMap = new HashMap<>();
     public static final Map<String, SpecialExprType> udfOperatorMap = new HashMap<>();
     public static final Map<String, UnaryExprType> unaryOperatorMap = new HashMap<>();
     public static final Map<String, BinaryExprType> binaryOperatorMap = new HashMap<>();
@@ -99,39 +98,11 @@ public class RexNodeUtil {
         specialOperatorMap.put("OR", SpecialExprType.OR);
         specialOperatorMap.put("IF", SpecialExprType.IF);
         specialOperatorMap.put("COALESCE", SpecialExprType.COALESCE);
-        // IFNULL reuses the COALESCE native path (equivalent to 2-arg COALESCE)
-        specialOperatorMap.put("IFNULL", SpecialExprType.COALESCE);
         specialOperatorMap.put("JSON_VALUE", SpecialExprType.JSON_VALUE);
         specialOperatorMap.put("JSON_QUERY", SpecialExprType.JSON_QUERY);
         specialOperatorMap.put("JSON_SPLIT", SpecialExprType.JSON_SPLIT);
         specialOperatorMap.put("CURRENT_TIMESTAMP", SpecialExprType.CURRENT_TIMESTAMP);
         specialOperatorMap.put("DATE_ADD", SpecialExprType.DATE_ADD);
-        specialOperatorMap.put("ROUND", SpecialExprType.ROUND);
-        specialOperatorMap.put("GREATEST", SpecialExprType.GREATEST);
-        specialOperatorMap.put("LEAST", SpecialExprType.LEAST);
-        specialOperatorMap.put("CONCAT", SpecialExprType.CONCAT);
-        specialOperatorMap.put("CONCAT_WS", SpecialExprType.CONCAT_WS);
-        specialOperatorMap.put("REPLACE", SpecialExprType.REPLACE);
-        specialOperatorMap.put("SUBSTRING", SpecialExprType.SUBSTR);
-        specialOperatorMap.put("SUBSTR", SpecialExprType.SUBSTR);
-        specialOperatorMap.put("INSTR", SpecialExprType.INSTR);
-        specialOperatorMap.put("UNIX_TIMESTAMP", SpecialExprType.UNIX_TIMESTAMP);
-        specialOperatorMap.put("FROM_UNIXTIME", SpecialExprType.FROM_UNIXTIME);
-    }
-
-    static {
-        // Map SpecialExprType to the OmniOperatorJIT C++ registered function_name.
-        // Used by the generic FUNCTION case that forwards all operands as arguments.
-        simpleFunctionNameMap.put(SpecialExprType.ROUND, "round");
-        simpleFunctionNameMap.put(SpecialExprType.GREATEST, "Greatest");
-        simpleFunctionNameMap.put(SpecialExprType.LEAST, "Least");
-        simpleFunctionNameMap.put(SpecialExprType.CONCAT, "concat");
-        simpleFunctionNameMap.put(SpecialExprType.CONCAT_WS, "concat_ws");
-        simpleFunctionNameMap.put(SpecialExprType.REPLACE, "replace");
-        simpleFunctionNameMap.put(SpecialExprType.SUBSTR, "substr");
-        simpleFunctionNameMap.put(SpecialExprType.INSTR, "instr");
-        simpleFunctionNameMap.put(SpecialExprType.UNIX_TIMESTAMP, "unix_timestamp");
-        simpleFunctionNameMap.put(SpecialExprType.FROM_UNIXTIME, "from_unixtime");
     }
 
     static {
@@ -143,7 +114,6 @@ public class RexNodeUtil {
     static {
         unaryOperatorMap.put("-", UnaryExprType.NEGATION);
         unaryOperatorMap.put("IS TRUE", UnaryExprType.IS_TRUE);
-        unaryOperatorMap.put("NOT", UnaryExprType.NOT);
     }
 
     static {
@@ -182,8 +152,7 @@ public class RexNodeUtil {
 
     public enum UnaryExprType {
         NEGATION,
-        IS_TRUE,
-        NOT
+        IS_TRUE
     }
 
 
@@ -230,17 +199,7 @@ public class RexNodeUtil {
         JSON_QUERY,
         JSON_SPLIT,
         CURRENT_TIMESTAMP,
-        DATE_ADD,
-        ROUND,
-        GREATEST,
-        LEAST,
-        CONCAT,
-        CONCAT_WS,
-        REPLACE,
-        SUBSTR,
-        INSTR,
-        UNIX_TIMESTAMP,
-        FROM_UNIXTIME
+        DATE_ADD
     }
 
 
@@ -281,28 +240,12 @@ public class RexNodeUtil {
             int precision = rexNode.getType().getPrecision();
             jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
             jsonMap.put("width", precision);
-        } else if (rexNode.getType().getSqlTypeName() == SqlTypeName.DATE) {
-            jsonMap.put(keyStr, RexTypeToIdMap.get("DATE"));
         } else if (SqlTypeName.DATETIME_TYPES.contains(rexNode.getType().getSqlTypeName())) {
             jsonMap.put(keyStr, 2);
         } else if (SqlTypeName.INTERVAL_TYPES.contains(rexNode.getType().getSqlTypeName())) {
             jsonMap.put(keyStr, 1);
         } else {
             jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
-        }
-    }
-
-    /**
-     * Calcite may type string literals as CHAR(n); OmniOperator function signatures expect
-     * OMNI_VARCHAR. Normalize CHAR literals in the JSON subtree so JSONParser lookup matches.
-     */
-    private static void normalizeCharLiteralToVarchar(Map<String, Object> jsonMap) {
-        if (jsonMap == null) {
-            return;
-        }
-        if ("LITERAL".equals(jsonMap.get("exprType"))
-                && RexTypeToIdMap.get("CHAR").equals(jsonMap.get("dataType"))) {
-            jsonMap.put("dataType", RexTypeToIdMap.get("VARCHAR"));
         }
     }
 
@@ -799,60 +742,6 @@ public class RexNodeUtil {
                         }
                         jsonMap.put("arguments", dateAddArgs);
                         LOG.info("The DATE_ADD expression is {} ", rexCall.toString());
-                        break;
-                    case FROM_UNIXTIME:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        jsonMap.put("function_name", "from_unixtime");
-                        List<Map<String, Object>> fromUnixTimeArgs = new ArrayList<>();
-                        Map<String, Object> fromUnixTimeInputArg = buildJsonMap(operands.get(0));
-                        setDataType(operands.get(0), fromUnixTimeInputArg, "dataType");
-                        normalizeCharLiteralToVarchar(fromUnixTimeInputArg);
-                        fromUnixTimeArgs.add(fromUnixTimeInputArg);
-                        Map<String, Object> fromUnixTimeFormatArg;
-                        if (operands.size() >= 2) {
-                            fromUnixTimeFormatArg = buildJsonMap(operands.get(1));
-                            normalizeCharLiteralToVarchar(fromUnixTimeFormatArg);
-                        } else {
-                            // Flink default: FROM_UNIXTIME(numeric) -> 'yyyy-MM-dd HH:mm:ss'
-                            fromUnixTimeFormatArg = new LinkedHashMap<>();
-                            fromUnixTimeFormatArg.put("exprType", "LITERAL");
-                            fromUnixTimeFormatArg.put("dataType", RexTypeToIdMap.get("VARCHAR"));
-                            fromUnixTimeFormatArg.put("isNull", false);
-                            fromUnixTimeFormatArg.put("value", "yyyy-MM-dd HH:mm:ss");
-                            fromUnixTimeFormatArg.put("width", 19);
-                        }
-                        fromUnixTimeArgs.add(fromUnixTimeFormatArg);
-                        if (operands.get(0).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
-                            Map<String, Object> fromUnixTimeTzArg = new LinkedHashMap<>();
-                            fromUnixTimeTzArg.put("dataType", RexTypeToIdMap.get("VARCHAR"));
-                            fromUnixTimeTzArg.put("exprType", "LITERAL");
-                            fromUnixTimeTzArg.put("isNull", false);
-                            fromUnixTimeTzArg.put("value", CommonExecCalc.getZoneId().getId());
-                            fromUnixTimeTzArg.put("width", CommonExecCalc.getZoneId().getId().length());
-                            fromUnixTimeArgs.add(fromUnixTimeTzArg);
-                        }
-                        jsonMap.put("arguments", fromUnixTimeArgs);
-                        break;
-                    case ROUND:
-                    case GREATEST:
-                    case LEAST:
-                    case CONCAT:
-                    case CONCAT_WS:
-                    case REPLACE:
-                    case SUBSTR:
-                    case INSTR:
-                    case UNIX_TIMESTAMP:
-                        jsonMap.put("exprType", "FUNCTION");
-                        setDataType(rexCall, jsonMap, "returnType");
-                        jsonMap.put("function_name", simpleFunctionNameMap.get(specialType));
-                        List<Map<String, Object>> simpleArgList = new ArrayList<>();
-                        for (int i = 0; i < operands.size(); i++) {
-                            Map<String, Object> argMap = buildJsonMap(operands.get(i));
-                            normalizeCharLiteralToVarchar(argMap);
-                            simpleArgList.add(argMap);
-                        }
-                        jsonMap.put("arguments", simpleArgList);
                         break;
                     default:
                         jsonMap.put("exprType", "INVALID");

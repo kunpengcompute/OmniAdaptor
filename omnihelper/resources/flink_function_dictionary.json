@@ -70,7 +70,7 @@
   {"func_name": "OR", "func_type": "binary", "is_support_func": true,
     "is_supported_type": ["BOOLEAN"]
   },
-  {"func_name": "NOT", "is_support_func": true, "is_supported_type": ["BOOLEAN"]},
+  {"func_name": "NOT", "is_support_func": false},
   {"func_name": "IS FALSE", "is_support_func": false},
   {"func_name": "IS NOT FALSE", "is_support_func": false},
   {"func_name": "IS TRUE", "is_support_func": true,
@@ -121,9 +121,7 @@
   {"func_name": "DEGREES", "is_support_func": false},
   {"func_name": "RADIANS", "is_support_func": false},
   {"func_name": "SIGN", "is_support_func": false},
-  {"func_name": "ROUND", "is_support_func": true,
-   "is_supported_type": ["DOUBLE", "DECIMAL64", "DECIMAL128"]
-  },
+  {"func_name": "ROUND", "is_support_func": false},
   {"func_name": "PI", "is_support_func": false},
   {"func_name": "E", "is_support_func": false},
   {"func_name": "RAND", "is_support_func": false},
@@ -151,22 +149,14 @@
   {"func_name": "REPEAT", "is_support_func": false},
   {"func_name": "REGEXP_REPLACE", "is_support_func": false},
   {"func_name": "OVERLAY", "is_support_func": false},
-  {"func_name": "SUBSTRING", "is_support_func": true,
-   "is_supported_type": ["STRING", "VARCHAR"]
-  },
-  {"func_name": "REPLACE", "is_support_func": true,
-   "is_supported_type": ["STRING", "VARCHAR"]
-  },
+  {"func_name": "SUBSTRING", "is_support_func": false},
+  {"func_name": "REPLACE", "is_support_func": false},
   {"func_name": "REGEXP_EXTRACT", "is_support_func": true,
    "is_supported_type": [ "STRING", "INT"]
   },
   {"func_name": "INITCAP", "is_support_func": false},
-  {"func_name": "CONCAT", "is_support_func": true,
-   "is_supported_type": ["STRING", "VARCHAR"]
-  },
-  {"func_name": "CONCAT_WS", "is_support_func": true,
-   "is_supported_type": ["STRING", "VARCHAR"]
-  },
+  {"func_name": "CONCAT", "is_support_func": false},
+  {"func_name": "CONCAT_WS", "is_support_func": false},
   {"func_name": "LPAD", "is_support_func": false},
   {"func_name": "RPAD", "is_support_func": false},
   {"func_name": "FROM_BASE64", "is_support_func": false},
@@ -175,9 +165,7 @@
   {"func_name": "CHR", "is_support_func": false},
   {"func_name": "DECODE", "is_support_func": false},
   {"func_name": "ENCODE", "is_support_func": false},
-  {"func_name": "INSTR", "is_support_func": true,
-   "is_supported_type": ["STRING", "VARCHAR"]
-  },
+  {"func_name": "INSTR", "is_support_func": false},
   {"func_name": "LEFT", "is_support_func": false},
   {"func_name": "RIGHT", "is_support_func": false},
   {"func_name": "LOCATE", "is_support_func": false},
@@ -188,11 +176,9 @@
    "is_supported_type": ["STRING", "INT"]
   },
   {"func_name": "STR_TO_MAP", "is_support_func": false},
-  {"func_name": "SUBSTR", "is_support_func": true,
-   "is_supported_type": ["STRING", "VARCHAR"]
-  },
+  {"func_name": "SUBSTR", "is_support_func": false},
 
-  {"func_name": "DATE", "is_support_func": true, "is_supported_type": ["VARCHAR", "CHAR"]},
+  {"func_name": "DATE", "is_support_func": false},
   {"func_name": "TIME", "is_support_func": false},
   {"func_name": "TIMESTAMP", "is_support_func": false},
   {"func_name": "INTERVAL", "is_support_func": false},
@@ -225,12 +211,8 @@
   {"func_name": "TIMESTAMPADD", "is_support_func": false},
   {"func_name": "TIMESTAMPDIFF", "is_support_func": false},
   {"func_name": "CONVERT_TZ", "is_support_func": false},
-  {"func_name": "FROM_UNIXTIME", "is_support_func": true,
-   "is_supported_type": ["BIGINT", "INT"]
-  },
-  {"func_name": "UNIX_TIMESTAMP", "is_support_func": true,
-   "is_supported_type": ["STRING", "VARCHAR"]
-  },
+  {"func_name": "FROM_UNIXTIME", "is_support_func": false},
+  {"func_name": "UNIX_TIMESTAMP", "is_support_func": false},
   {"func_name": "TO_DATE", "is_support_func": false},
   {"func_name": "TO_TIMESTAMP_LTZ", "is_support_func": false},
   {"func_name": "TO_TIMESTAMP", "is_support_func": false},
@@ -256,23 +238,12 @@
   {"func_name": "IF", "is_support_func": true,
     "is_supported_type": []
   },
-  {"func_name": "IFNULL", "is_support_func": true,
-  "is_supported_type": [
-      "BIGINT", "INT", "TIMESTAMP(0)", "TIMESTAMP(1)",
-      "TIMESTAMP(2)", "TIMESTAMP(3)", "VARCHAR",
-      "VARCHAR(2147483647)", "VARCHAR(2000)", "VARCHAR(9)", "STRING", "BOOLEAN",
-      "DECIMAL64", "DECIMAL128", "TIMESTAMP_LTZ(3)"
-    ]
-  },
+  {"func_name": "IFNULL", "is_support_func": false},
   {"func_name": "IS_ALPHA", "is_support_func": false},
   {"func_name": "IS_DECIMAL", "is_support_func": false},
   {"func_name": "IS_DIGIT", "is_support_func": false},
-  {"func_name": "GREATEST", "is_support_func": true,
-   "is_supported_type": ["BIGINT", "INT", "DOUBLE"]
-  },
-  {"func_name": "LEAST", "is_support_func": true,
-   "is_supported_type": ["BIGINT", "INT", "DOUBLE"]
-  },
+  {"func_name": "GREATEST", "is_support_func": false},
+  {"func_name": "LEAST", "is_support_func": false},
 
   {"func_name": "CAST", "is_support_func": true,
     "cast_is_support_type": {

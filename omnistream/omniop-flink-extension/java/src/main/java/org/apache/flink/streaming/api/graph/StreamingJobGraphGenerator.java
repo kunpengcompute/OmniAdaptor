@@ -76,6 +76,9 @@ import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.hashmap.HashMapStateBackend;
 import org.apache.flink.runtime.util.Hardware;
 import org.apache.flink.runtime.util.config.memory.ManagedMemoryUtils;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.checkpoint.WithMasterCheckpointHook;
@@ -119,6 +122,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -144,6 +148,7 @@ import javax.annotation.Nullable;
 public class StreamingJobGraphGenerator {
 
     private static final Logger LOG = LoggerFactory.getLogger(StreamingJobGraphGenerator.class);
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final ConfigOption<Boolean> SOURCE_SINK_TASK_FALLBACK_ENABLED =
             ConfigOptions.key("omni.task-fallback.source-sink.enabled").booleanType().defaultValue(false);
@@ -539,6 +544,8 @@ public class StreamingJobGraphGenerator {
             legacyHashes.add(hasher.traverseStreamGraphAndGenerateHashes(streamGraph));
         }
 
+        applyOmniStreamRowDataConfig();
+
         setChaining(hashes, legacyHashes);
 
         setPhysicalEdges();
@@ -608,6 +615,144 @@ public class StreamingJobGraphGenerator {
         return jobGraph;
     }
 
+    private boolean isCalcValidForRowData(StreamNode calcNode) {
+        String desc = calcNode.getOperatorDescription();
+        
+        if (desc == null || !desc.trim().startsWith("{")) {
+            return false;
+        }
+
+        try {
+            JsonNode rootNode = objectMapper.readTree(desc);
+            JsonNode indices = rootNode.get("indices");
+
+            if (indices != null && indices.isArray()) {
+                
+                for (JsonNode indexNode : indices) {
+                    JsonNode exprType = indexNode.get("exprType");
+                    if (exprType == null || !"FIELD_REFERENCE".equals(exprType.asText())) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to parse StreamCalc description for operator {}", calcNode.getOperatorName(), e);
+        }
+        
+        return false;
+    }
+
+    private void addDescription(StreamNode streamNode, String key, String value) {
+        String currentDesc = streamNode.getOperatorDescription(); 
+        Map<String, Object> jsonMap;
+        try {
+            if (currentDesc != null && currentDesc.trim().startsWith("{")) {
+                jsonMap = objectMapper.readValue(currentDesc, new TypeReference<LinkedHashMap<String, Object>>() {});
+            } else {
+                jsonMap = new LinkedHashMap<>();
+            }
+
+            jsonMap.put(key, value);
+
+            String newJsonString = objectMapper.writeValueAsString(jsonMap);
+            streamNode.setOperatorDescription(newJsonString); 
+            
+        } catch (JsonProcessingException e) {
+            LOG.warn("Failed to append {}={} to StreamNode description for operator {}", 
+                key, value, streamNode.getOperatorName(), e);
+        }
+    }
+
+    /**
+     * Optimization: Dynamically configures the C++ OmniStream backend to use BinaryRowData 
+     * for network serialization instead of VectorBatch for specific operator topologies.
+     * 
+     * This method traverses the unchained StreamGraph to find GlobalWindowAgg operators. 
+     * If the direct downstream consumers are exclusively supported operators (currently 
+     * WindowJoin or StreamCalc with FIELD_REFERENCE indices), it appends input/output 
+     * record type flags to the operator's JSON description. 
+     * 
+     * Supported Topologies:
+     * - GlobalWindowAgg -> WindowJoin (Sets input1ValueType or input2ValueType based on edge)
+     * - GlobalWindowAgg -> StreamCalc (Sets inputValueType, requires FIELD_REFERENCE indices)
+     */
+    private void applyOmniStreamRowDataConfig() {
+       
+        for (StreamNode node : streamGraph.getStreamNodes()) {
+        
+            if (node.getOperatorName().contains("GlobalWindowAgg")) {
+                List<StreamEdge> outEdges = node.getOutEdges();
+                if (outEdges == null || outEdges.isEmpty()) {
+                    continue;
+                }
+
+                boolean allValidDownstreams = true;
+
+                for (StreamEdge outEdge : outEdges) {
+                    StreamNode downstreamNode = streamGraph.getStreamNode(outEdge.getTargetId());
+                    String downstreamName = downstreamNode.getOperatorName();
+                    if (downstreamName.contains("Calc")) {
+                    // Run the JSON expression check for Calc nodes
+                    if (!isCalcValidForRowData(downstreamNode)) {
+                        allValidDownstreams = false;
+                        break;
+                        }
+                    } else if (downstreamName.contains("WindowJoin")) {
+                        // WindowJoin is valid, no extra checks needed
+                    } else {
+                        allValidDownstreams = false;
+                        break;
+                    }
+
+                }
+
+                
+                if (allValidDownstreams) {
+                    addDescription(node, "OutputRecordType", "BINARY_ROW_DATA");
+                    LOG.info("Configured GlobalWindowAgg Output Record Type");
+                    for (StreamEdge outEdge : outEdges) {
+                        StreamNode downstreamNode = streamGraph.getStreamNode(outEdge.getTargetId());
+                        
+                        String downstreamName = downstreamNode.getOperatorName();
+                        
+                        if (downstreamName.contains("Calc")) {
+                            addDescription(downstreamNode, "InputRecordType", "BINARY_ROW_DATA");
+                            LOG.info("Configured StreamCalc Input Record Type");
+                            List<StreamEdge> calcOutEdges = downstreamNode.getOutEdges();
+                            if (calcOutEdges != null && !calcOutEdges.isEmpty()) {
+                                boolean outputRowData = true;
+                                for (StreamEdge calcOutEdge : calcOutEdges) {
+                                    StreamNode calcDownstreamNode = streamGraph.getStreamNode(calcOutEdge.getTargetId());
+                                    String calcDownstreamName = calcDownstreamNode.getOperatorName();
+                                    if (!downstreamName.contains("WindowJoin")) {
+                                        outputRowData = false;
+                                        break;
+                                    }
+                                }
+                                if (outputRowData){
+                                    //for the case GlobalWindowAgg->StreamCalc->WindowJoin
+                                    //set rowdata output records type for StreamCalc(not tested yet)
+                                    LOG.info("Configured StreamCalc Output Record Type");
+                                    addDescription(downstreamNode, "OutputRecordType", "BINARY_ROW_DATA");
+                                }
+                            }
+                        } else if (downstreamName.contains("WindowJoin")) {
+                            int inputIndex = outEdge.getTypeNumber(); 
+                            if (inputIndex == 1) {
+                                addDescription(downstreamNode, "InputRecordType1", "BINARY_ROW_DATA");
+                                LOG.info("Configured LEFT side of WindowJoin for RowData");
+                                
+                            } else if (inputIndex == 2) {
+                                addDescription(downstreamNode, "InputRecordType2", "BINARY_ROW_DATA");
+                                LOG.info("Configured RIGHT side of WindowJoin for RowData");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     private void overrideVertices() {
         // The input para is the entire job chain.
         // the member jobType, taskTypes, operatorTypes in class OmniGraphOverride is assigned value by the method.

@@ -27,7 +27,8 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
     private static final List<String> SUPPORT_GROUP_KEY_TYPES = Collections.singletonList("BIGINT");
     private static final List<String> SUPPORT_ORDER_BY_TYPES = Arrays.asList("BIGINT",
             "TIMESTAMP_WITHOUT_TIME_ZONE(3)");
-    private static final List<String> SUPPORT_FUNCTIONS = Arrays.asList("AppendOnlyTopNFunction", "FastTop1Function");
+    private static final List<String> SUPPORT_FUNCTIONS =
+            Arrays.asList("AppendOnlyTopNFunction", "FastTop1Function", "AppendOnlyFirstNFunction");
 
     @SuppressWarnings("unchecked")
     @Override
@@ -45,7 +46,7 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
         List<Boolean> sortAscendingOrders = (ArrayList<Boolean>) operatorInfoMap.get("sortAscendingOrders");
         List<Integer> sortFieldIds = (ArrayList<Integer>) operatorInfoMap.get("sortFieldIndices");
 
-        // only support TOP1 and TOPN
+        // Rank 子算子: FirstN / Top1 / TopN
         if (!SUPPORT_FUNCTIONS.contains(rankFunction)) {
             return false;
         }
@@ -72,6 +73,10 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
         }
 
         if (!validateTopNFunction(operatorInfoMap, inputTypeList, sortFieldIds, sortAscendingOrders)) {
+            return false;
+        }
+
+        if (!validateFirstNFunction(operatorInfoMap, inputTypeList, sortFieldIds, sortAscendingOrders)) {
             return false;
         }
 
@@ -109,5 +114,42 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
 
         return sortFieldIds.size() <= 1 && stripNotNull(inputTypeList.get(sortFieldIds.get(0))).equals("BIGINT")
                 && !sortAscendingOrders.get(0);
+    }
+
+    private boolean validateFirstNFunction(Map<String, Object> operatorInfoMap, List<String> inputTypeList,
+                                           List<Integer> sortFieldIds, List<Boolean> sortAscendingOrders) {
+        if (!operatorInfoMap.get("processFunction").equals("AppendOnlyFirstNFunction")) {
+            return true;
+        }
+        Object rankRangeObj = operatorInfoMap.get("rankRange");
+        if (!(rankRangeObj instanceof String)) {
+            LOG.info("validate AppendOnlyFirstNFunction missing constant rankRange");
+            return false;
+        }
+        String rankRange = (String) rankRangeObj;
+        if (!rankRange.matches(".*rankStart=\\d+.*rankEnd=\\d+.*")) {
+            LOG.info("validate AppendOnlyFirstNFunction only supports constant rankRange, got {}", rankRange);
+            return false;
+        }
+        if (CollectionUtil.isNullOrEmpty(sortFieldIds) || CollectionUtil.isNullOrEmpty(sortAscendingOrders)
+                || sortFieldIds.size() != 1 || sortAscendingOrders.size() < 1) {
+            LOG.info("validate AppendOnlyFirstNFunction requires a single sort field");
+            return false;
+        }
+        if (!Boolean.TRUE.equals(sortAscendingOrders.get(0))) {
+            LOG.info("validate AppendOnlyFirstNFunction requires ascending proctime order");
+            return false;
+        }
+        int sortId = sortFieldIds.get(0);
+        if (sortId < 0 || sortId >= inputTypeList.size()) {
+            LOG.info("validate AppendOnlyFirstNFunction sort index {} out of bound", sortId);
+            return false;
+        }
+        String sortType = stripNotNull(inputTypeList.get(sortId));
+        if (sortType == null || !sortType.startsWith("TIMESTAMP_WITH_LOCAL_TIME_ZONE")) {
+            LOG.info("validate AppendOnlyFirstNFunction sort type {} is not proctime", sortType);
+            return false;
+        }
+        return true;
     }
 }

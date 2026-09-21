@@ -13,6 +13,7 @@ package com.huawei.omniruntime.flink.streaming.api.graph;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
+import com.huawei.omniruntime.flink.runtime.api.graph.json.operatorchain.OperatorDescriptorHelper;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.AbstractValidateOperatorStrategy;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateCalcOPStrategy;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateOperatorStrategyFactory;
@@ -26,11 +27,14 @@ import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.api.java.typeutils.runtime.PojoSerializer;
 import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
+import org.apache.flink.connector.file.sink.FileSink;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.hashmap.HashMapStateBackend;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.graph.StreamEdge;
@@ -42,14 +46,26 @@ import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.SourceOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
+import org.apache.flink.streaming.runtime.operators.sink.CommitterOperatorFactory;
 import org.apache.flink.streaming.runtime.operators.sink.SinkWriterOperatorFactory;
 import org.apache.flink.table.runtime.operators.sink.OutputConversionOperator;
 import org.apache.flink.table.runtime.operators.source.InputConversionOperator;
 import org.apache.flink.table.runtime.typeutils.AbstractRowDataSerializer;
 import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
+import org.apache.flink.table.types.logical.ArrayType;
+import org.apache.flink.table.types.logical.BigIntType;
+import org.apache.flink.table.types.logical.BooleanType;
+import org.apache.flink.table.types.logical.CharType;
+import org.apache.flink.table.types.logical.DecimalType;
+import org.apache.flink.table.types.logical.IntType;
+import org.apache.flink.table.types.logical.LocalZonedTimestampType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
+import org.apache.flink.table.types.logical.MapType;
+import org.apache.flink.table.types.logical.MultisetType;
 import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.table.types.logical.TimestampType;
+import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.util.CollectionUtil;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
@@ -76,6 +92,8 @@ import java.util.regex.Pattern;
 public final class OmniGraphOverride {
     private static final Logger LOG = LoggerFactory.getLogger(OmniGraphOverride.class);
     private static final Pattern SOURCE_REGEX = Pattern.compile("^Source");
+    private static final Pattern CSV_LTZ_TYPE_PATTERN =
+            Pattern.compile("^TIMESTAMP_WITH_LOCAL_TIME_ZONE\\((\\d+)\\)$");
 
     // pattern to extract substring till the first "(" like   "Calc(..."   flink 1.14
     private static final Pattern OPERATOR_NAME_REGEX = Pattern.compile("^\\s*(.*?)[\\[(]");
@@ -125,6 +143,10 @@ public final class OmniGraphOverride {
     private static final String SINK_REGEX_PATTERN = ".*"
             + Pattern.quote(WRITER_NAME) + "\\s*$" + "|^" + SINK_NAME + ".*";
     private static final Pattern SINK_REGEX = Pattern.compile(SINK_REGEX_PATTERN);
+
+    // native 的 CAST(... AS TIMESTAMP_LTZ) 目前是恒等变换（不做会话时区→UTC 换算），
+    // 会话时区非 UTC 时输出与 stock Flink 不同；native 表达式层修复后置 false。
+    private static final boolean FALLBACK_ON_ZONE_SENSITIVE_LTZ_CAST = true;
 
     private static final Set<String> SUPPORT_KAFKA_SCHEMA_TYPE = new HashSet<>();
 
@@ -192,6 +214,13 @@ public final class OmniGraphOverride {
 
     private static boolean isSinkSupportNative = true;
 
+    // 当前被校验节点是否为 filesystem+csv 的 file sink。只有这类算子允许绕过文件门禁
+    // 走 native；由 validateNodeForOmniTask 按节点计算，供随后调用的 validateSink 读取。
+    private static boolean isFileSinkCsvNative = false;
+    // 作业里是否存在 filesystem+csv 的 file sink。没有 csv sink 时 filesystem 准入保持
+    // master 的行为；出现 csv sink 时才按其能力收紧判定。
+    private static boolean jobHasCsvFileSink = false;
+
     private static boolean isConstraintEnforcerSupportNative = true;
 
     private static boolean isStreamRecordTimestampInserterSupportNative = true;
@@ -216,6 +245,7 @@ public final class OmniGraphOverride {
 
     private static final Set<String> SINK_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
+            "BOOLEAN",
             "INTEGER",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
@@ -274,6 +304,7 @@ public final class OmniGraphOverride {
                 vertexID, vertexConfig.getOperatorName());
 
         JobVertex jobVertex = vertexEntry.getValue();
+        refreshJobCsvFileSinkFlag(chainInfos);
 
         if (validateVertexChainInfoForOmniTask(vertexID, chainInfos, chainedConfigs, jobVertex, vertexConfigs, jobType)) {
             LOG.info("validateVertexForOmniTask  true for : vertexID is {}, and vertexName {}", vertexID, vertexConfig.getOperatorName());
@@ -358,6 +389,16 @@ public final class OmniGraphOverride {
             }
         }
 
+        if (FALLBACK_ON_ZONE_SENSITIVE_LTZ_CAST && chainHasZoneSensitiveLtzCast(chainedNode)) {
+            String sessionTimeZone = chainSessionTimeZone(chainedNode);
+            if (!isUtcTimeZone(sessionTimeZone)) {
+                LOG.info("validateVertexChainInfoForOmniTask chainInfo of vertex ID {} falls back to stock Flink: "
+                        + "the chain casts between TIMESTAMP and TIMESTAMP_LTZ while the session time "
+                        + "zone is {} and the native cast does not convert to UTC", vertexID, sessionTimeZone);
+                return false;
+            }
+        }
+
         StreamNode lastNode = chainedNode.get(0);
         StreamNode firstNode = chainedNode.get(chainedNode.size() - 1);
 
@@ -433,10 +474,85 @@ public final class OmniGraphOverride {
         return false;
     }
 
+    /**
+     * 判断链内是否存在跨 TIMESTAMP_LTZ 边界的 CAST。看 originDescription 文本而非类型表：
+     * 反向 CAST(ltz AS TIMESTAMP) 的类型表里没有 LTZ；不带 CAST( 的 LTZ 表达式
+     * （TO_TIMESTAMP_LTZ / DATE_FORMAT）native 已按 vanilla 语义实现，需排除。
+     */
+    private static boolean chainHasZoneSensitiveLtzCast(List<StreamNode> chainedNodes) {
+        ObjectMapper mapper = new ObjectMapper();
+        for (StreamNode node : chainedNodes) {
+            String description = node.getOperatorDescription();
+            if (description == null || !description.startsWith("{")) {
+                continue;
+            }
+            try {
+                JsonNode origin = mapper.readTree(description).get("originDescription");
+                if (origin == null) {
+                    continue;
+                }
+                String originText = origin.asText();
+                if (originText.contains("CAST(")
+                        && (originText.contains("TIMESTAMP_LTZ")
+                                || originText.contains("TIMESTAMP_WITH_LOCAL_TIME_ZONE"))) {
+                    return true;
+                }
+            } catch (Exception ignored) {
+                // 描述不是 JSON（源/sink 的简单名描述）时跳过
+            }
+        }
+        return false;
+    }
+
+    /** 描述符里的 timeZone 即作业的 table.local-time-zone（例：GMT+08:00 / UTC）。 */
+    private static String chainSessionTimeZone(List<StreamNode> chainedNodes) {
+        ObjectMapper mapper = new ObjectMapper();
+        for (StreamNode node : chainedNodes) {
+            String description = node.getOperatorDescription();
+            if (description == null || !description.contains("\"timeZone\"")) {
+                continue;
+            }
+            try {
+                JsonNode timeZone = mapper.readTree(description).get("timeZone");
+                if (timeZone != null && !timeZone.asText().isEmpty()) {
+                    return timeZone.asText();
+                }
+            } catch (Exception ignored) {
+                // 不是单个节点的 JSON 描述，跳过
+            }
+        }
+        return null;
+    }
+
+    private static boolean isUtcTimeZone(String timeZone) {
+        if (timeZone == null) {
+            return false;
+        }
+        String normalized = timeZone.trim().toUpperCase(Locale.ROOT);
+        return normalized.equals("UTC") || normalized.equals("Z") || normalized.equals("GMT")
+                || normalized.equals("GMT+00:00") || normalized.equals("GMT-00:00")
+                || normalized.equals("ETC/UTC") || normalized.equals("ETC/GMT");
+    }
+
     private static boolean validateNodeForOmniTask(Integer vertexID, Map<Integer, StreamConfig> vertexConfigs,
                                                    JobType jobType, StreamGraph streamGraph, StreamNode node) {
         String operatorName = node.getOperatorName();
         String operatorDescription = node.getOperatorDescription();
+        // 按当前节点判定 filesystem+csv 的 sink 是否允许走 native。
+        // checkpoint 开启时 native csv sink 无 pending-file/commit 恢复语义，回退 stock。
+        boolean csvSinkCandidate = computeFileSinkCsvNative(node);
+        boolean csvSinkAllowed = csvSinkCandidate && !isCheckpointingEnabled(streamGraph);
+        if (csvSinkCandidate && !csvSinkAllowed) {
+            LOG.info("CSV file sink {} falls back to stock Flink: checkpointing is enabled, "
+                    + "native has no recoverable pending-file/commit state", operatorName);
+        }
+        isFileSinkCsvNative = csvSinkAllowed;
+        if (jobHasCsvFileSink && requiresFlinkFileSink(operatorName, node.getOperatorFactory())
+                && !isFileSinkCsvNative) {
+            LOG.info("File operator {} uses Flink: native file enumeration, restore and recoverable commit "
+                    + "are not implemented", operatorName);
+            return true;
+        }
         switch (jobType) {
             case SQL:
                 // check partitioner type
@@ -682,6 +798,12 @@ public final class OmniGraphOverride {
                 LOG.info("converted to DECIMAL128");
             }
             isSupportNative = SINK_SUPPORT_DATA_TYPE.contains(type);
+            if (!isSupportNative && isCsvSinkLtzExempt(operatorName, type)) {
+                // 通用表只登记了 LTZ(3)，这里按算子名给 csv sink 放行 LTZ(0..2)，不影响
+                // 其它 sink。CHAR/VARCHAR 的长度截断语义尚未对齐，仍由通用表拦下回退。
+                LOG.info("csv file sink {} admits {} through the csv gate", operatorName, type);
+                isSupportNative = true;
+            }
             if (!isSupportNative) {
                 LOG.info("getInputTypes unsupported sink type for operator '{}': '{}' (original: '{}')",
                         operatorName, type, originalType);
@@ -695,6 +817,15 @@ public final class OmniGraphOverride {
         } else if (isStreamRecordTimestampInserter(operatorName)) {
             isStreamRecordTimestampInserterSupportNative = isSupportNative;
         }
+    }
+
+    /** csv filesystem sink 的 TIMESTAMP_LTZ(p<=3) 豁免通用 sink 能力表；绑定 StreamingFileWriter。 */
+    private static boolean isCsvSinkLtzExempt(String operatorName, String type) {
+        if (operatorName == null || !operatorName.contains("StreamingFileWriter")) {
+            return false;
+        }
+        Matcher matcher = CSV_LTZ_TYPE_PATTERN.matcher(type);
+        return matcher.matches() && Integer.parseInt(matcher.group(1)) <= 3;
     }
 
     private static void buildInputTypes(List<String> inputTypeList, TypeSerializer<?> typeSerializerOut) {
@@ -757,11 +888,293 @@ public final class OmniGraphOverride {
         return isStreamRecordTimestampInserterSupportNative;
     }
 
+    static boolean requiresFlinkFileSink(String operatorName, StreamOperatorFactory<?> factory) {
+        if (operatorName.contains("StreamingFileWriter") || operatorName.contains("PartitionCommitter")) {
+            return true;
+        }
+        if (factory instanceof SinkWriterOperatorFactory) {
+            return ((SinkWriterOperatorFactory<?, ?>) factory).getSink() instanceof FileSink;
+        }
+        if (factory instanceof CommitterOperatorFactory) {
+            try {
+                Object sink = ReflectionUtils.retrievePrivateField(factory, "sink");
+                return sink instanceof FileSink;
+            } catch (RuntimeException e) {
+                LOG.warn("Cannot inspect committer; using Flink", e);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** checkpoint 是否开启；开启时 native csv sink 无 pending-file/commit 恢复语义，sink 回退 stock。 */
+    private static boolean isCheckpointingEnabled(StreamGraph streamGraph) {
+        return streamGraph != null && streamGraph.getCheckpointConfig().isCheckpointingEnabled();
+    }
+
+    /** 只看 sink 配置（不看行类型/选项）判定是否 filesystem+csv file sink，用于给作业分流。 */
+    private static boolean isCsvFileSink(StreamNode node) {
+        String operatorName = node.getOperatorName();
+        if (operatorName == null || !operatorName.contains("StreamingFileWriter")) {
+            return false;
+        }
+        try {
+            StreamOperator<?> operator = node.getOperator();
+            if (operator == null) {
+                return false;
+            }
+            Object confObj = ReflectionUtils.retrievePrivateField(operator, "conf");
+            return confObj instanceof Configuration
+                    && "csv".equals(((Configuration) confObj).getString("format", ""));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static void refreshJobCsvFileSinkFlag(
+            Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {
+        boolean hasCsvFileSink = false;
+        for (StreamingJobGraphGenerator.OperatorChainInfo chainInfo : chainInfos.values()) {
+            for (StreamNode node : chainInfo.getAllChainedNodes()) {
+                if (isCsvFileSink(node)) {
+                    hasCsvFileSink = true;
+                    break;
+                }
+            }
+            if (hasCsvFileSink) {
+                break;
+            }
+        }
+        jobHasCsvFileSink = hasCsvFileSink;
+    }
+
+    /**
+     * filesystem+csv 的 StreamingFileWriter 才允许走 native：选项能力与行类型能力都满足
+     * 才走 native，任一不满足则整链回退 stock Flink。
+     */
+    private static boolean computeFileSinkCsvNative(StreamNode node) {
+        String operatorName = node.getOperatorName();
+        if (operatorName == null || !operatorName.contains("StreamingFileWriter")) {
+            return false;
+        }
+        try {
+            StreamOperator<?> operator = node.getOperator();
+            if (operator == null) {
+                return false;
+            }
+            Object confObj = ReflectionUtils.retrievePrivateField(operator, "conf");
+            if (!(confObj instanceof Configuration)) {
+                return false;
+            }
+            Map<String, String> opts = ((Configuration) confObj).toMap();
+            return csvSinkOptionsAllowed(operatorName, opts) && csvSinkRowTypeAllowed(node);
+        } catch (Exception e) {
+            LOG.warn("Failed to detect filesystem csv sink for {}, defaulting to fallback",
+                    operatorName, e);
+            return false;
+        }
+    }
+
+    /**
+     * CSV sink 选项门禁：native 无法逐字节复现的配置一律整链回退 stock Flink，
+     * 而不是硬失败或静默产出不同字节。
+     */
+    private static boolean csvSinkOptionsAllowed(String operatorName, Map<String, String> opts) {
+        if (!"csv".equals(opts.get("format"))) {
+            return false;
+        }
+        if (Boolean.parseBoolean(opts.getOrDefault("csv.disable-quote-character", "false"))) {
+            LOG.info("CSV file sink {} falls back to stock Flink: csv.disable-quote-character is enabled",
+                    operatorName);
+            return false;
+        }
+        // auto-compaction 依赖 checkpoint 提交与 .uncompacted-* 前缀，native 无法复现，整体回退。
+        if (Boolean.parseBoolean(opts.getOrDefault("auto-compaction", "false"))) {
+            LOG.info("CSV file sink {} falls back to stock Flink: auto-compaction is enabled (stock "
+                    + "writes .uncompacted-* part files that native does not reproduce)", operatorName);
+            return false;
+        }
+        // ARRAY 列已被嵌套行类型门禁挡住；这里把选项显式化，避免将来放开 ARRAY 时漏掉。
+        if (opts.containsKey("csv.array-element-delimiter")) {
+            LOG.info("CSV file sink {} falls back to stock Flink: csv.array-element-delimiter is not "
+                    + "supported by native CSV encoding", operatorName);
+            return false;
+        }
+        // native 以单个 char 存储分隔符/引号/转义符，多字节 UTF-8 或 NUL 会被截断成
+        // 首字节静默产出坏数据，故要求单字节 ASCII（vanilla 本身支持完整字符）。
+        String fieldDelimiter = org.apache.commons.lang3.StringEscapeUtils.unescapeJava(
+                opts.getOrDefault("csv.field-delimiter", ","));
+        if (!isSingleAsciiChar(fieldDelimiter)) {
+            LOG.info("CSV file sink {} falls back to stock Flink: csv.field-delimiter '{}' is not a "
+                    + "single ASCII character", operatorName, fieldDelimiter);
+            return false;
+        }
+        if (!isSingleAsciiChar(opts.getOrDefault("csv.quote-character", "\""))) {
+            LOG.info("CSV file sink {} falls back to stock Flink: csv.quote-character is not a single "
+                    + "ASCII character", operatorName);
+            return false;
+        }
+        String escapeCharacter = opts.get("csv.escape-character");
+        if (escapeCharacter != null && !isSingleAsciiChar(escapeCharacter)) {
+            LOG.info("CSV file sink {} falls back to stock Flink: csv.escape-character is not a single "
+                    + "ASCII character", operatorName);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * CSV 行类型门禁：只放行白名单逻辑类型（含 partition 列），嵌套类型、TIMESTAMP(p>3)
+     * 与 DOUBLE/DATE/TIME 等一律回退，类型未知时同样回退。
+     */
+    private static boolean csvSinkRowTypeAllowed(StreamNode node) {
+        String operatorName = node.getOperatorName();
+        LogicalType[] types = collectInputLogicalTypes(node);
+        if (types == null || types.length == 0) {
+            LOG.info("CSV file sink {} falls back to stock Flink: input logical types are unknown",
+                    operatorName);
+            return false;
+        }
+        for (LogicalType type : types) {
+            if (type instanceof ArrayType || type instanceof RowType || type instanceof MapType
+                    || type instanceof MultisetType) {
+                LOG.info("CSV file sink {} falls back to stock Flink: nested logical type {} is not "
+                        + "supported by native CSV encoding", operatorName, type);
+                return false;
+            }
+            if (type instanceof TimestampType) {
+                int precision = ((TimestampType) type).getPrecision();
+                if (precision > 3) {
+                    LOG.info("CSV file sink {} falls back to stock Flink: TIMESTAMP precision {} exceeds "
+                            + "native CSV support (0..3)", operatorName, precision);
+                    return false;
+                }
+                continue;
+            }
+            if (type instanceof LocalZonedTimestampType) {
+                int precision = ((LocalZonedTimestampType) type).getPrecision();
+                if (precision > 3) {
+                    LOG.info("CSV file sink {} falls back to stock Flink: TIMESTAMP_LTZ precision {} exceeds "
+                            + "native CSV support (0..3)", operatorName, precision);
+                    return false;
+                }
+                continue;
+            }
+            if (!(type instanceof BigIntType || type instanceof IntType || type instanceof BooleanType
+                    || type instanceof VarCharType || type instanceof CharType
+                    || type instanceof DecimalType)) {
+                LOG.info("CSV file sink {} falls back to stock Flink: logical type {} is not supported by "
+                        + "native CSV encoding", operatorName, type);
+                return false;
+            }
+            // 与 OperatorDescriptorHelper.nativeInputTypeName 保持同步：名字没映射到时
+            // native 会少建一列并硬崩，这里提前回退。
+            if (OperatorDescriptorHelper.nativeInputTypeName(type) == null) {
+                LOG.info("CSV file sink {} falls back to stock Flink: logical type {} has no native "
+                        + "inputTypes mapping", operatorName, type);
+                return false;
+            }
+        }
+        return csvSinkPartitionKeysAllowed(node);
+    }
+
+    /**
+     * CSV 分区键门禁：分区目录值由 BucketAssigner 经 VectorBatchUtil::getValueAtAsStr 渲染，
+     * 该函数对 TIMESTAMP/DECIMAL/DOUBLE 的输出与 vanilla 不一致，因此只放行渲染结果一致的
+     * 列类型，其余回退，避免静默产出不同的目录与文件分布。
+     */
+    private static boolean csvSinkPartitionKeysAllowed(StreamNode node) {
+        String operatorName = node.getOperatorName();
+        try {
+            StreamOperator<?> operator = node.getOperator();
+            if (operator == null) {
+                LOG.info("CSV file sink {} falls back to stock Flink: cannot inspect partition keys",
+                        operatorName);
+                return false;
+            }
+            Object keysObj = ReflectionUtils.retrievePrivateField(operator, "partitionKeys");
+            if (!(keysObj instanceof List) || ((List<?>) keysObj).isEmpty()) {
+                // 无分区键：native 分区取值路径不参与，目录值渲染不影响结果。
+                return true;
+            }
+            int[] partitionIndexes = partitionIndexesOf(operator);
+            LogicalType[] inputTypes = collectInputLogicalTypes(node);
+            if (partitionIndexes == null || inputTypes == null) {
+                LOG.info("CSV file sink {} falls back to stock Flink: cannot resolve partition key types "
+                        + "(partition keys {})", operatorName, keysObj);
+                return false;
+            }
+            for (int index : partitionIndexes) {
+                if (index < 0 || index >= inputTypes.length) {
+                    LOG.info("CSV file sink {} falls back to stock Flink: partition key index {} is out of "
+                            + "range of the {} input columns", operatorName, index, inputTypes.length);
+                    return false;
+                }
+                LogicalType keyType = inputTypes[index];
+                if (!isNativePartitionValueRenderable(keyType)) {
+                    LOG.info("CSV file sink {} falls back to stock Flink: the native partition path renders "
+                            + "partition key column {} (logical type {}) differently from vanilla Flink",
+                            operatorName, index, keyType);
+                    return false;
+                }
+            }
+            LOG.info("CSV file sink {} uses the native partition path for partition keys {} (indices {})",
+                    operatorName, keysObj, Arrays.toString(partitionIndexes));
+            return true;
+        } catch (Exception e) {
+            LOG.warn("Cannot inspect partition keys of CSV file sink {}, defaulting to fallback",
+                    operatorName, e);
+            return false;
+        }
+    }
+
+    // BucketAssigner 持有的 RowDataPartitionComputer 上与 OperatorDescriptorHelper
+    // 同源的 partitionIndexes。
+    private static int[] partitionIndexesOf(StreamOperator<?> operator) {
+        Object bucketsBuilder = ReflectionUtils.retrievePrivateField(operator, "bucketsBuilder");
+        Object assigner = ReflectionUtils.retrievePrivateField(bucketsBuilder, "bucketAssigner");
+        Object computer = ReflectionUtils.retrievePrivateField(assigner, "computer");
+        return (int[]) ReflectionUtils.retrievePrivateField(computer, "partitionIndexes");
+    }
+
+    // 与 VectorBatchUtil::getValueAtAsStr 中产出 vanilla 等价文本的分支一致：
+    // VARCHAR/CHAR、INT/LONG、BOOLEAN；TIMESTAMP、DECIMAL、DOUBLE 不在此列。
+    private static boolean isNativePartitionValueRenderable(LogicalType type) {
+        return type instanceof VarCharType || type instanceof CharType
+                || type instanceof IntType || type instanceof BigIntType || type instanceof BooleanType;
+    }
+
+    // 取节点行输入（sink writer 收到的列）的逻辑类型；无 row serializer 时返回 null。
+    private static LogicalType[] collectInputLogicalTypes(StreamNode node) {
+        TypeSerializer<?>[] serializers = node.getTypeSerializersIn();
+        if (serializers == null) {
+            return null;
+        }
+        for (TypeSerializer<?> serializer : serializers) {
+            if (serializer instanceof AbstractRowDataSerializer) {
+                try {
+                    return ReflectionUtils.retrievePrivateField(serializer, "types");
+                } catch (RuntimeException e) {
+                    LOG.warn("Cannot read row types of CSV file sink input", e);
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    // 单字节 ASCII、非空、非 NUL：native 的 char 表示能无损承载的集合。
+    private static boolean isSingleAsciiChar(String value) {
+        return value != null && value.length() == 1
+                && value.charAt(0) != '\0' && value.charAt(0) <= 0x7F;
+    }
+
     private static boolean validateSink(String operatorName, StreamOperatorFactory operatorFactory) {
         if (!isSinkSupportNative) {
             return false;
         }
-        if (performanceMode && operatorName.contains("StreamingFileWriter")) {
+        if (jobHasCsvFileSink && requiresFlinkFileSink(operatorName, operatorFactory)
+                && !isFileSinkCsvNative) {
             return false;
         }
         if (!(operatorFactory instanceof SinkWriterOperatorFactory)) {
@@ -930,7 +1343,10 @@ public final class OmniGraphOverride {
                         getInputTypes(node);
                         continue;
                     } else {
-                        return false;
+                        // A terminal sink whose input is not RowData (e.g. "Sink: end" backed by a
+                        // PojoSerializer) is a pass-through and must not degrade the whole job to
+                        // STREAM; SQL-mode validateSink already accepts such non-Kafka sinks.
+                        continue;
                     }
                 }
                 if (isConstraintEnforcer(operatorName) || isStreamRecordTimestampInserter(operatorName)) {

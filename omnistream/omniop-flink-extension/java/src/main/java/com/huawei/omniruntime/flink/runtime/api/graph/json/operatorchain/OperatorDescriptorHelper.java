@@ -544,10 +544,18 @@ public class OperatorDescriptorHelper {
                     policy.put("kind", conf.getString("sink.partition-commit.policy.kind", ""));
                     partitionCommit.put("policy", policy);
                     description.put("partition-commit", partitionCommit);
+                    // 未显式设置 rolling-policy 时填入 Flink 的默认值：native 的
+                    // RollingPolicy 要求三参数均 > 0，空串会被 parse 成 0 导致 job FAILED。
+                    // inactivity-interval 才是 native 的滚动条件，check-interval 只调频率。
                     JSONObject rollingPolicy = new JSONObject();
-                    rollingPolicy.put("rollover-interval", conf.getString("sink.rolling-policy.rollover-interval", ""));
-                    rollingPolicy.put("check-interval", conf.getString("sink.rolling-policy.check-interval", ""));
-                    rollingPolicy.put("file-size", conf.getString("sink.rolling-policy.file-size", ""));
+                    rollingPolicy.put("file-size",
+                            conf.getString("sink.rolling-policy.file-size", "128 mb"));
+                    rollingPolicy.put("rollover-interval",
+                            conf.getString("sink.rolling-policy.rollover-interval", "30 min"));
+                    rollingPolicy.put("inactivity-interval",
+                            conf.getString("sink.rolling-policy.inactivity-interval", "30 min"));
+                    rollingPolicy.put("check-interval",
+                            conf.getString("sink.rolling-policy.check-interval", "1 min"));
                     description.put("rolling-policy", rollingPolicy);
                     JSONObject timeExtractor = new JSONObject();
                     timeExtractor.put("timestamp-pattern", conf.getString("partition.time-extractor.timestamp-pattern", ""));
@@ -576,16 +584,40 @@ public class OperatorDescriptorHelper {
                         }
                         description.put("nonPartitionIndexes", nonPartitionIndexes);
                     }
+                    // 分区列值为 NULL 或空串时落 partition.default-name；直接取
+                    // TableBucketAssigner 的 defaultPartValue，与 stock 用同一个值。
+                    Object defaultPartValue = ReflectionUtils.retrievePrivateField(computer, "defaultPartValue");
+                    description.put("partitionDefaultName", defaultPartValue instanceof String
+                            ? defaultPartValue : "__DEFAULT_PARTITION__");
+                    // inputTypes 决定 native 把 BinaryRowData 重建为几列，必须与
+                    // csvSpec.fields 同源：旧实现的类型分派漏掉 BOOLEAN/DECIMAL/INT/CHAR 时，
+                    // native 会少建一列并在取列时硬崩。两者统一走 extractInputLogicalTypes。
+                    String[] nativeInputTypes = nativeInputTypeNames(
+                            extractInputLogicalTypes(opConfig, userCodeClassloader));
                     JSONArray inputTypes = new JSONArray();
-                    for (StreamConfig.InputConfig in : opConfig.getInputs(userCodeClassloader)) {
-                        String[] parsed = parseTypeSerializer(((StreamConfig.NetworkInputConfig) in).getTypeSerializer());
-                        if ("Row".equals(parsed[0])) {
-                            new JSONArray(parsed[1]).forEach(fld -> inputTypes.put(((JSONObject)fld).getString("type")));
-                        } else {
-                            inputTypes.put(parsed[1]);
+                    if (nativeInputTypes != null) {
+                        for (String nativeType : nativeInputTypes) {
+                            inputTypes.put(nativeType);
+                        }
+                    } else {
+                        for (StreamConfig.InputConfig in : opConfig.getInputs(userCodeClassloader)) {
+                            String[] parsed = parseTypeSerializer(((StreamConfig.NetworkInputConfig) in).getTypeSerializer());
+                            if ("Row".equals(parsed[0])) {
+                                new JSONArray(parsed[1]).forEach(fld -> inputTypes.put(((JSONObject)fld).getString("type")));
+                            } else {
+                                inputTypes.put(parsed[1]);
+                            }
                         }
                     }
                     description.put("inputTypes", inputTypes);
+                    // format=csv 时下发 csvSpec，native 据此按 Jackson 契约输出，
+                    // 而不是走 legacy naive-text 路径。
+                    String tableFormat = conf.toMap().get("format");
+                    if ("csv".equals(tableFormat)) {
+                        description.put("format", "csv");
+                        description.put("csvSpec",
+                                buildCsvSpec(conf, opConfig, userCodeClassloader, nonPartitionFields));
+                    }
                     opDesc.setDescription(description.toString());
                 } catch (Exception e) {
                     LOG.warn("Failed to create StreamingFileWriter description", e);
@@ -702,6 +734,88 @@ public class OperatorDescriptorHelper {
         return rowFields;
     }
 
+    /**
+     * csvSpec.fields 与 native inputTypes 的同源 LogicalType[]；两者不一致会让 native
+     * 重建的列数少于编码器读取的列数而崩溃。
+     */
+    static LogicalType[] extractInputLogicalTypes(StreamConfig opConfig, ClassLoader userCodeClassloader) {
+        for (StreamConfig.InputConfig in : opConfig.getInputs(userCodeClassloader)) {
+            if (!(in instanceof StreamConfig.NetworkInputConfig)) {
+                continue;
+            }
+            TypeSerializer<?> ts = ((StreamConfig.NetworkInputConfig) in).getTypeSerializer();
+            if (ts instanceof RowDataSerializer) {
+                try {
+                    Field f = ts.getClass().getDeclaredField("types");
+                    f.setAccessible(true);
+                    return (LogicalType[]) f.get(ts);
+                } catch (NoSuchFieldException | IllegalAccessException e) {
+                    throw new IllegalStateException("Failed to extract CSV fields from RowDataSerializer", e);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 把 consumed logical types 映射成 native 认得的类型名。任一列没有对应名字时返回
+     * null，让调用方保持原行为——短列表正是 native 少建列的原因。
+     *
+     * <p>DECIMAL 必须带 precision（native 据此选 DECIMAL64/128）；TIMESTAMP_LTZ 不能带
+     * precision，否则 native 无法匹配。
+     */
+    public static String[] nativeInputTypeNames(LogicalType[] types) {
+        if (types == null) {
+            return null;
+        }
+        String[] names = new String[types.length];
+        for (int i = 0; i < types.length; i++) {
+            names[i] = nativeInputTypeName(types[i]);
+            if (names[i] == null) {
+                LOG.warn("CSV sink input column {} has logical type {} without a native inputTypes "
+                        + "mapping; keeping the legacy inputTypes", i, types[i]);
+                return null;
+            }
+        }
+        return names;
+    }
+
+    /**
+     * @return 单个 consumed logical type 对应的 native 类型名，null 表示 native 无法重建该列
+     *     （OmniGraphOverride 的 csvSinkRowTypeAllowed 用同一映射提前回退）。
+     */
+    public static String nativeInputTypeName(LogicalType type) {
+        if (type instanceof BigIntType) {
+            return "BIGINT";
+        }
+        if (type instanceof IntType) {
+            return "INTEGER";
+        }
+        if (type instanceof BooleanType) {
+            return "BOOLEAN";
+        }
+        if (type instanceof DoubleType) {
+            return "DOUBLE";
+        }
+        if (type instanceof VarCharType) {
+            return "VARCHAR";
+        }
+        if (type instanceof CharType) {
+            return "CHAR";
+        }
+        if (type instanceof DecimalType) {
+            DecimalType decimalType = (DecimalType) type;
+            return "DECIMAL(" + decimalType.getPrecision() + "," + decimalType.getScale() + ")";
+        }
+        if (type instanceof TimestampType) {
+            return "TIMESTAMP_WITHOUT_TIME_ZONE";
+        }
+        if (type instanceof LocalZonedTimestampType) {
+            return "TIMESTAMP_WITH_LOCAL_TIME_ZONE";
+        }
+        return null;
+    }
+
     private static JSONObject rewriteToOmniDatatypes(String description) {
         JSONObject jsonObject = new JSONObject();
         try {
@@ -710,5 +824,64 @@ public class OperatorDescriptorHelper {
             LOG.error("Description is not JSON format {}", description, e);
         }
         return jsonObject;
+    }
+
+    /**
+     * 构造下发给 native 的 csvSpec：fields 按输入列全序（含分区列），native 编码器用
+     * nonPartitionIndexes 选非分量子集；CSV 选项取自原始 table options（csv.* 前缀）。
+     */
+    private static JSONObject buildCsvSpec(Configuration conf, StreamConfig opConfig,
+                                          ClassLoader userCodeClassloader, int[] nonPartitionIndexes) {
+        JSONObject spec = new JSONObject();
+        spec.put("connector", "filesystem");
+        spec.put("format", "csv");
+
+        JSONArray fields = new JSONArray();
+        LogicalType[] types = extractInputLogicalTypes(opConfig, userCodeClassloader);
+        if (types != null) {
+            for (LogicalType t : types) {
+                JSONObject d = LogicalTypeDescriptor.createCsvFieldDescriptor(t);
+                fields.put(d != null ? d : LogicalTypeDescriptor.createJSONDescriptorUNRESOLVED(t));
+            }
+        }
+        spec.put("fields", fields);
+
+        JSONArray npi = new JSONArray();
+        if (nonPartitionIndexes != null) {
+            for (int i : nonPartitionIndexes) {
+                npi.put(i);
+            }
+        }
+        spec.put("nonPartitionIndexes", npi);
+
+        Map<String, String> opts = conf.toMap();
+        JSONObject csvOptions = new JSONObject();
+        csvOptions.put("fieldDelimiter",
+                firstCsvCharacter(org.apache.commons.lang3.StringEscapeUtils.unescapeJava(
+                        opts.getOrDefault("csv.field-delimiter", ","))));
+        csvOptions.put("disableQuoteCharacter",
+                Boolean.parseBoolean(opts.getOrDefault("csv.disable-quote-character", "false")));
+        csvOptions.put("quoteCharacter",
+                firstCsvCharacter(opts.getOrDefault("csv.quote-character", "\"")));
+        // escape-character / null-literal have no default; omit when absent so the
+        // native side treats them as "none" / empty.
+        String escape = opts.get("csv.escape-character");
+        if (escape != null) {
+            csvOptions.put("escapeCharacter", firstCsvCharacter(escape));
+        }
+        String nullLiteral = opts.get("csv.null-literal");
+        if (nullLiteral != null) {
+            csvOptions.put("nullLiteral", nullLiteral);
+        }
+        spec.put("csvOptions", csvOptions);
+        return spec;
+    }
+
+    // Flink 的 bulk CSV factory 只对分隔符做 unescape；quote/escape 直接取首字符。
+    private static String firstCsvCharacter(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            throw new IllegalArgumentException("CSV character option must not be empty");
+        }
+        return String.valueOf(raw.charAt(0));
     }
 }

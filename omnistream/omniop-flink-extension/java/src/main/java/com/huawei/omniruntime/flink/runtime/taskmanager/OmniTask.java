@@ -954,8 +954,9 @@ public class OmniTask extends Task {
 
     private OriginalTaskDataFetcher createAndStartRemoteDataFetcher(IndexedInputGate[] inputGates) throws IOException {
         if (isTaskNative()) {
-            String upStreamNativeStr = this.__taskInformation.getTaskConfiguration().getString("upStreamNative", "[]");
-            List<Boolean> upstreamNative = getUpstreamNative(upStreamNativeStr);
+            String upstreamNativeConfig =
+                    new StreamConfig(this.__taskInformation.getTaskConfiguration()).getUpstreamNative();
+            List<Boolean> upstreamNative = parseUpstreamNative(upstreamNativeConfig);
             if (upstreamNative.size() != inputGates.length) {
                 throw new IOException("Upstream engine metadata count " + upstreamNative.size()
                         + " does not match input gate count " + inputGates.length);
@@ -964,7 +965,7 @@ public class OmniTask extends Task {
             List<OmniLocalInputChannel> localInputChannels = new ArrayList<>();
             int index = 0;
             for (IndexedInputGate inputGate : inputGates) {
-                boolean upStreamTaskNative = upstreamNative.get(index++);
+                boolean upstreamTaskNative = upstreamNative.get(index++);
                 InputGateWithMetrics inputGateWithMetrics = (InputGateWithMetrics) inputGate;
 
                 int numberOfChannels = inputGateWithMetrics.getNumberOfInputChannels();
@@ -980,7 +981,7 @@ public class OmniTask extends Task {
                     if (inputChannel instanceof RemoteInputChannel) {
                         RemoteInputChannel remoteInputChannel = (RemoteInputChannel) inputChannel;
                         OmniRemoteInputChannel omniRemoteInputChannel = new OmniRemoteInputChannel(remoteInputChannel);
-                        if (!upStreamTaskNative) {
+                        if (!upstreamTaskNative) {
                             omniRemoteInputChannel.setFromOriginal(true);
                         }
                         remoteInputChannels.add(omniRemoteInputChannel);
@@ -1058,7 +1059,7 @@ public class OmniTask extends Task {
         }
     }
 
-    static List<Boolean> getUpstreamNative(String value) throws IOException {
+    static List<Boolean> parseUpstreamNative(String value) throws IOException {
         if (value == null) {
             throw new IOException("Missing upstream engine metadata");
         }

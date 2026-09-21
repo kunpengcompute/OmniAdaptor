@@ -386,8 +386,8 @@ public class OmniTaskExecutor extends TaskExecutor {
 
             taskInformationPOJO.setTaskType(jobType);
 
-            String upStreamNative = taskInformation.getTaskConfiguration().getString("upStreamNative", "[]");
-            taskInformationPOJO.setUpStreamNative(upStreamNative);
+            String upstreamNative = streamConfig.getUpstreamNative();
+            taskInformationPOJO.setUpstreamNative(upstreamNative);
 
             final String localRecoveryConfig =
                 getLocalRecoveryConfig(new TaskParam(tdd, tdd.getJobId(), taskInformation, jobInformation));

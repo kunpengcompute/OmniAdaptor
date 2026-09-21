@@ -13,14 +13,14 @@ class OmniTaskUpstreamMetadataTest {
     @Test
     void preservesGateOrderAndEmptySourceInputs() throws Exception {
         assertEquals(Arrays.asList(true, false, true),
-                OmniTask.getUpstreamNative(" [true, false, true] "));
-        assertEquals(Collections.emptyList(), OmniTask.getUpstreamNative("[]"));
+                OmniTask.parseUpstreamNative(" [true, false, true] "));
+        assertEquals(Collections.emptyList(), OmniTask.parseUpstreamNative("[]"));
     }
 
     @Test
     void rejectsMissingMalformedOrUnknownFlags() {
         for (String value : new String[] {null, "", "true", "[yes]", "[true,]", "[,false]", "[TRUE]"}) {
-            assertThrows(IOException.class, () -> OmniTask.getUpstreamNative(value));
+            assertThrows(IOException.class, () -> OmniTask.parseUpstreamNative(value));
         }
     }
 }

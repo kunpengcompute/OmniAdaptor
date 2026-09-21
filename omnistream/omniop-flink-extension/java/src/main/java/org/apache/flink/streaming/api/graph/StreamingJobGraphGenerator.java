@@ -647,13 +647,13 @@ public class StreamingJobGraphGenerator {
             StreamConfig config = new StreamConfig(vertexEntry.getValue().getConfiguration());
             List<JobEdge> jobEdges = jobVertex.getInputs();
             LOG.info("overrideVertices >> " + jobVertex.getName() + " jobEdge size is " + jobEdges.size());
-            List<Boolean> upStreamNative = new ArrayList<>(jobEdges.size());
+            List<Boolean> upstreamNative = new ArrayList<>(jobEdges.size());
             for (JobEdge jobEdge : jobEdges) {
                 JobVertex upstreamVertex = jobEdge.getSource().getProducer();
                 StreamConfig upstreamConfig = new StreamConfig(upstreamVertex.getConfiguration());
-                upStreamNative.add(upstreamConfig.isUseOmniEnabled());
+                upstreamNative.add(upstreamConfig.isUseOmniEnabled());
             }
-            config.setUpstreamNative(upStreamNative.toString());
+            config.setUpstreamNative(upstreamNative.toString());
         }
         
         // Build partition OmniFlag map for each vertex

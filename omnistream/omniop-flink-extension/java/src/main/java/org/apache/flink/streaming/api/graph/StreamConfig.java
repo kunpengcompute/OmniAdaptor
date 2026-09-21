@@ -145,6 +145,7 @@ public class StreamConfig implements Serializable {
     private static final String PARTITION_OMNI_FLAG_MAP = "partitionOmniFlagMap";
 
     private static final String CHECK_NATIVE = "checkNative";
+    private static final String UPSTREAM_NATIVE = "upstreamNative";
 
     private static final String MANAGED_MEMORY_FRACTION_PREFIX = "managedMemFraction.";
     private static final ConfigOption<Boolean> STATE_BACKEND_USE_MANAGED_MEMORY =
@@ -597,6 +598,14 @@ public class StreamConfig implements Serializable {
 
     public void setSplitWatermark(boolean enabled) {
         config.setBoolean(SPLIT_WATERMARK, enabled);
+    }
+
+    public String getUpstreamNative() {
+        return config.getString(UPSTREAM_NATIVE, "[]");
+    }
+
+    public void setUpstreamNative(String upstreamNative) {
+        config.setString(UPSTREAM_NATIVE, upstreamNative);
     }
 
     public void setJobType(int jobType) {

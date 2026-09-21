@@ -954,9 +954,17 @@ public class OmniTask extends Task {
 
     private OriginalTaskDataFetcher createAndStartRemoteDataFetcher(IndexedInputGate[] inputGates) throws IOException {
         if (isTaskNative()) {
+            String upStreamNativeStr = this.__taskInformation.getTaskConfiguration().getString("upStreamNative", "[]");
+            List<Boolean> upstreamNative = getUpstreamNative(upStreamNativeStr);
+            if (upstreamNative.size() != inputGates.length) {
+                throw new IOException("Upstream engine metadata count " + upstreamNative.size()
+                        + " does not match input gate count " + inputGates.length);
+            }
             List<OmniRemoteInputChannel> remoteInputChannels = new ArrayList<>();
             List<OmniLocalInputChannel> localInputChannels = new ArrayList<>();
+            int index = 0;
             for (IndexedInputGate inputGate : inputGates) {
+                boolean upStreamTaskNative = upstreamNative.get(index++);
                 InputGateWithMetrics inputGateWithMetrics = (InputGateWithMetrics) inputGate;
 
                 int numberOfChannels = inputGateWithMetrics.getNumberOfInputChannels();
@@ -971,20 +979,23 @@ public class OmniTask extends Task {
                     InputChannel inputChannel = inputGateWithMetrics.getChannel(i);
                     if (inputChannel instanceof RemoteInputChannel) {
                         RemoteInputChannel remoteInputChannel = (RemoteInputChannel) inputChannel;
-                        remoteInputChannels.add(new OmniRemoteInputChannel(remoteInputChannel));
-                    } else
-                        if (inputChannel instanceof LocalInputChannel) {
-                            LocalInputChannel localInputChannel = (LocalInputChannel) inputChannel;
-                            boolean targetIsNative =
-                                    checkIfTargetResultPartitionIsNative(localInputChannel.getPartitionId());
-                            if (!targetIsNative) {
-                                // target task is not native,  but myself is a native task, so we need to create
-                                // OmniLocalInputChannel to read data from original java task
-                                OmniLocalInputChannel omniLocalInputChannel =
-                                        createOmniLocalInputChannel(inputGateWithMetrics, localInputChannel);
-                                localInputChannels.add(omniLocalInputChannel);
-                            }
+                        OmniRemoteInputChannel omniRemoteInputChannel = new OmniRemoteInputChannel(remoteInputChannel);
+                        if (!upStreamTaskNative) {
+                            omniRemoteInputChannel.setFromOriginal(true);
                         }
+                        remoteInputChannels.add(omniRemoteInputChannel);
+                    } else if (inputChannel instanceof LocalInputChannel) {
+                        LocalInputChannel localInputChannel = (LocalInputChannel) inputChannel;
+                        boolean targetIsNative =
+                                checkIfTargetResultPartitionIsNative(localInputChannel.getPartitionId());
+                        if (!targetIsNative) {
+                            // target task is not native,  but myself is a native task, so we need to create
+                            // OmniLocalInputChannel to read data from original java task
+                            OmniLocalInputChannel omniLocalInputChannel =
+                                    createOmniLocalInputChannel(inputGateWithMetrics, localInputChannel);
+                            localInputChannels.add(omniLocalInputChannel);
+                        }
+                    }
                 }
             }
 
@@ -1045,6 +1056,29 @@ public class OmniTask extends Task {
         } else {
             throw new GeneralRuntimeException("OmniTaskReferenceCounter is null for partitionId: " + partitionId);
         }
+    }
+
+    static List<Boolean> getUpstreamNative(String value) throws IOException {
+        if (value == null) {
+            throw new IOException("Missing upstream engine metadata");
+        }
+        String text = value.trim();
+        if (!text.startsWith("[") || !text.endsWith("]")) {
+            throw new IOException("Invalid upstream engine metadata: " + value);
+        }
+        String body = text.substring(1, text.length() - 1).trim();
+        List<Boolean> result = new ArrayList<>();
+        if (body.isEmpty()) {
+            return result;
+        }
+        for (String entry : body.split(",", -1)) {
+            String flag = entry.trim();
+            if (!"true".equals(flag) && !"false".equals(flag)) {
+                throw new IOException("Invalid upstream engine flag: " + flag);
+            }
+            result.add(Boolean.valueOf(flag));
+        }
+        return result;
     }
 
     private void setRecoverInputStateFutureCompleted(RecoveredInputChannel recoveredInputChannel) {

@@ -81,7 +81,8 @@ public class TaskInformationPOJO {
 
     private String localRecoveryConfig = "";
 
-    // Default constructor
+    private String upStreamNative = "[]";
+
     public TaskInformationPOJO() {
     }
 
@@ -315,6 +316,14 @@ public class TaskInformationPOJO {
     }
     public void setTaskType(int taskType) {
         this.taskType = taskType;
+    }
+
+    public String getUpstreamNative() {
+        return upStreamNative;
+    }
+
+    public void setUpStreamNative(String upStreamNative) {
+        this.upStreamNative = upStreamNative;
     }
 
     public CheckpointConfigPOJO getCheckpointConfig() {

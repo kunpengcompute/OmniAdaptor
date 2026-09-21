@@ -61,6 +61,19 @@ public class RemoteDataFetcher implements Runnable {
         this.remoteInputChannels = remoteInputChannels;
     }
 
+    private void addExtraInfoToNative() throws IOException {
+        if (remoteInputChannels != null && remoteInputChannels.size() > 0) {
+            for (OmniRemoteInputChannel omniRemoteInputChannel : remoteInputChannels) {
+                if (omniRemoteInputChannel.getFromOriginal()) {
+                    if (!omniRemoteInputChannel.addExtraInfoToNativeRemoteInputChannel(nativeTaskRef)) {
+                        LOG.error("Failed to add extra information to native remote input channel");
+                        throw new IOException("Failed to add extra information to native remote input channel");
+                    }
+                }
+            }
+        }
+    }
+
 
     public void run() {
         Thread.currentThread().setName("RemoteDataFetcher-----> for task: " + taskName);
@@ -78,8 +91,9 @@ public class RemoteDataFetcher implements Runnable {
         }
     }
 
-    public void start() {
+    public void start() throws IOException {
         LOG.info("start RemoteDataFetcher thread......................................for {}", taskName);
+        addExtraInfoToNative();
         startRecycleBuffersThreadForRemote();
         remoteDataFetcherExecutorService.execute(this);
     }
@@ -112,6 +126,7 @@ public class RemoteDataFetcher implements Runnable {
                 try {
                     LOG.info("buildRemoteConnection for task: {} remotechannel = {}", taskName,
                             remoteInputChannel.getRemoteInputChannel());
+                    remoteInputChannel.getRemoteInputChannel().setNative(true);
                     remoteInputChannel.getRemoteInputChannel().requestSubpartition();
                     remoteInputChannel.setConnected(true);
                 } catch (IOException | InterruptedException e) {

@@ -540,16 +540,20 @@ public abstract class NettyMessage {
         final InputChannelID receiverId;
         
         final int credit;
+
+        final boolean isNative;
         
         PartitionRequest(
                 ResultPartitionID partitionId,
                 int queueIndex,
                 InputChannelID receiverId,
-                int credit) {
+                int credit,
+                boolean isNative) {
             this.partitionId = checkNotNull(partitionId);
             this.queueIndex = queueIndex;
             this.receiverId = checkNotNull(receiverId);
             this.credit = credit;
+            this.isNative = isNative;
         }
         
         @Override
@@ -562,6 +566,7 @@ public abstract class NettyMessage {
                         bb.writeInt(queueIndex);
                         receiverId.writeTo(bb);
                         bb.writeInt(credit);
+                        bb.writeBoolean(isNative);
                     };
             
             writeToChannel(
@@ -574,7 +579,7 @@ public abstract class NettyMessage {
                     + ExecutionAttemptID.getByteBufLength()
                     + Integer.BYTES
                     + InputChannelID.getByteBufLength()
-                    + Integer.BYTES);
+                    + Integer.BYTES + 1);
         }
         
         static PartitionRequest readFrom(ByteBuf buffer) {
@@ -585,8 +590,9 @@ public abstract class NettyMessage {
             int queueIndex = buffer.readInt();
             InputChannelID receiverId = InputChannelID.fromByteBuf(buffer);
             int credit = buffer.readInt();
+            boolean isNative = buffer.readBoolean();
             
-            return new PartitionRequest(partitionId, queueIndex, receiverId, credit);
+            return new PartitionRequest(partitionId, queueIndex, receiverId, credit, isNative);
         }
         
         @Override

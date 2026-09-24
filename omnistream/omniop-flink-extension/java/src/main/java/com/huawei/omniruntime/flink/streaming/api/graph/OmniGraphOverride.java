@@ -273,6 +273,17 @@ public final class OmniGraphOverride {
 
         JobVertex jobVertex = vertexEntry.getValue();
 
+        // Force source vertices to use the Flink path for fallback validation.
+        // This keeps the source boundary native while allowing downstream
+        // vertices to be validated independently for Omni execution.
+        String operatorName = vertexConfig.getOperatorName();
+        if (operatorName != null && isSource(operatorName)) {
+            LOG.info("validateVertexForOmniTask  false for source vertex: vertexID is {}, and vertexName {}",
+                    vertexID, operatorName);
+            vertexConfig.setUseOmniEnabled(false);
+            return false;
+        }
+
         if (validateVertexChainInfoForOmniTask(vertexID, chainInfos, chainedConfigs, jobVertex, vertexConfigs, jobType)) {
             LOG.info("validateVertexForOmniTask  true for : vertexID is {}, and vertexName {}", vertexID, vertexConfig.getOperatorName());
             vertexConfig.setUseOmniEnabled(true);

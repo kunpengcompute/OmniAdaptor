@@ -11,10 +11,6 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
-import com.huawei.omniruntime.flink.runtime.api.graph.json.descriptor.ResultPartitionIDPOJO;
-import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -26,11 +22,9 @@ import java.util.Optional;
  * @since 2025-04-27
  */
 public class OmniRemoteInputChannel {
-    private static final Logger LOG = LoggerFactory.getLogger(OmniLocalInputChannel.class);
     private RemoteInputChannel remoteInputChannel;
     private boolean isConnected = false;
     private boolean dataReceived = false;
-    private boolean fromOriginal = false;
 
     public OmniRemoteInputChannel(RemoteInputChannel remoteInputChannel) {
         this.remoteInputChannel = remoteInputChannel;
@@ -50,14 +44,6 @@ public class OmniRemoteInputChannel {
 
     public void setConnected(boolean connected) {
         isConnected = connected;
-    }
-
-    public void setFromOriginal(boolean fromOriginal) {
-        this.fromOriginal = fromOriginal;
-    }
-
-    public boolean getFromOriginal() {
-        return fromOriginal;
     }
 
     /**
@@ -119,21 +105,4 @@ public class OmniRemoteInputChannel {
         remoteInputChannel.resumeConsumption();
     }
 
-    public boolean addExtraInfoToNativeRemoteInputChannel(long nativeTaskRef) {
-        ResultPartitionIDPOJO resultPartitionIDPOJO = new ResultPartitionIDPOJO(remoteInputChannel.getPartitionId());
-        JSONObject jsonObject = new JSONObject(resultPartitionIDPOJO);
-        String parititonIdString = jsonObject.toString();
-        long nativeRemoteInputChannelRef = doAddExtraInfoToNativeRemoteInputChannel(nativeTaskRef, parititonIdString);
-        if(nativeRemoteInputChannelRef != -1) {
-            LOG.info("Successfully add extra info to native remote input channel with " +
-                            "channelIndex: {} nativeRemoteInputChannelRef = {}", remoteInputChannel.getChannelIndex(),
-                    nativeRemoteInputChannelRef);
-            return true;
-        } else {
-            LOG.error("Failed to add extra info to native remote input channel with channelIndex: {} ", remoteInputChannel.getChannelIndex());
-            return false;
-        }
-    }
-
-    public native long doAddExtraInfoToNativeRemoteInputChannel(long nativeTaskRef, String partitionIdString);
 }

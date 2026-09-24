@@ -928,10 +928,12 @@ public class OmniTask extends Task {
         }
     }
 
-    private void notifyChannelToOmni(IndexedInputGate[] inputGates) {
+    private void notifyChannelToOmni(IndexedInputGate[] inputGates) throws IOException {
         if (!isTaskNative()) {
             return;
         }
+        List<Boolean> upstreamNative = readUpstreamNative(
+                new StreamConfig(this.__taskInformation.getTaskConfiguration()), inputGates);
         for (IndexedInputGate inputGate : inputGates) {
             InputGateWithMetrics inputGateWithMetrics = (InputGateWithMetrics) inputGate;
             int numberOfChannels = inputGateWithMetrics.getNumberOfInputChannels();
@@ -940,7 +942,7 @@ public class OmniTask extends Task {
                 if (!(inputChannel instanceof LocalRecoveredInputChannel)) {
                     continue;
                 }
-                boolean targetIsNative = checkIfTargetResultPartitionIsNative(inputChannel.getPartitionId());
+                boolean targetIsNative = upstreamNative.get(inputGate.getGateIndex());
                 if (targetIsNative) {
                     continue;
                 }
@@ -954,18 +956,12 @@ public class OmniTask extends Task {
 
     private OriginalTaskDataFetcher createAndStartRemoteDataFetcher(IndexedInputGate[] inputGates) throws IOException {
         if (isTaskNative()) {
-            String upstreamNativeConfig =
-                    new StreamConfig(this.__taskInformation.getTaskConfiguration()).getUpstreamNative();
-            List<Boolean> upstreamNative = parseUpstreamNative(upstreamNativeConfig);
-            if (upstreamNative.size() != inputGates.length) {
-                throw new IOException("Upstream engine metadata count " + upstreamNative.size()
-                        + " does not match input gate count " + inputGates.length);
-            }
+            List<Boolean> upstreamNative = readUpstreamNative(
+                    new StreamConfig(this.__taskInformation.getTaskConfiguration()), inputGates);
             List<OmniRemoteInputChannel> remoteInputChannels = new ArrayList<>();
             List<OmniLocalInputChannel> localInputChannels = new ArrayList<>();
-            int index = 0;
             for (IndexedInputGate inputGate : inputGates) {
-                boolean upstreamTaskNative = upstreamNative.get(index++);
+                boolean upstreamTaskNative = upstreamNative.get(inputGate.getGateIndex());
                 InputGateWithMetrics inputGateWithMetrics = (InputGateWithMetrics) inputGate;
 
                 int numberOfChannels = inputGateWithMetrics.getNumberOfInputChannels();
@@ -981,14 +977,10 @@ public class OmniTask extends Task {
                     if (inputChannel instanceof RemoteInputChannel) {
                         RemoteInputChannel remoteInputChannel = (RemoteInputChannel) inputChannel;
                         OmniRemoteInputChannel omniRemoteInputChannel = new OmniRemoteInputChannel(remoteInputChannel);
-                        if (!upstreamTaskNative) {
-                            omniRemoteInputChannel.setFromOriginal(true);
-                        }
                         remoteInputChannels.add(omniRemoteInputChannel);
                     } else if (inputChannel instanceof LocalInputChannel) {
                         LocalInputChannel localInputChannel = (LocalInputChannel) inputChannel;
-                        boolean targetIsNative =
-                                checkIfTargetResultPartitionIsNative(localInputChannel.getPartitionId());
+                        boolean targetIsNative = upstreamTaskNative;
                         if (!targetIsNative) {
                             // target task is not native,  but myself is a native task, so we need to create
                             // OmniLocalInputChannel to read data from original java task
@@ -1057,6 +1049,24 @@ public class OmniTask extends Task {
         } else {
             throw new GeneralRuntimeException("OmniTaskReferenceCounter is null for partitionId: " + partitionId);
         }
+    }
+
+    static List<Boolean> readUpstreamNative(StreamConfig streamConfig, IndexedInputGate[] inputGates)
+            throws IOException {
+        List<Boolean> upstreamNative = parseUpstreamNative(streamConfig.getUpstreamNative());
+        if (upstreamNative.size() != inputGates.length) {
+            throw new IOException("Upstream engine metadata count " + upstreamNative.size()
+                    + " does not match input gate count " + inputGates.length);
+        }
+        boolean[] seen = new boolean[inputGates.length];
+        for (IndexedInputGate gate : inputGates) {
+            int gateIndex = gate.getGateIndex();
+            if (gateIndex < 0 || gateIndex >= seen.length || seen[gateIndex]) {
+                throw new IOException("Invalid or duplicate physical input gate index: " + gateIndex);
+            }
+            seen[gateIndex] = true;
+        }
+        return upstreamNative;
     }
 
     static List<Boolean> parseUpstreamNative(String value) throws IOException {

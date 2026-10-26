@@ -24,7 +24,7 @@ import java.util.Set;
 
 public class ValidateWindowJoinOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateWindowJoinOPStrategy.class);
-    private static final Set<String> SUPPORT_JOIN_TYPE = new HashSet<>(Arrays.asList("InnerJoin"));
+    private static final Set<String> SUPPORT_JOIN_TYPE = new HashSet<>(Arrays.asList("InnerJoin", "LeftOuterJoin"));
     private static final Set<String> SUPPORT_TIME_TYPE = new HashSet<>(Collections.singletonList("event"));
     private static final Set<String> SUPPORT_ON_CONDITION_DATA_TYPE = new HashSet<>(Arrays.asList("INTEGER", "INT", "STRING", "BIGINT"));
     private static final Set<String> SUPPORT_NON_EQUI_OPERATOR = new HashSet<>(Arrays.asList(

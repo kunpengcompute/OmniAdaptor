@@ -211,6 +211,7 @@ public class StreamExecWindowJoin extends ExecNodeBase<RowData>
         jsonMap.put("filterNulls", joinSpec.getFilterNulls());
         jsonMap.put("nonEquiCondition", nonEquiConditionMap);
         jsonMap.put("joinType", joinType.toString());
+        jsonMap.put("filterNulls", filterNulls);
         jsonMap.put("leftWindowing", leftWindowSpec.toString());
         jsonMap.put("leftTimeType", leftWindowing.isRowtime() ? "event" : "processing");
         jsonMap.put("leftTimeAttributeType", leftTypeName);

@@ -208,7 +208,6 @@ public class StreamExecWindowJoin extends ExecNodeBase<RowData>
         jsonMap.put("outputTypes", outputTypeList);
         jsonMap.put("leftJoinKey", leftJoinKey);
         jsonMap.put("rightJoinKey", rightJoinKey);
-        jsonMap.put("filterNulls", joinSpec.getFilterNulls());
         jsonMap.put("nonEquiCondition", nonEquiConditionMap);
         jsonMap.put("joinType", joinType.toString());
         jsonMap.put("filterNulls", filterNulls);

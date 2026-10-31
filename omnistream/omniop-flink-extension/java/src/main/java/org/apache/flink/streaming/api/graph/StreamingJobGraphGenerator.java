@@ -607,6 +607,10 @@ public class StreamingJobGraphGenerator {
     private void overrideVertices() {
         // The input para is the entire job chain.
         // the member jobType, taskTypes, operatorTypes in class OmniGraphOverride is assigned value by the method.
+        // Reset per-job static state first, so state left by a previous job (e.g. an early-return
+        // fallback branch like the VALUES BINARY/VARBINARY one at line 636-643 that skips cleanup)
+        // cannot leak into the current job.
+        OmniGraphOverride.clearTypeInfo();
         OmniGraphOverride.generateTypeInfo(chainInfos);
         JobType jobType = OmniGraphOverride.getJobType();
         if (jobType.equals(JobType.NULL) || jobType.equals(JobType.SQL_STREAM)) {

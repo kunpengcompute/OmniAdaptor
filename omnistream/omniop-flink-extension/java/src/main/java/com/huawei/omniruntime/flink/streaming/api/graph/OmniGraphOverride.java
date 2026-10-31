@@ -108,6 +108,7 @@ public final class OmniGraphOverride {
 
 
     private static final Set<String> SUPPORT_OP_NAME = new HashSet<>();
+    private static final Set<String> SUPPORT_OP_NAME_BASELINE = new HashSet<>();
     private static final Set<String> OP_NAME_OF_SQL = new HashSet<>();
     private static final Set<String> VALID_PARTITION_NAMES = new HashSet<>(
             Arrays.asList("ForwardPartitioner", "KeyGroupStreamPartitioner", "RescalePartitioner", "RebalancePartitioner",
@@ -187,6 +188,10 @@ public final class OmniGraphOverride {
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",
                 "WindowTableFunction",
                 "StreamRecordTimestampInserter", "ConstraintEnforcer"));
+        // Snapshot the baseline whitelist determined by performanceMode, so that setStateBackend()/setNext()
+        // restrictions can be reset per job. Must be taken inside the static block AFTER SUPPORT_OP_NAME is
+        // populated (field initializers would capture the still-empty set).
+        SUPPORT_OP_NAME_BASELINE.addAll(SUPPORT_OP_NAME);
     }
 
     private static boolean isSourceSupportNative = true;
@@ -630,7 +635,20 @@ public final class OmniGraphOverride {
     }
 
     public static void clearTypeInfo() {
+        jobType = JobType.NULL;
+        taskTypes.clear();
         operatorTypes.clear();
+        supportTaskFallback = true;
+        isSourceSupportNative = true;
+        isSinkSupportNative = true;
+        isConstraintEnforcerSupportNative = true;
+        isStreamRecordTimestampInserterSupportNative = true;
+        resetSupportedOpNames();
+    }
+
+    private static void resetSupportedOpNames() {
+        SUPPORT_OP_NAME.clear();
+        SUPPORT_OP_NAME.addAll(SUPPORT_OP_NAME_BASELINE);
     }
 
     public static JobType getJobType(Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {

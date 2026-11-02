@@ -33,6 +33,7 @@ public class ValidateOperatorStrategyFactory {
         strategyMap.put("Deduplicate", new ValidateDeduplicateOPStrategy());
         strategyMap.put("WatermarkAssigner", new ValidateWatermarkOPStrategy());
         strategyMap.put("Rank", new ValidateRankOPStrategy());
+        strategyMap.put("Limit", new ValidateLimitOPStrategy());
         strategyMap.put("WindowTableFunction", new ValidateWindowTableFunctionOPStrategy());
     }
 

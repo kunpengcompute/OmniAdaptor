@@ -98,9 +98,15 @@ class PartitionRequestServerHandler extends SimpleChannelInboundHandler<NettyMes
                     boolean isNative = checkIfCreditBasedSequenceNumberingViewReaderIsNative(request.partitionId);
 
                     if (isNative) {
-                        reader =
-                                new OmniCreditBasedSequenceNumberingViewReader(
-                                        request.receiverId, request.credit, outboundQueue);
+                        if (request.isNative) {
+                            reader =
+                                    new OmniCreditBasedSequenceNumberingViewReader(
+                                            request.receiverId, request.credit, outboundQueue, true);
+                        } else {
+                            reader =
+                                    new OmniCreditBasedSequenceNumberingViewReader(
+                                            request.receiverId, request.credit, outboundQueue, false);
+                        }
                     } else {
                         reader =
                                 new CreditBasedSequenceNumberingViewReader(

@@ -57,7 +57,7 @@ public class OriginalTaskDataFetcher {
         }
     }
 
-    public void createAndStartRemoteDataFetcher(List<OmniRemoteInputChannel> remoteInputChannels) {
+    public void createAndStartRemoteDataFetcher(List<OmniRemoteInputChannel> remoteInputChannels) throws IOException {
         if (jobType == JobType.SQL) {
             remoteDataFetcher = new RemoteDataFetcher(nativeTaskRef, taskName, jobType, remoteInputChannels);
         } else

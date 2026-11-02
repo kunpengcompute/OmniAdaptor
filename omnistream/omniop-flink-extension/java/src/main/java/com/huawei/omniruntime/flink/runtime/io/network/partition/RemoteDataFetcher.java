@@ -62,7 +62,6 @@ public class RemoteDataFetcher implements Runnable {
         this.remoteInputChannels = remoteInputChannels;
     }
 
-
     public void run() {
         Thread.currentThread().setName("RemoteDataFetcher-----> for task: " + taskName);
         registerRemoteDataFetcherToNative(nativeTaskRef);
@@ -79,7 +78,7 @@ public class RemoteDataFetcher implements Runnable {
         }
     }
 
-    public void start() {
+    public void start() throws IOException {
         LOG.info("start RemoteDataFetcher thread......................................for {}", taskName);
         startRecycleBuffersThreadForRemote();
         remoteDataFetcherExecutorService.execute(this);
@@ -113,6 +112,7 @@ public class RemoteDataFetcher implements Runnable {
                 try {
                     LOG.info("buildRemoteConnection for task: {} remotechannel = {}", taskName,
                             remoteInputChannel.getRemoteInputChannel());
+                    remoteInputChannel.getRemoteInputChannel().setNative(true);
                     remoteInputChannel.getRemoteInputChannel().requestSubpartition();
                     remoteInputChannel.setConnected(true);
                 } catch (IOException | InterruptedException e) {

@@ -642,11 +642,19 @@ public class StreamingJobGraphGenerator {
                 validateRes = false;
             }
         }
-        if (!validateRes && jobType.equals(JobType.SQL) && !OmniGraphOverride.isSupportTaskFallback()) {
-            for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
-                StreamConfig vertexConfig = new StreamConfig(vertexEntry.getValue().getConfiguration());
-                vertexConfig.setUseOmniEnabled(false);
+
+        for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+            JobVertex jobVertex = vertexEntry.getValue();
+            StreamConfig config = new StreamConfig(vertexEntry.getValue().getConfiguration());
+            List<JobEdge> jobEdges = jobVertex.getInputs();
+            LOG.info("overrideVertices >> " + jobVertex.getName() + " jobEdge size is " + jobEdges.size());
+            List<Boolean> upstreamNative = new ArrayList<>(jobEdges.size());
+            for (JobEdge jobEdge : jobEdges) {
+                JobVertex upstreamVertex = jobEdge.getSource().getProducer();
+                StreamConfig upstreamConfig = new StreamConfig(upstreamVertex.getConfiguration());
+                upstreamNative.add(upstreamConfig.isUseOmniEnabled());
             }
+            config.setUpstreamNative(upstreamNative.toString());
         }
         
         // Build partition OmniFlag map for each vertex

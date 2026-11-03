@@ -156,7 +156,11 @@ public class OperatorChainDescriptorHelper {
                 operatorFactory.getStreamOperatorClass(userCodeClassloader).getCanonicalName());
         fillBasicOperatorDescriptions(opDesc, operatorFactory, operatorConfig, userCodeClassloader);
         if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SimpleInputFormatOperatorFactory) {
-            LOG.info("operatorFactory is {}", operatorFactory.getClass().getCanonicalName());
+            // VALUES-based sources: the full JSON description injected by CommonExecValues
+            // (format=values, tuples, outputTypes, outputNames, batch) is passed through verbatim
+            // to the native side by fillBasicOperatorDescriptions above.
+            LOG.info("operatorFactory is {} (VALUES source description passed through)",
+                    operatorFactory.getClass().getCanonicalName());
         } else if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SourceOperatorFactory) {
             LOG.info("operatorFactory is {}", operatorFactory.getClass().getCanonicalName());
             SourceOperatorFactory<?> sourceOperatorFactory = operatorConfig.getStreamOperatorFactory(userCodeClassloader);

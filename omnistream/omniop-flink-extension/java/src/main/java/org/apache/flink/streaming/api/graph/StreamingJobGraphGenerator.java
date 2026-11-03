@@ -607,6 +607,10 @@ public class StreamingJobGraphGenerator {
     private void overrideVertices() {
         // The input para is the entire job chain.
         // the member jobType, taskTypes, operatorTypes in class OmniGraphOverride is assigned value by the method.
+        // Reset per-job static state first, so state left by a previous job (e.g. an early-return
+        // fallback branch like the VALUES BINARY/VARBINARY one at line 636-643 that skips cleanup)
+        // cannot leak into the current job.
+        OmniGraphOverride.clearTypeInfo();
         OmniGraphOverride.generateTypeInfo(chainInfos);
         JobType jobType = OmniGraphOverride.getJobType();
         if (jobType.equals(JobType.NULL) || jobType.equals(JobType.SQL_STREAM)) {
@@ -630,6 +634,17 @@ public class StreamingJobGraphGenerator {
         OmniGraphOverride.setdataStreamLowParaMode(dataStreamLowParaMode);
 
         checkSourceOperator(jobType);
+
+        // BINARY/VARBINARY 驱动 VALUES 链时，Java→native 混合链路（createOutputBatch 等）尚不完整，
+        // 整作业回退 Flink 保证正确输出（与"BINARY 一律回退 Java"决策一致，且不改 SINK 白名单）。
+        if (jobType.equals(JobType.SQL) && OmniGraphOverride.isJobContainsValuesBinaryChain(chainInfos)) {
+            LOG.info("Job contains a VALUES source with BINARY/VARBINARY output, fall back the whole job to Flink.");
+            for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+                StreamConfig vertexConfig = new StreamConfig(vertexEntry.getValue().getConfiguration());
+                vertexConfig.setUseOmniEnabled(false);
+            }
+            return;
+        }
 
         boolean validateRes = true;
         boolean shouldDoSpiltWatermark = false;

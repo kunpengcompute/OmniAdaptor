@@ -157,6 +157,39 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>read-omni-stream-version</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <exportAntProperties>true</exportAntProperties>
+                            <target>
+                                <loadfile property="omni.stream.version.raw" srcFile="${project.basedir}/../../../config.conf">
+                                    <filterchain>
+                                        <linecontains>
+                                            <contains value="OMNI_STREAM_VERSION="/>
+                                        </linecontains>
+                                        <tokenfilter>
+                                            <replaceregex pattern="^[ \t]*OMNI_STREAM_VERSION=['&quot;]?([^'&quot;\t#]+).*$" replace="\1"/>
+                                        </tokenfilter>
+                                        <striplinebreaks/>
+                                        <trim/>
+                                    </filterchain>
+                                </loadfile>
+                                <property name="omni.stream.version" value="${omni.stream.version.raw}"/>
+                                <echo message="OMNI_STREAM_VERSION=${omni.stream.version}"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.22.2</version>
             </plugin>
@@ -200,7 +233,7 @@
                                 <artifactItem>
                                     <groupId>com.huawei.boostkit.flink</groupId>
                                     <artifactId>omni-table-planer</artifactId>
-                                    <version>${project.version}</version>
+                                    <version>${project.parent.version}</version>
                                     <type>jar</type>
                                     <overWrite>true</overWrite>
                                     <destFileName>omni-flink-table-planner.jar</destFileName>

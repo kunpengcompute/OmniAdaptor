@@ -149,6 +149,27 @@
     ],
     "not_supported_list": []
   },
+  "WindowTableFunction": {
+    "is_supported": true,
+    "supported_list": [
+      "BOOLEAN",
+      "INT",
+      "STRING",
+      "BIGINT",
+      "DECIMAL64",
+      "DECIMAL128",
+      "VARCHAR",
+      "VARCHAR(9)",
+      "VARCHAR(2147483647)",
+      "VARCHAR(2000)",
+      "TIMESTAMP(0)",
+      "TIMESTAMP(1)",
+      "TIMESTAMP(2)",
+      "TIMESTAMP(3)",
+      "TIMESTAMP_LTZ(3)"
+    ],
+    "not_supported_list": []
+  },
   "GroupWindowAggregate": {
     "is_supported": true,
     "supported_list": [

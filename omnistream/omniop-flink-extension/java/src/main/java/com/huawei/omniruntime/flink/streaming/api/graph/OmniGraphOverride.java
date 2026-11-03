@@ -16,6 +16,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.AbstractValidateOperatorStrategy;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateCalcOPStrategy;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateOperatorStrategyFactory;
+import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateValuesOPStrategy;
 import com.huawei.omniruntime.flink.utils.DescriptionUtil;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
 
@@ -107,6 +108,7 @@ public final class OmniGraphOverride {
 
 
     private static final Set<String> SUPPORT_OP_NAME = new HashSet<>();
+    private static final Set<String> SUPPORT_OP_NAME_BASELINE = new HashSet<>();
     private static final Set<String> OP_NAME_OF_SQL = new HashSet<>();
     private static final Set<String> VALID_PARTITION_NAMES = new HashSet<>(
             Arrays.asList("ForwardPartitioner", "KeyGroupStreamPartitioner", "RescalePartitioner", "RebalancePartitioner",
@@ -177,6 +179,8 @@ public final class OmniGraphOverride {
                     "LocalWindowAggregate",
                     "WatermarkAssigner",
                     "Rank",
+                    "Limit",
+                    "WindowTableFunction",
                     "StreamRecordTimestampInserter",
                     "ConstraintEnforcer"));
         }
@@ -185,7 +189,11 @@ public final class OmniGraphOverride {
                 "GlobalGroupAggregate",
                 "IncrementalGroupAggregate", "Join", "LookupJoin", "WindowAggregate", "WindowJoin", "GroupWindowAggregate",
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",
-                "StreamRecordTimestampInserter", "ConstraintEnforcer"));
+                "Limit", "WindowTableFunction", "StreamRecordTimestampInserter", "ConstraintEnforcer"));                
+        // Snapshot the baseline whitelist determined by performanceMode, so that setStateBackend()/setNext()
+        // restrictions can be reset per job. Must be taken inside the static block AFTER SUPPORT_OP_NAME is
+        // populated (field initializers would capture the still-empty set).
+        SUPPORT_OP_NAME_BASELINE.addAll(SUPPORT_OP_NAME);
     }
 
     private static boolean isSourceSupportNative = true;
@@ -629,7 +637,20 @@ public final class OmniGraphOverride {
     }
 
     public static void clearTypeInfo() {
+        jobType = JobType.NULL;
+        taskTypes.clear();
         operatorTypes.clear();
+        supportTaskFallback = true;
+        isSourceSupportNative = true;
+        isSinkSupportNative = true;
+        isConstraintEnforcerSupportNative = true;
+        isStreamRecordTimestampInserterSupportNative = true;
+        resetSupportedOpNames();
+    }
+
+    private static void resetSupportedOpNames() {
+        SUPPORT_OP_NAME.clear();
+        SUPPORT_OP_NAME.addAll(SUPPORT_OP_NAME_BASELINE);
     }
 
     public static JobType getJobType(Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {
@@ -881,11 +902,13 @@ public final class OmniGraphOverride {
         if (!isSourceSupportNative) {
             return false;
         }
-        // VALUES-based sources (SimpleInputFormatOperatorFactory) are not supported
-        // in native SQL execution because OmniStream does not handle them
+        // VALUES-based sources (SimpleInputFormatOperatorFactory): the description is injected by
+        // CommonExecValues during planning (format=values, tuples, outputTypes, outputNames, batch).
+        // They are executed natively only when the description is complete and every output type is
+        // within the native VALUES whitelist; otherwise fall back to Flink.
         if (operatorFactory instanceof SimpleInputFormatOperatorFactory) {
-            LOG.info("validateSource: VALUES-based source (SimpleInputFormatOperatorFactory) is not supported for native execution");
-            return false;
+            Map<String, Object> jsonMap = toJsonMap(operatorDescription);
+            return jsonMap != null && new ValidateValuesOPStrategy().executeValidateOperator(jsonMap);
         }
         if (!operatorDescription.contains("originDescription")) {
             return true;
@@ -908,6 +931,70 @@ public final class OmniGraphOverride {
         }
         return jsonMap.containsKey("watermarkStrategy") && (jsonMap.get("watermarkStrategy") instanceof String)
                 && !((String) jsonMap.get("watermarkStrategy")).isEmpty();
+    }
+
+    /**
+     * Checks whether the chained node list contains a VALUES-based source
+     * (SimpleInputFormatOperatorFactory, i.e. the StreamExecValues InputFormat source).
+     */
+    private static boolean containsValuesSource(List<StreamNode> chainedNode) {
+        for (StreamNode node : chainedNode) {
+            if (node.getOperatorFactory() instanceof SimpleInputFormatOperatorFactory) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks whether any operator in the chained node list declares a BINARY/VARBINARY output type.
+     *
+     * <p>Flink restructures VALUES rows containing non-literal expressions (e.g. CAST) into a
+     * LogicalValues.createOneRow seed plus Calc projections, so the BINARY/VARBINARY columns may
+     * live in the downstream Calc nodes rather than in the VALUES source itself. The native Calc
+     * codegen cannot evaluate BINARY/VARBINARY literals (would hang), so such a chain must fall
+     * back to Flink.
+     */
+    private static boolean chainContainsBinaryOrVarbinaryOutput(List<StreamNode> chainedNode) {
+        for (StreamNode node : chainedNode) {
+            String operatorDescription = node.getOperatorDescription();
+            if (operatorDescription == null || operatorDescription.trim().isEmpty()) {
+                continue;
+            }
+            Map<String, Object> jsonMap = toJsonMap(operatorDescription);
+            if (jsonMap == null || !(jsonMap.get("outputTypes") instanceof List)) {
+                continue;
+            }
+            for (Object typeObj : (List<?>) jsonMap.get("outputTypes")) {
+                if (!(typeObj instanceof String)) {
+                    continue;
+                }
+                String type = AbstractValidateOperatorStrategy.stripNotNull((String) typeObj).trim();
+                if (type.startsWith("BINARY") || type.startsWith("VARBINARY")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks whether the whole job contains a VALUES-driven chain with BINARY/VARBINARY output.
+     *
+     * <p>Such a job would otherwise run in Java→native mixed mode (VALUES vertex falls back while
+     * the Sink stays native), where the native Java-RowData→VectorBatch conversion
+     * (OmniAbstractStreamTaskNetworkInput::createOutputBatch) is incomplete and crashes. The whole
+     * job must fall back to Flink to produce correct output.
+     */
+    public static boolean isJobContainsValuesBinaryChain(
+            Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {
+        for (StreamingJobGraphGenerator.OperatorChainInfo chainInfo : chainInfos.values()) {
+            List<StreamNode> chainedNode = chainInfo.getAllChainedNodes();
+            if (containsValuesSource(chainedNode) && chainContainsBinaryOrVarbinaryOutput(chainedNode)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Map<String, Object> toJsonMap(String operatorDescription) {

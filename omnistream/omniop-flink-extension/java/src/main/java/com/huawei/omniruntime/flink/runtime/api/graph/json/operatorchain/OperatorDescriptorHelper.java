@@ -38,7 +38,9 @@ import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.file.src.FileSource;
 import org.apache.flink.connector.file.src.impl.StreamFormatAdapter;
+import org.apache.flink.connector.file.src.reader.BulkFormat;
 import org.apache.flink.connector.file.src.reader.StreamFormat;
+import org.apache.flink.connector.file.table.LimitableBulkFormat;
 import org.apache.flink.connector.file.table.RowDataPartitionComputer;
 import org.apache.flink.formats.csv.CsvReaderFormat;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
@@ -105,9 +107,12 @@ public class OperatorDescriptorHelper {
                 operatorFactory.getStreamOperatorClass(userCodeClassloader).getCanonicalName());
         fillBasicOperatorDescriptions(opDesc, operatorFactory, operatorConfig, userCodeClassloader);
         if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SimpleInputFormatOperatorFactory) {
-            LOG.info("operatorFactory is {}", operatorFactory.getClass().getCanonicalName());
-            // Add format field for VALUES-based sources to prevent native crash
-            // when the source description is sent to OmniStream native code
+            // VALUES-based sources: the full JSON description (format=values, tuples, outputTypes,
+            // outputNames, batch) is injected by CommonExecValues during planning and carried by the
+            // StreamConfig, so it is passed through verbatim to the native side. The format field is
+            // only ensured as a defensive fallback for non-injected legacy InputFormat sources.
+            LOG.info("operatorFactory is {} (VALUES source description passed through)",
+                    operatorFactory.getClass().getCanonicalName());
             String currentDesc = opDesc.getDescription();
             if (currentDesc != null && !currentDesc.isEmpty()) {
                 try {
@@ -117,7 +122,7 @@ public class OperatorDescriptorHelper {
                         opDesc.setDescription(descJson.toString());
                     }
                 } catch (Exception e) {
-                    LOG.warn("Failed to add format field to VALUES source description", e);
+                    LOG.warn("Failed to ensure format field in VALUES source description", e);
                 }
             }
         } else if (operatorFactory instanceof org.apache.flink.streaming.api.operators.SourceOperatorFactory) {
@@ -309,7 +314,15 @@ public class OperatorDescriptorHelper {
 
     private static void handleCsvReaderFormat(SourceOperatorFactory<?> sourceOperatorFactory, OperatorPOJO opDesc) {
         FileSource fileSource = ReflectionUtils.retrievePrivateField(sourceOperatorFactory, "source");
-        StreamFormatAdapter streamFormatAdapter = ReflectionUtils.retrievePrivateField(fileSource, "readerFormat");
+        BulkFormat<?, ?> readerFormat = ReflectionUtils.retrievePrivateField(fileSource, "readerFormat");
+        // The planner pushes a stream-side LIMIT into the file scan (the plan shows
+        // TableSourceScan(..., limit=[n])), which wraps the reader format in
+        // LimitableBulkFormat. Unwrap it to reach the CSV stream format; the limit
+        // itself is re-enforced by the downstream Limit(Rank) operator.
+        if (readerFormat instanceof LimitableBulkFormat) {
+            readerFormat = ReflectionUtils.retrievePrivateField(readerFormat, "format");
+        }
+        StreamFormatAdapter streamFormatAdapter = (StreamFormatAdapter) readerFormat;
         StreamFormat streamFormat = ReflectionUtils.retrievePrivateField(streamFormatAdapter, "streamFormat");
         if (streamFormat instanceof CsvReaderFormat) {
             org.apache.flink.core.fs.Path[] inputPaths = ReflectionUtils.retrievePrivateField(fileSource, "inputPaths");

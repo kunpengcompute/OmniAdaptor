@@ -66,7 +66,7 @@ public class TNELLibrary {
                 LOG.error("load so file {} failed, exception : {}", filePath, ex);
             }
         }
-        System.loadLibrary("tnel");
+        System.loadLibrary("boostkit-omnistream");
 
         LOG.info("Loading Task Native Execution Library");
         initialize();

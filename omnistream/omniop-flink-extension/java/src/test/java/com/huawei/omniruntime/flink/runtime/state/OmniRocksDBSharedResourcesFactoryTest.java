@@ -47,7 +47,7 @@ class OmniRocksDBSharedResourcesFactoryTest {
     }
 
     @Test
-    void sharesSlotPoolAndReleasesBudgetOnlyAfterLastLease() throws Exception {
+    void sharesSlotPoolWithoutReservingMemoryAndReleasesOnlyAfterLastLease() throws Exception {
         MemoryManager manager = MemoryManager.create(SLOT_BYTES, 32768);
         AtomicInteger allocations = new AtomicInteger();
         AtomicInteger releases = new AtomicInteger();
@@ -61,15 +61,66 @@ class OmniRocksDBSharedResourcesFactoryTest {
                 OmniRocksDBSharedResourcesFactory.acquire(manager, 0.5, config, allocator);
         assertSame(a.getResourceHandle(), b.getResourceHandle());
         assertEquals(1, allocations.get());
-        assertEquals(SLOT_BYTES / 2, manager.availableMemory());
+        assertEquals(SLOT_BYTES / 2, a.getSize());
+        assertEquals(SLOT_BYTES / 2, a.getResourceHandle().getTotalMemoryBytes());
+        assertEquals(SLOT_BYTES, manager.availableMemory());
         a.close();
         assertEquals(0, releases.get());
         assertTrue(b.getResourceHandle().getHandle() > 0);
+        assertEquals(SLOT_BYTES, manager.availableMemory());
         b.close();
         assertEquals(1, releases.get());
         assertEquals(SLOT_BYTES, manager.availableMemory());
         assertTrue(manager.verifyEmpty());
         manager.shutdown();
+    }
+
+    @Test
+    void coexistsWithJavaManagedPoolInEitherAllocationOrder() throws Exception {
+        for (boolean nativeFirst : new boolean[] {true, false}) {
+            MemoryManager manager = MemoryManager.create(SLOT_BYTES, 32768);
+            AtomicInteger nativeAllocations = new AtomicInteger();
+            AtomicInteger nativeReleases = new AtomicInteger();
+            AtomicInteger javaReleases = new AtomicInteger();
+            OmniRocksDBMemoryConfiguration config = managed();
+            LongFunctionWithException<OmniRocksDBSharedResources, Exception> nativeAllocator = size ->
+                    new OmniRocksDBSharedResources(nativeAllocations.incrementAndGet(), size, config,
+                            handle -> nativeReleases.incrementAndGet());
+            OpaqueMemoryResource<OmniRocksDBSharedResources> nativeLease = nativeFirst
+                    ? OmniRocksDBSharedResourcesFactory.acquire(manager, 1, config, nativeAllocator)
+                    : null;
+            // Use the Java RocksDB resource ID and reservation API without loading RocksDB JNI.
+            try (OpaqueMemoryResource<AutoCloseable> javaLease =
+                    manager.getSharedMemoryResourceForManagedMemory(
+                            "state-rocks-managed-memory",
+                            size -> (AutoCloseable) () -> javaReleases.incrementAndGet(), 1)) {
+                if (!nativeFirst) {
+                    nativeLease = OmniRocksDBSharedResourcesFactory.acquire(
+                            manager, 1, config, nativeAllocator);
+                }
+                assertEquals(SLOT_BYTES, javaLease.getSize());
+                assertEquals(SLOT_BYTES, nativeLease.getSize());
+                assertEquals(0, manager.availableMemory());
+                try (OpaqueMemoryResource<OmniRocksDBSharedResources> secondNativeLease =
+                        OmniRocksDBSharedResourcesFactory.acquire(manager, 1, config, nativeAllocator)) {
+                    assertSame(nativeLease.getResourceHandle(), secondNativeLease.getResourceHandle());
+                    assertEquals(1, nativeAllocations.get());
+                    nativeLease.close();
+                    assertEquals(0, nativeReleases.get());
+                }
+                assertEquals(1, nativeReleases.get());
+                assertEquals(0, javaReleases.get());
+                assertEquals(0, manager.availableMemory());
+            } finally {
+                if (nativeLease != null) {
+                    nativeLease.close();
+                }
+            }
+            assertEquals(1, javaReleases.get());
+            assertEquals(SLOT_BYTES, manager.availableMemory());
+            assertTrue(manager.verifyEmpty());
+            manager.shutdown();
+        }
     }
 
     @Test
@@ -112,7 +163,7 @@ class OmniRocksDBSharedResourcesFactoryTest {
     }
 
     @Test
-    void allocationFailureRollsBackReservation() {
+    void allocationFailureLeavesManagedBudgetUntouched() {
         MemoryManager manager = MemoryManager.create(SLOT_BYTES, 32768);
         assertThrows(Exception.class, () ->
                 OmniRocksDBSharedResourcesFactory.acquire(manager, 0.5, managed(),

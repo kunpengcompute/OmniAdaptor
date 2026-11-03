@@ -52,7 +52,7 @@ import org.apache.flink.table.planner.plan.utils.AggregateUtil;
 import org.apache.flink.table.planner.plan.utils.DistinctInfo;
 import org.apache.flink.table.planner.plan.utils.KeySelectorUtil;
 import org.apache.flink.table.planner.utils.JavaScalaConversionUtil;
-import org.apache.flink.table.runtime.generated.GeneratedTableAggsHandlerFunction;
+import org.apache.flink.table.runtime.generated.GeneratedTableAggsHandleFunction;
 import org.apache.flink.table.runtime.keyselector.RowDataKeySelector;
 import org.apache.flink.table.runtime.operators.aggregate.GroupTableAggFunction;
 import org.apache.flink.table.runtime.types.LogicalTypeDataTypeConverter;
@@ -109,6 +109,14 @@ public class StreamExecGroupTableAggregate extends ExecNodeBase<RowData>
 
     /** Top2 rank bounds serialized for the native side (descending, top-2). */
     private static final String RANK_RANGE = "rankStart=1, rankEnd=2";
+
+    // JSON field names kept identical to StreamExecAggregateBase (that interface is not
+    // implemented here because this node is not part of the plain-aggregate family).
+    private static final String FIELD_NAME_GROUPING = "grouping";
+    private static final String FIELD_NAME_AGG_CALLS = "aggCalls";
+    private static final String FIELD_NAME_AGG_CALL_NEED_RETRACTIONS = "aggCallNeedRetractions";
+    private static final String FIELD_NAME_GENERATE_UPDATE_BEFORE = "generateUpdateBefore";
+    private static final String FIELD_NAME_NEED_RETRACTION = "needRetraction";
 
     @JsonProperty(FIELD_NAME_GROUPING)
     private final int[] grouping;
@@ -388,7 +396,7 @@ public class StreamExecGroupTableAggregate extends ExecNodeBase<RowData>
                         needRetraction,
                         true, // isStateBackendDataViews
                         true); // needDistinctInfo
-        final GeneratedTableAggsHandlerFunction aggsHandler =
+        final GeneratedTableAggsHandleFunction aggsHandler =
                 generator.generateTableAggsHandler("GroupTableAggHandler", aggInfoList);
 
         final LogicalType[] accTypes =

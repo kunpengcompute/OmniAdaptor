@@ -118,4 +118,3 @@ https://www.hikunpeng.com/document/detail/zh/kunpengbds/appAccelFeatures/sqlquer
 
 开发者文档（链接）
 测试指导文档（链接）
-11

@@ -66,6 +66,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.MultipleTransformationTranslator;
 import org.apache.flink.table.planner.plan.nodes.exec.spec.DynamicTableSinkSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecNode;
+import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.TransformationMetadata;
 import org.apache.flink.table.planner.plan.utils.KeySelectorUtil;
@@ -509,7 +510,36 @@ public abstract class CommonExecSink extends ExecNodeBase<Object>
                         classLoader, primaryKeys, InternalTypeInfo.of(physicalRowType));
         materializeTransform.setStateKeySelector(keySelector);
         materializeTransform.setStateKeyType(keySelector.getProducedType());
+        materializeTransform.setDescription(getMaterializerExtraDescription(materializeTransform.getDescription(),
+                physicalRowType, primaryKeys, inputUpsertKey));
         return materializeTransform;
+    }
+
+    /**
+     * OmniStream overlay: the native SinkUpsertMaterializer reads its dispatch
+     * contract (sink primary key indices, optional upstream upsert key, row types)
+     * from the transformation description JSON, mirroring the other StreamExec
+     * overlays. Fields must stay aligned with ValidateSinkMaterializerOPStrategy
+     * and the C++ operator constructor.
+     */
+    private String getMaterializerExtraDescription(
+            String oldDescription, RowType physicalRowType, int[] primaryKeys, int[] inputUpsertKey) {
+        ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
+        List<String> inputTypeList = DescriptionUtil.getFieldTypeList(physicalRowType.getFields());
+
+        Map<String, Object> jsonMap = new LinkedHashMap<>();
+        jsonMap.put("originDescription", oldDescription);
+        jsonMap.put("inputTypes", inputTypeList);
+        jsonMap.put("outputTypes", inputTypeList);
+        jsonMap.put("grouping", primaryKeys);
+        jsonMap.put("inputUpsertKey", inputUpsertKey);
+        String jsonString = "";
+        try {
+            jsonString = objectMapper.writeValueAsString(jsonMap);
+        } catch (JsonProcessingException e) {
+            LOG.warn("getMaterializerExtraDescription error", e);
+        }
+        return jsonString;
     }
 
     private Transformation<?> applySinkProvider(

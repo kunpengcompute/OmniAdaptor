@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import json
+import locale
 import time
 import hashlib
 from collections import defaultdict
@@ -32,7 +33,7 @@ class LogParser:
     EXECUTE_PATH = CommonUtil.get_execute_path()
     TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
     TMP_PATH = os.path.join(EXECUTE_PATH, "tmp", TIMESTAMP)
-    FILE_PATTERN = re.compile(r".*(application_|local-)[0-9]+(_[0-9])*.*(\\.lz4|\\.zstd)?$")
+    FILE_PATTERN = re.compile(r".*(application_|local-|app-)[0-9]+([-_][0-9]+)*(\.lz4|\.zstd|\.lzf|\.snappy)?$")
     TABLE_SCHEMA_PATH = os.path.join(EXECUTE_PATH, "resources", "spark_table_schema.csv")
 
     def __init__(self, args):
@@ -102,14 +103,15 @@ class LogParser:
             filename
         ]
         try:
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='gbk')
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        encoding=locale.getpreferredencoding(False), errors='replace')
             stdout, stderr = process.communicate()
             return process.returncode == 0, stdout, stderr
         except Exception as e:
             return False, "", str(e)
 
     def find_compressed_files(self):
-        """查找目录/文件中的所有.lz4和.zstd文件"""
+        """查找目录/文件中的所有 event log 文件（.lz4/.zstd/.lzf/.snappy 压缩及无扩展名纯文本）"""
         if self.input_is_file:
             # 处理单个文件
             input_file_path = os.path.dirname(self.input_file_path)
@@ -207,7 +209,7 @@ class LogParser:
             if not line.strip():
                 continue
             for pattern in patterns:
-                matches = re.findall(pattern, physical_plan)
+                matches = re.findall(pattern, line)
                 for match in matches:
                     db_name = match[0]
                     table_name = match[1]

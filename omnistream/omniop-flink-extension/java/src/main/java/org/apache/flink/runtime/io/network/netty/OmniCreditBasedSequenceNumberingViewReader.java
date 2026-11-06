@@ -47,6 +47,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * OmniCreditBasedSequenceNumberingViewReader
@@ -54,7 +55,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @since 2025-04-27
  */
 public class OmniCreditBasedSequenceNumberingViewReader
-        extends CreditBasedSequenceNumberingViewReader implements Runnable {
+        extends CreditBasedSequenceNumberingViewReader {
     private static final EndOfData END_OF_DATA = new EndOfData(DRAIN);
     private static final Logger LOG = LoggerFactory.getLogger(OmniCreditBasedSequenceNumberingViewReader.class);
 
@@ -62,6 +63,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
     private volatile long nativeCreditBasedSequenceNumberingViewReaderRef = -1;
     private String taskName;
     private final Object requestLock = new Object();
+    private final ReentrantReadWriteLock nativeLifecycle = new ReentrantReadWriteLock();
 
     private ByteBuffer outputBuffer;
     private long outputBufferAddress;   // the address of outputBuffer
@@ -69,6 +71,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
     private long statusAddress;
 
     private volatile boolean running = true;
+    private volatile IOException nativeReadFailure;
 
     AtomicInteger sequenceNumber = new AtomicInteger(0);
 
@@ -79,13 +82,11 @@ public class OmniCreditBasedSequenceNumberingViewReader
 
     private int subPartitionIndex;
     private String partitionId;
-    private volatile boolean flushed = false;
     private volatile int numCreditsAvailable;
     private volatile int initialCredit;
-    // ExecutorService, not Executor: this must be shut down in stop(), otherwise its worker thread
-    // parks on the task queue forever and one thread leaks per view reader per job.
+    // Initial drain and checkpoint resume can block on the native pool. Keep them off
+    // Netty's event loop; normal data-ready notifications do not use this executor.
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final Object localChannelLocker = new Object();
     private boolean downStreamIsNative = true;
 
     OmniCreditBasedSequenceNumberingViewReader(
@@ -166,6 +167,8 @@ public class OmniCreditBasedSequenceNumberingViewReader
             // Step 2 — Java bind via super: occupies subpartition.readView only after Native succeeds.
             try {
                 super.requestSubpartitionView(partitionProvider, resultPartitionId, subPartitionIndex);
+                registerDataAvailableListener(nativeCreditBasedSequenceNumberingViewReaderRef);
+                startFirstDataAvailableNotificationThread();
             } catch (Exception e) {
                 LOG.error("Java bind failed after Native bind succeeded, cleaning up native reader", e);
                 stop();
@@ -175,9 +178,6 @@ public class OmniCreditBasedSequenceNumberingViewReader
                 throw new PartitionNotFoundException(resultPartitionId);
             }
 
-            Thread thread = new Thread(this);
-            thread.start();
-            startFirstDataAvailableNotificationThread();
         }
     }
 
@@ -213,104 +213,34 @@ public class OmniCreditBasedSequenceNumberingViewReader
 
     private void startFirstDataAvailableNotificationThread() {
         executor.execute(() -> {
-            synchronized (localChannelLocker) {
-                if (nativeCreditBasedSequenceNumberingViewReaderRef == -1) {
-                    try {
-                        localChannelLocker.wait();
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
+            nativeLifecycle.readLock().lock();
+            try {
+                if (running && nativeCreditBasedSequenceNumberingViewReaderRef != -1) {
+                    firstDataAvailableNotification(nativeCreditBasedSequenceNumberingViewReaderRef);
                 }
-                // here, nativeCreditBasedSequenceNumberingViewReaderRef should not be -1
-                firstDataAvailableNotification(nativeCreditBasedSequenceNumberingViewReaderRef);
-                LOG.info("call first notification  for task: {} ## {} successfully..........", taskName.substring(0,
-                        15), subPartitionIndex);
+            } catch (Throwable failure) {
+                if (running) {
+                    nativeReadFailure = new IOException("Failed to prepare native output", failure);
+                    // Surface the failure through Flink's normal reader error response.
+                    super.notifyDataAvailable();
+                }
+            } finally {
+                nativeLifecycle.readLock().unlock();
             }
-            
         });
     }
 
-
-    @Override
-    public void run() {
-        Thread.currentThread().setName("OmniCreditBasedSequenceNumberingViewReader::::["
-                                        + taskName.substring(0, 15) + "##]" + subPartitionIndex);
-        int count = 0;
-        while (running) {
-            try {
-                if (nativeCreditBasedSequenceNumberingViewReaderRef != -1) {
-                    if (!flushed && (numCreditsAvailable - bufferInfos.size()) > 0) {
-                        int res = checkIfDataAvailableAndNotifyNetty();
-                        LOG.debug("nativeCreditBasedSequenceNumberingViewReaderRef can flush: " + "{} ## {},"
-                                + " got " + "data" + " size = {} and numCreditsAvailable = {},native ref = "
-                                + "{}", taskName.substring(0, 15), subPartitionIndex, res,
-                                numCreditsAvailable, nativeCreditBasedSequenceNumberingViewReaderRef);
-                        if (res == 0) {
-                            Thread.sleep(20);
-                        }
-                    } else {
-                        count++;
-                        if (count % 500 == 0) {
-                            LOG.debug("nativeCreditBasedSequenceNumberingViewReaderRef can not flush: {} "
-                                    + "##{}, numCreditsAvailable = {}, bufferInfos size = {} and "
-                                    + "flushed= {} and native " + "ref = {}", taskName.substring(0,
-                                    15), subPartitionIndex, numCreditsAvailable, bufferInfos.size(),
-                                    flushed, nativeCreditBasedSequenceNumberingViewReaderRef);
-                            count = 0;
-                        }
-                        Thread.sleep(20);
-                    }
-                } else {
-                    synchronized (localChannelLocker) {
-                        LOG.error("nativeCreditBasedSequenceNumberingViewReaderRef is -1 for task: {} ## {},{},{}",
-                                taskName.substring(0, 15), subPartitionIndex, this.hashCode(),
-                                this.nativeCreditBasedSequenceNumberingViewReaderRef);
-                        nativeCreditBasedSequenceNumberingViewReaderRef =
-                                createNativeCreditBasedSequenceNumberingViewReader(nativeTaskRef, statusAddress,
-                                        partitionId, subPartitionIndex, downStreamIsNative);
-                        if (nativeCreditBasedSequenceNumberingViewReaderRef != -1) {
-                            localChannelLocker.notifyAll();
-                        }
-                    }
-
-                }
-            } catch (InterruptedException e) {
-                LOG.error("InterruptedException in OmniCreditBasedSequenceNumberingViewReader", e);
-            }
+    /** Native output is ready. Only hand over to Flink's event loop here. */
+    public void notifyNativeDataAvailable() {
+        if (running) {
+            super.notifyDataAvailable();
         }
     }
 
-    private synchronized int checkIfDataAvailableAndNotifyNetty() {
-        if (nativeCreditBasedSequenceNumberingViewReaderRef == -1) {
-            return 0;
-        }
-        int res = getAvailabilityAndBacklog(nativeCreditBasedSequenceNumberingViewReaderRef, getNumCreditsAvailable());
-        if (res > 0) {
-            flushed = true;
-            notifyDataAvailableForNetty();
-        }
-        return res;
-    }
-
-    /**
-     * notifyDataAvailable
-     */
     @Override
     public void notifyDataAvailable() {
-        LOG.info("Thread = {} do nothing notifyDataAvailable for task: {} ## {} and native red = {}",
-                Thread.currentThread().getName(), taskName.substring(0, 15),
-                subPartitionIndex, nativeCreditBasedSequenceNumberingViewReaderRef);
-    }
-
-    /**
-     * notifyDataAvailableForNetty
-     */
-    public void notifyDataAvailableForNetty() {
-        LOG.info("Thread = {} do super notifyDataAvailable for task: {} ## {} and native ref = {}",
-                Thread.currentThread().getName(), taskName.substring(0, 15),
-                subPartitionIndex, nativeCreditBasedSequenceNumberingViewReaderRef);
-
-        super.notifyDataAvailable();
+        // The Java partition view is a compatibility shell. Native queue notifications
+        // use notifyNativeDataAvailable(), after the serialized bytes are published.
     }
 
     public void setNativeTaskRef(long nativeTaskRef) {
@@ -332,21 +262,32 @@ public class OmniCreditBasedSequenceNumberingViewReader
      */
     @Override
     public ResultSubpartitionView.AvailabilityWithBacklog getAvailabilityAndBacklog() {
-        if (nativeCreditBasedSequenceNumberingViewReaderRef == -1) {
-            return new ResultSubpartitionView.AvailabilityWithBacklog(false, 0);
+        nativeLifecycle.readLock().lock();
+        try {
+            if (!running || nativeCreditBasedSequenceNumberingViewReaderRef == -1) {
+                return new ResultSubpartitionView.AvailabilityWithBacklog(false, 0);
+            }
+            if (nativeReadFailure != null) {
+                return new ResultSubpartitionView.AvailabilityWithBacklog(true, 0);
+            }
+            int backlog = bufferInfos.size()
+                    + getAvailabilityAndBacklog(nativeCreditBasedSequenceNumberingViewReaderRef, numCreditsAvailable);
+            Buffer.DataType nextType = nextDataType();
+            boolean available = nextType != Buffer.DataType.NONE
+                    && (numCreditsAvailable > 0 || !nextType.isBuffer());
+            return new ResultSubpartitionView.AvailabilityWithBacklog(available, backlog);
+        } finally {
+            nativeLifecycle.readLock().unlock();
         }
-        int backlog = this.bufferInfos.size();
+    }
 
-        boolean isAvailable = false;
-        if (getNumCreditsAvailable() > 0) {
-            isAvailable = true;
-        } else {
-            LOG.info("OmniCreditBasedSequenceNumberingViewReader IS not available, backlog = {} and "
-                    + "available = {} of {}## {} and native ref = {}, thread = {}", backlog, isAvailable,
-                    taskName.substring(0, 15), subPartitionIndex,
-                    nativeCreditBasedSequenceNumberingViewReaderRef, Thread.currentThread().getName());
+    private Buffer.DataType nextDataType() {
+        if (!bufferInfos.isEmpty()) {
+            return bufferInfos.get(0).networkBuffer.getDataType();
         }
-        return new ResultSubpartitionView.AvailabilityWithBacklog(isAvailable, backlog);
+        int type = getNextBufferType(nativeCreditBasedSequenceNumberingViewReaderRef);
+        return type == -1 ? Buffer.DataType.NONE
+                : type == 2 ? Buffer.DataType.EVENT_BUFFER : Buffer.DataType.DATA_BUFFER;
     }
 
     static class BufferInfo {
@@ -376,34 +317,41 @@ public class OmniCreditBasedSequenceNumberingViewReader
 
     @Override
     public InputChannel.BufferAndAvailability getNextBuffer() throws IOException {
-        if (numCreditsAvailable > 0) {
-            InputChannel.BufferAndAvailability bufferAndAvailability = doGetNextBuffer();
-
-            if (bufferAndAvailability != null) {
-                return bufferAndAvailability;
-            } else {
-                // get next buffer from c++
-                // The native code will put the data in the serializedBatchQueue to the heap-off memory.
-                // The java code can directly decode the data from the heap-off memory,
-                // and save to the bufferInfos.
-                // "readElementNum" is the size of serializedBatchQueue in the native code (the max value is 10)
-                int readElementNum = getNextBuffer(nativeCreditBasedSequenceNumberingViewReaderRef);
-                if (readElementNum > 0) {
-                    // decode the buffer
-                    decodeReadBuffer(readElementNum);
-                    return doGetNextBuffer();
-                } else {
-                    return null;
-                }
+        nativeLifecycle.readLock().lock();
+        try {
+            if (nativeReadFailure != null) {
+                throw nativeReadFailure;
             }
-        } else {
-            return null;
+            if (running && getAvailabilityAndBacklog().isAvailable()) {
+                InputChannel.BufferAndAvailability bufferAndAvailability = doGetNextBuffer();
+
+                if (bufferAndAvailability != null) {
+                    return bufferAndAvailability;
+                } else {
+                    // get next buffer from c++
+                    // The native code will put the data in the serializedBatchQueue to the heap-off memory.
+                    // The java code can directly decode the data from the heap-off memory,
+                    // and save to the bufferInfos.
+                    // "readElementNum" is the size of serializedBatchQueue in the native code (the max value is 10)
+                    int readElementNum = getNextBuffer(nativeCreditBasedSequenceNumberingViewReaderRef);
+                    if (readElementNum > 0) {
+                        // decode the buffer
+                        decodeReadBuffer(readElementNum);
+                        return doGetNextBuffer();
+                    } else {
+                        return null;
+                    }
+                }
+            } else {
+                return null;
+            }
+        } finally {
+            nativeLifecycle.readLock().unlock();
         }
     }
 
     private InputChannel.BufferAndAvailability doGetNextBuffer() throws IOException {
         if (!bufferInfos.isEmpty()) {
-            flushed = false;
             BufferInfo bufferInfo = bufferInfos.get(0);
             if (bufferInfo.networkBuffer.isBuffer()) {
                 if(numCreditsAvailable == 0){
@@ -414,12 +362,18 @@ public class OmniCreditBasedSequenceNumberingViewReader
             }
             //remove the element from bufferInfos
             bufferInfos.remove(0);
-            Buffer.DataType nextDataType = bufferInfos.size() > 0 ? Buffer.DataType.DATA_BUFFER : Buffer.DataType.NONE;
+            Buffer.DataType nextDataType = nextDataType();
+            if (numCreditsAvailable == 0 && nextDataType.isBuffer()) {
+                // Flink immediately re-enqueues readers reporting moreAvailable().
+                // Keep the backlog but wait for a credit notification before scheduling data.
+                nextDataType = Buffer.DataType.NONE;
+            }
 
             return new InputChannel.BufferAndAvailability(
                     bufferInfo.getNetworkBuffer(),
                     nextDataType,
-                    bufferInfos.size(),
+                    bufferInfos.size() + getAvailabilityAndBacklog(
+                            nativeCreditBasedSequenceNumberingViewReaderRef, numCreditsAvailable),
                     sequenceNumber.getAndIncrement());
         } else {
             return null;
@@ -522,51 +476,34 @@ public class OmniCreditBasedSequenceNumberingViewReader
      * stop
      */
     public void stop() {
-        running = false;
-        int res = checkIfDataAvailableAndNotifyNetty();
-        int retryCount = 0;
-        while (res > 0 && retryCount++ < 5) {
-            LOG.info("OmniCreditBasedSequenceNumberingViewReader of {}## "
-                            + "{}............................find data during stop......data size= "
-                            + "{}................................",
-                    taskName.substring(0, 15),
-                    subPartitionIndex, res);
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+        synchronized (requestLock) {
+            if (!running) {
+                return;
             }
-            res = checkIfDataAvailableAndNotifyNetty();
+            running = false;
+            executor.shutdownNow();
+            long nativeRef = nativeCreditBasedSequenceNumberingViewReaderRef;
+            if (nativeRef == -1) {
+                return;
+            }
+            // Wake a serialization request blocked on an exhausted pool before waiting
+            // for in-flight native calls; Java interrupts cannot wake a native condition variable.
+            stopNativeReader(nativeRef);
+            nativeLifecycle.writeLock().lock();
+            try {
+                for (BufferInfo info : bufferInfos) {
+                    info.networkBuffer.recycleBuffer();
+                }
+                bufferInfos.clear();
+                NativeBufferRecycler.unRegisterInstance(nativeRef);
+                NativeNetworkBufferRecycler.unRegisterInstance(nativeRef);
+                releaseNativeViewReader(nativeRef);
+                nativeCreditBasedSequenceNumberingViewReaderRef = -1;
+            } finally {
+                nativeLifecycle.writeLock().unlock();
+            }
         }
-
-        if (res > 0) {
-            LOG.warn("There are still {} data available after stop, taskName: {}, partitionId: {}, subPartitionIndex: {}",
-                    res, taskName.substring(0, 15), partitionId, subPartitionIndex);
-        }
-
-        NativeBufferRecycler.unRegisterInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
-        NativeNetworkBufferRecycler.unRegisterInstance(nativeCreditBasedSequenceNumberingViewReaderRef);
-
-        LOG.info("OmniCreditBasedSequenceNumberingViewReader of {}## {} and native ref = {}"
-                        + "............................is stopped......................................",
-                taskName.substring(0, 15), subPartitionIndex, nativeCreditBasedSequenceNumberingViewReaderRef);
-        // invoke native to call OmniCreditBasedSequenceNumberingViewReader::releaseAllResources()
-        releaseNativeViewReader(nativeCreditBasedSequenceNumberingViewReaderRef);
-        setNativeCreditBasedSequenceNumberingViewReaderRef(-1);
-
-        // shutdownNow, not shutdown: the first-data-available task may still be blocked in
-        // localChannelLocker.wait(), and only an interrupt releases it. Without this the worker
-        // thread parks on the task queue forever - one leaked thread per view reader per job.
-        synchronized (localChannelLocker) {
-            localChannelLocker.notifyAll();
-        }
-        executor.shutdownNow();
     }
-
-    private synchronized void setNativeCreditBasedSequenceNumberingViewReaderRef(long value) {
-        nativeCreditBasedSequenceNumberingViewReaderRef = value;
-    }
-
 
     /**
      * releaseAllResources
@@ -587,18 +524,26 @@ public class OmniCreditBasedSequenceNumberingViewReader
      */
     @Override
     public void resumeConsumption() {
-        if (initialCredit == 0) {
-            // reset available credit if no exclusive buffer is available at the
-            // consumer side for all floating buffers must have been released
-            numCreditsAvailable = 0;
+        nativeLifecycle.readLock().lock();
+        try {
+            if (!running) {
+                return;
+            }
+            if (initialCredit == 0) {
+                // reset available credit if no exclusive buffer is available at the
+                // consumer side for all floating buffers must have been released
+                numCreditsAvailable = 0;
+            }
+
+            LOG.info("resumeConsumption and notify data available, taskName: {}, partitionId: {}, subPartitionIndex: {}",
+                    taskName.substring(0, 15), partitionId, subPartitionIndex);
+            resumeConsumption(nativeCreditBasedSequenceNumberingViewReaderRef);
+
+            // When subPartition is blocked, the flusher thread may not notify data available, so we need to notify it manually.
+            startFirstDataAvailableNotificationThread();
+        } finally {
+            nativeLifecycle.readLock().unlock();
         }
-
-        LOG.info("resumeConsumption and notify data available, taskName: {}, partitionId: {}, subPartitionIndex: {}",
-                taskName.substring(0, 15), partitionId, subPartitionIndex);
-        resumeConsumption(nativeCreditBasedSequenceNumberingViewReaderRef);
-
-        // When subPartition is blocked, the flusher thread may not notify data available, so we need to notify it manually.
-        startFirstDataAvailableNotificationThread();
     }
 
     /**
@@ -675,7 +620,13 @@ public class OmniCreditBasedSequenceNumberingViewReader
      */
     public native void firstDataAvailableNotification(long nativeCreditBasedSequenceNumberingViewReaderRef);
 
+    private native void registerDataAvailableListener(long nativeReaderRef);
+
+    native int getNextBufferType(long nativeReaderRef);
+
+    native void stopNativeReader(long nativeReaderRef);
+
     private native void resumeConsumption(long nativeCreditBasedSequenceNumberingViewReaderRef);
 
-    private native  void releaseNativeViewReader(long nativeCreditBasedSequenceNumberingViewReaderRef);
+    native void releaseNativeViewReader(long nativeCreditBasedSequenceNumberingViewReaderRef);
 }

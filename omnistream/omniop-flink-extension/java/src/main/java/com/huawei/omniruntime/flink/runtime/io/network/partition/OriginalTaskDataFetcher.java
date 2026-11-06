@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * OriginalTaskDataFetcher
@@ -57,7 +58,8 @@ public class OriginalTaskDataFetcher {
         }
     }
 
-    public void createAndStartRemoteDataFetcher(List<OmniRemoteInputChannel> remoteInputChannels) throws IOException {
+    public void createAndStartRemoteDataFetcher(List<OmniRemoteInputChannel> remoteInputChannels,
+            Consumer<Throwable> failureHandler) {
         if (jobType == JobType.SQL) {
             remoteDataFetcher = new RemoteDataFetcher(nativeTaskRef, taskName, jobType, remoteInputChannels);
         } else
@@ -68,6 +70,7 @@ public class OriginalTaskDataFetcher {
                 LOG.error("Unsupported job type: {}", jobType);
                 throw new IllegalArgumentException("Unsupported job type: " + jobType);
             }
+        remoteDataFetcher.setFailureHandler(failureHandler);
         remoteDataFetcher.start();
     }
 

@@ -23,7 +23,8 @@ def _create_spark_parser(subparsers):
         type=str,
         required=True,
         help='Input directory path or single file path (required). '
-             'If a single .lz4 or .zstd file is provided, only that file will be processed.'
+             'If a single .lz4, .zstd, .lzf, .snappy or plain-text event log file is provided, '
+             'only that file will be processed.'
     )
 
     spark_parser.add_argument(

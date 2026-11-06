@@ -304,7 +304,7 @@ class LogsParser(conf: SparkConf, eventLogDir: String, outPutDir: String) extend
    */
   private[spark] def rebuildAppStore(store: KVStore, reader: EventLogFileReader): Unit = {
     // Disable async updates, since they cause higher memory usage, and it's ok to take longer
-    // to parse the event logs in the SHS.
+    // to parse the event logs in the Spark History Server.
     val replayConf = conf.clone().set(ASYNC_TRACKING_ENABLED, false)
     val trackingStore = new ElementTrackingStore(store, replayConf)
     val replayBus = new ReplayListenerBus()
@@ -407,7 +407,7 @@ arg1: output dir in hdfs, eg. hdfs://server1:9000/logParser
 arg2: log file to be parsed, eg. application_1646816941391_0115.lz4
  */
 object ParseLog extends RewriteLogger {
-  val regex = ".*(application_|local-)[0-9]+(_[0-9])*.*(\\.lz4|\\.zstd)?$"
+  val regex = ".*(application_|local-|app-)[0-9]+([-_][0-9]+)*(\\.lz4|\\.zstd|\\.lzf|\\.snappy)?$"
 
   def main(args: Array[String]): Unit = {
     if (args == null || args.length != 3) {

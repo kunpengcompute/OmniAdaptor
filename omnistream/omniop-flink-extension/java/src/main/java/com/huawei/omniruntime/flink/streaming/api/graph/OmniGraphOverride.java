@@ -421,7 +421,7 @@ public final class OmniGraphOverride {
         }
 
         if (FALLBACK_ON_ZONE_SENSITIVE_LTZ_CAST && chainHasZoneSensitiveLtzCast(chainedNode)) {
-            String sessionTimeZone = chainSessionTimeZone(chainedNode);
+            String sessionTimeZone = chainSessionTimeZone(chainedNode, streamGraph);
             if (!isUtcTimeZone(sessionTimeZone)) {
                 LOG.info("validateVertexChainInfoForOmniTask chainInfo of vertex ID {} falls back to stock Flink: "
                         + "the chain casts between TIMESTAMP and TIMESTAMP_LTZ while the session time "
@@ -536,7 +536,17 @@ public final class OmniGraphOverride {
     }
 
     /** 描述符里的 timeZone 即作业的 table.local-time-zone（例：GMT+08:00 / UTC）。 */
-    private static String chainSessionTimeZone(List<StreamNode> chainedNodes) {
+    private static String chainSessionTimeZone(List<StreamNode> chainedNodes, StreamGraph streamGraph) {
+        // Prefer the effective SQL session setting when it is carried by StreamGraph.
+        if (streamGraph != null) {
+            java.util.Optional<String> configuredTimeZone = streamGraph.getConfiguration().getOptional(
+                    org.apache.flink.configuration.ConfigOptions.key("table.local-time-zone")
+                            .stringType().noDefaultValue());
+            if (configuredTimeZone.isPresent() && !configuredTimeZone.get().trim().isEmpty()) {
+                return configuredTimeZone.get();
+            }
+        }
+
         ObjectMapper mapper = new ObjectMapper();
         for (StreamNode node : chainedNodes) {
             String description = node.getOperatorDescription();

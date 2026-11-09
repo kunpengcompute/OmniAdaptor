@@ -15,6 +15,7 @@ import com.huawei.omniruntime.flink.runtime.api.graph.json.JsonHelper;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.operatorchain.tablescan.CSVFormatPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.operatorchain.tablescan.JoinSourceFormatPOJO;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.operatorchain.tablescan.KafkaFormatPojo;
+import com.huawei.omniruntime.flink.streaming.api.graph.OmniGraphOverride;
 import com.huawei.omniruntime.flink.runtime.api.graph.json.operatorchain.tablescan.NexmarkFormatPOJO;
 import com.huawei.omniruntime.flink.table.types.logical.LogicalTypeDescriptor;
 import com.huawei.omniruntime.flink.utils.ReflectionUtils;
@@ -186,25 +187,33 @@ public class OperatorDescriptorHelper {
             return;
         }
         RowType rowType = ReflectionUtils.retrievePrivateField(valueSerializationSchema, "rowType");
-        List<RowType.RowField> inputFields = rowType.getFields();
-        List<String> inputTypeList = new ArrayList<>();
-        List<String> inputFieldList = new ArrayList<>();
-        for (RowType.RowField field : inputFields) {
-            LogicalType fieldType = field.getType();
-            if (fieldType.getTypeRoot() == LogicalTypeRoot.ROW) {
-                List<RowType.RowField> subFields = ((RowType) field.getType()).getFields();
-                // save the offset and subfield cnt and expand row
-                for (RowType.RowField rowField : subFields) {
-                    inputTypeList.add(getFieldType(rowField.getType()));
-                    inputFieldList.add(rowField.getName());
+        if (OmniGraphOverride.isUpsertKafkaDescription(opDesc.getDescription())) {
+            jsonMap.putAll(new JSONObject(opDesc.getDescription()).toMap());
+            Object keySerialization = ReflectionUtils.retrievePrivateField(recordSerializer, "keySerialization");
+            RowType keyType = ReflectionUtils.retrievePrivateField(keySerialization, "rowType");
+            jsonMap.put("keyFieldNames", keyType.getFieldNames());
+            jsonMap.put("valueFieldNames", rowType.getFieldNames());
+        } else {
+            List<RowType.RowField> inputFields = rowType.getFields();
+            List<String> inputTypeList = new ArrayList<>();
+            List<String> inputFieldList = new ArrayList<>();
+            for (RowType.RowField field : inputFields) {
+                LogicalType fieldType = field.getType();
+                if (fieldType.getTypeRoot() == LogicalTypeRoot.ROW) {
+                    List<RowType.RowField> subFields = ((RowType) field.getType()).getFields();
+                    // save the offset and subfield cnt and expand row
+                    for (RowType.RowField rowField : subFields) {
+                        inputTypeList.add(getFieldType(rowField.getType()));
+                        inputFieldList.add(rowField.getName());
+                    }
+                } else {
+                    inputTypeList.add(getFieldType(fieldType));
+                    inputFieldList.add(field.getName());
                 }
-            } else {
-                inputTypeList.add(getFieldType(fieldType));
-                inputFieldList.add(field.getName());
             }
+            jsonMap.put("inputTypes", inputTypeList);
+            jsonMap.put("inputFields", inputFieldList);
         }
-        jsonMap.put("inputTypes", inputTypeList);
-        jsonMap.put("inputFields", inputFieldList);
         try {
             jsonString = objectMapper.writeValueAsString(jsonMap);
         } catch (JsonProcessingException e) {

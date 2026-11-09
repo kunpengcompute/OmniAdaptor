@@ -42,6 +42,16 @@ public class KafkaFormatPojo {
 
     private List<String> outputTypes;
 
+    private Boolean upsertMode;
+
+    private List<Integer> keyProjection;
+
+    private List<Integer> valueProjection;
+
+    private List<String> keyFieldNames;
+
+    private List<String> valueFieldNames;
+
     public boolean isBatch() {
         return batch;
     }
@@ -128,5 +138,45 @@ public class KafkaFormatPojo {
 
     public void setOutputTypes(List<String> outputTypes) {
         this.outputTypes = outputTypes;
+    }
+
+    public Boolean getUpsertMode() {
+        return upsertMode;
+    }
+
+    public void setUpsertMode(Boolean upsertMode) {
+        this.upsertMode = upsertMode;
+    }
+
+    public List<Integer> getKeyProjection() {
+        return keyProjection;
+    }
+
+    public void setKeyProjection(List<Integer> keyProjection) {
+        this.keyProjection = keyProjection;
+    }
+
+    public List<Integer> getValueProjection() {
+        return valueProjection;
+    }
+
+    public void setValueProjection(List<Integer> valueProjection) {
+        this.valueProjection = valueProjection;
+    }
+
+    public List<String> getKeyFieldNames() {
+        return keyFieldNames;
+    }
+
+    public void setKeyFieldNames(List<String> keyFieldNames) {
+        this.keyFieldNames = keyFieldNames;
+    }
+
+    public List<String> getValueFieldNames() {
+        return valueFieldNames;
+    }
+
+    public void setValueFieldNames(List<String> valueFieldNames) {
+        this.valueFieldNames = valueFieldNames;
     }
 }

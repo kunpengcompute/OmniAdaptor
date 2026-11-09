@@ -31,6 +31,7 @@ public class ValidateOperatorStrategyFactory {
         strategyMap.put("Calc", new ValidateCalcOPStrategy());
         strategyMap.put("Expand", new ValidateExpandOPStrategy());
         strategyMap.put("Deduplicate", new ValidateDeduplicateOPStrategy());
+        strategyMap.put("ChangelogNormalize", new ValidateChangelogNormalizeOPStrategy());
         strategyMap.put("WatermarkAssigner", new ValidateWatermarkOPStrategy());
         strategyMap.put("Rank", new ValidateRankOPStrategy());
         strategyMap.put("Limit", new ValidateLimitOPStrategy());

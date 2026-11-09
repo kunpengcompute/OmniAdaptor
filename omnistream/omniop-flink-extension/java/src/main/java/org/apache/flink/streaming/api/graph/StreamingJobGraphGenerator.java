@@ -625,6 +625,15 @@ public class StreamingJobGraphGenerator {
             return;
         }
 
+        boolean upsertKafka = jobType.equals(JobType.SQL) && streamGraph.getStreamNodes().stream()
+                .anyMatch(node -> OmniGraphOverride.isUpsertKafkaDescription(node.getOperatorDescription()));
+        if (upsertKafka && (streamGraph.getCheckpointConfig().isCheckpointingEnabled()
+                || streamGraph.getSavepointRestoreSettings().restoreSavepoint())) {
+            LOG.warn("SQL upsert-kafka not supports checkpoint or savepoint.");
+            OmniGraphOverride.clearTypeInfo();
+            return;
+        }
+
         if (validateFallBackForCheckpoint(jobType)){
             return;
         }

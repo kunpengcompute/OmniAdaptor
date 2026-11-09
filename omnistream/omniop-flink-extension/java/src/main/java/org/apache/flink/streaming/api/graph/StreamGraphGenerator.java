@@ -21,6 +21,8 @@
 
 package org.apache.flink.streaming.api.graph;
 
+import com.huawei.omniruntime.flink.streaming.api.graph.OmniGraphOverride;
+
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.BatchShuffleMode;
 import org.apache.flink.api.common.ExecutionConfig;
@@ -47,6 +49,7 @@ import org.apache.flink.streaming.api.operators.sorted.state.BatchExecutionInter
 import org.apache.flink.streaming.api.operators.sorted.state.BatchExecutionStateBackend;
 import org.apache.flink.streaming.api.transformations.*;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
+import org.apache.flink.streaming.runtime.operators.sink.SinkWriterOperatorFactory;
 import org.apache.flink.streaming.runtime.translators.*;
 import org.apache.flink.util.TernaryBoolean;
 import org.slf4j.Logger;
@@ -782,8 +785,11 @@ public class StreamGraphGenerator {
                                 .flatMap(Collection::stream)
                                 .collect(Collectors.toList()));
 
+        String sinkDescription = transform instanceof SinkTransformation
+                && OmniGraphOverride.isUpsertKafkaDescription(transform.getDescription())
+                ? transform.getDescription() : null;
         final TransformationTranslator.Context context =
-                new ContextImpl(this, streamGraph, slotSharingGroup, configuration);
+                new ContextImpl(this, streamGraph, slotSharingGroup, configuration, sinkDescription);
 
         return shouldExecuteInBatchMode
                 ? translator.translateForBatch(transform, context)
@@ -850,12 +856,15 @@ public class StreamGraphGenerator {
         private final String slotSharingGroup;
 
         private final ReadableConfig config;
+        @Nullable private final String sinkDescription;
 
         public ContextImpl(
                 final StreamGraphGenerator streamGraphGenerator,
                 final StreamGraph streamGraph,
                 final String slotSharingGroup,
-                final ReadableConfig config) {
+                final ReadableConfig config,
+                @Nullable final String sinkDescription) {
+            this.sinkDescription = sinkDescription;
             this.streamGraphGenerator = checkNotNull(streamGraphGenerator);
             this.streamGraph = checkNotNull(streamGraph);
             this.slotSharingGroup = checkNotNull(slotSharingGroup);
@@ -895,6 +904,11 @@ public class StreamGraphGenerator {
 
         @Override
         public Collection<Integer> transform(Transformation<?> transformation) {
+            if (sinkDescription != null && transformation instanceof OneInputTransformation
+                    && ((OneInputTransformation<?, ?>) transformation).getOperatorFactory()
+                            instanceof SinkWriterOperatorFactory) {
+                transformation.setDescription(sinkDescription);
+            }
             return streamGraphGenerator.transform(transformation);
         }
     }

@@ -181,13 +181,14 @@ public final class OmniGraphOverride {
                     "Limit",
                     "WindowTableFunction",
                     "StreamRecordTimestampInserter",
-                    "ConstraintEnforcer"));
+                    "ConstraintEnforcer",
+                    "ChangelogNormalize"));
         }
         SUPPORT_KAFKA_SCHEMA_TYPE.add("JsonRowDataDeserializationSchema");
         OP_NAME_OF_SQL.addAll(Arrays.asList("Calc", "GroupAggregate", "LocalGroupAggregate", "GlobalGroupAggregate",
                 "IncrementalGroupAggregate", "Join", "LookupJoin", "WindowAggregate", "WindowJoin", "GroupWindowAggregate",
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",
-                "Limit", "WindowTableFunction", "StreamRecordTimestampInserter", "ConstraintEnforcer"));                
+                "Limit", "WindowTableFunction", "StreamRecordTimestampInserter", "ConstraintEnforcer", "ChangelogNormalize"));
         // Snapshot the baseline whitelist determined by performanceMode, so that setStateBackend()/setNext()
         // restrictions can be reset per job. Must be taken inside the static block AFTER SUPPORT_OP_NAME is
         // populated (field initializers would capture the still-empty set).
@@ -836,7 +837,7 @@ public final class OmniGraphOverride {
         if (isSource(operatorName)) {
             return validateSource(operatorDescription, operatorFactory);
         } else if (isSink(operatorName)) {
-            return validateSink(operatorName, operatorFactory);
+            return validateSink(operatorName, operatorDescription, operatorFactory);
         } else if (isConstraintEnforcer(operatorName)) {
             return validateConstraintEnforcer();
         } else if (isStreamRecordTimestampInserter(operatorName)) {
@@ -876,24 +877,53 @@ public final class OmniGraphOverride {
         return isStreamRecordTimestampInserterSupportNative;
     }
 
-    private static boolean validateSink(String operatorName, StreamOperatorFactory operatorFactory) {
+    public static boolean isUpsertKafkaDescription(String description) {
+        if (description == null || !description.contains("\"upsertMode\"")) {
+            return false;
+        }
+        Map<String, Object> plan = toJsonMap(description);
+        return plan != null && Boolean.TRUE.equals(plan.get("upsertMode"));
+    }
+
+    private static boolean validateSink(String operatorName, String description, StreamOperatorFactory operatorFactory) {
         if (!isSinkSupportNative) {
             return false;
         }
         if (performanceMode && operatorName.contains("StreamingFileWriter")) {
             return false;
         }
+        boolean upsert = isUpsertKafkaDescription(description);
         if (!(operatorFactory instanceof SinkWriterOperatorFactory)) {
             return true;
         }
         Sink sink = ((SinkWriterOperatorFactory) operatorFactory).getSink();
         if (!sink.getClass().getSimpleName().equals("KafkaSink")) {
-            return true;
+            return !upsert;
         }
         Object recordSerializer = ReflectionUtils.retrievePrivateField(sink, "recordSerializer");
-        Object valueSerializationSchema = ReflectionUtils
+        Object valueSerialization = ReflectionUtils
                 .retrievePrivateField(recordSerializer, "valueSerialization");
-        return "JsonRowDataSerializationSchema".equals(valueSerializationSchema.getClass().getSimpleName());
+        if (valueSerialization == null
+                || !"JsonRowDataSerializationSchema".equals(valueSerialization.getClass().getSimpleName())) {
+            return false;
+        }
+        if (!upsert) {
+            return true;
+        }
+        Object keySerialization = ReflectionUtils.retrievePrivateField(recordSerializer, "keySerialization");
+        return keySerialization != null
+                && "JsonRowDataSerializationSchema".equals(keySerialization.getClass().getSimpleName())
+                && Boolean.FALSE.equals(ReflectionUtils.retrievePrivateField(recordSerializer, "hasMetadata"))
+                && ReflectionUtils.retrievePrivateField(recordSerializer, "partitioner") == null
+                && validateUpsertKafkaSerialization(keySerialization)
+                && validateUpsertKafkaSerialization(valueSerialization)
+                && validateUpsertKafkaKey(toJsonMap(description), "physicalTypes");
+    }
+
+    private static boolean validateUpsertKafkaSerialization(Object schema) {
+        Object timestampFormat = ReflectionUtils.retrievePrivateField(schema, "timestampFormat");
+        return "SQL".equals(String.valueOf(timestampFormat))
+                && Boolean.FALSE.equals(ReflectionUtils.retrievePrivateField(schema, "encodeDecimalAsPlainNumber"));
     }
 
     private static boolean validateSource(String operatorDescription, StreamOperatorFactory operatorFactory) {
@@ -927,8 +957,28 @@ public final class OmniGraphOverride {
                 || (Boolean) jsonMap.get("hasMetadata")) {
             return false;
         }
-        return jsonMap.containsKey("watermarkStrategy") && (jsonMap.get("watermarkStrategy") instanceof String)
-                && !((String) jsonMap.get("watermarkStrategy")).isEmpty();
+        Object watermarkStrategy = jsonMap.get("watermarkStrategy");
+        if (!(watermarkStrategy instanceof String) || ((String) watermarkStrategy).isEmpty()) {
+            return false;
+        }
+        return !Boolean.TRUE.equals(jsonMap.get("upsertMode"))
+                || validateUpsertKafkaKey(jsonMap, "outputTypes");
+    }
+
+    private static boolean validateUpsertKafkaKey(Map<String, Object> description, String fieldTypes) {
+        Object keyProjection = description.get("keyProjection");
+        Object rowTypes = description.get(fieldTypes);
+        if (!(keyProjection instanceof List) || !(rowTypes instanceof List)) {
+            return false;
+        }
+        List<?> keys = (List<?>) keyProjection;
+        List<?> types = (List<?>) rowTypes;
+        if (keys.size() != 1 || !(keys.get(0) instanceof Integer)) {
+            return false;
+        }
+        int index = (Integer) keys.get(0);
+        return index >= 0 && index < types.size() && types.get(index) instanceof String
+                && "BIGINT".equals(AbstractValidateOperatorStrategy.stripNotNull((String) types.get(index)));
     }
 
     /**

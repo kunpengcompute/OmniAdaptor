@@ -146,7 +146,7 @@ public final class OmniGraphOverride {
 
     // native 的 CAST(... AS TIMESTAMP_LTZ) 目前是恒等变换（不做会话时区→UTC 换算），
     // 会话时区非 UTC 时输出与 stock Flink 不同；native 表达式层修复后置 false。
-    private static final boolean FALLBACK_ON_ZONE_SENSITIVE_LTZ_CAST = true;
+    private static final boolean FALLBACK_ON_ZONE_SENSITIVE_LTZ_CAST = false;
 
     private static final Set<String> SUPPORT_KAFKA_SCHEMA_TYPE = new HashSet<>();
 

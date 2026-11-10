@@ -11,13 +11,16 @@
 
 package org.apache.flink.table.planner.plan.nodes.exec.util;
 
+import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPatternFieldRef;
+import org.apache.calcite.rex.RexShuttle;
 import org.apache.calcite.rex.RexTableInputRef;
+import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -251,6 +254,24 @@ public class RexNodeUtil {
         } else {
             jsonMap.put(keyStr, RexTypeToIdMap.get(rexNode.getType().getSqlTypeName().toString()));
         }
+    }
+
+    public static Map<String, Object> buildJsonMap(RexNode rexNode, RexBuilder rexBuilder) {
+        final RexShuttle expandRangeSearch = new RexShuttle() {
+            @Override
+            public RexNode visitCall(RexCall call) {
+                RexCall rewrittenCall = (RexCall) super.visitCall(call);
+                if (rewrittenCall.getKind() == SqlKind.SEARCH) {
+                    RexLiteral searchArg = (RexLiteral) rewrittenCall.getOperands().get(1);
+                    Sarg<?> sarg = searchArg.getValueAs(Sarg.class);
+                    if (!sarg.isPoints()) {
+                        return RexUtil.expandSearch(rexBuilder, null, rewrittenCall);
+                    }
+                }
+                return rewrittenCall;
+            }
+        };
+        return buildJsonMap(rexNode.accept(expandRangeSearch));
     }
 
     public static Map<String, Object> buildJsonMap(RexNode rexNode) {

@@ -181,7 +181,9 @@ public final class OmniGraphOverride {
                     "WatermarkAssigner",
                     "StreamRecordTimestampInserter",
                     "ConstraintEnforcer",
-                    "GroupAggregate"));
+                    "GroupAggregate",
+                    "Deduplicate",
+                    "Rank"));
         } else {
             SUPPORT_OP_NAME.addAll(Arrays.asList(
                     "Calc",
@@ -271,7 +273,8 @@ public final class OmniGraphOverride {
             SUPPORT_OP_NAME.clear();
             SUPPORT_OP_NAME.addAll(
                     Arrays.asList("Calc", "Correlate", "WatermarkAssigner", "StreamRecordTimestampInserter",
-                            "ConstraintEnforcer"));
+                            "ConstraintEnforcer",
+                            "GroupAggregate", "Deduplicate", "Rank"));
         }
     }
 
@@ -281,7 +284,8 @@ public final class OmniGraphOverride {
             SUPPORT_OP_NAME.clear();
             SUPPORT_OP_NAME.addAll(
                     Arrays.asList("Calc", "Correlate", "WatermarkAssigner", "StreamRecordTimestampInserter",
-                            "ConstraintEnforcer"));
+                            "ConstraintEnforcer",
+                            "GroupAggregate", "Deduplicate", "Rank"));
         }
     }
 

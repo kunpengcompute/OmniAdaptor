@@ -20,6 +20,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateRankOPStrategy.class);
@@ -29,6 +31,7 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
             "TIMESTAMP_WITHOUT_TIME_ZONE(3)");
     private static final List<String> SUPPORT_FUNCTIONS =
             Arrays.asList("AppendOnlyTopNFunction", "FastTop1Function", "AppendOnlyFirstNFunction");
+    private static final Pattern RANK_RANGE_PATTERN = Pattern.compile("rankStart=(\\d+),\\s*rankEnd=(\\d+)");
 
     @SuppressWarnings("unchecked")
     @Override
@@ -127,8 +130,22 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
             return false;
         }
         String rankRange = (String) rankRangeObj;
-        if (!rankRange.matches(".*rankStart=\\d+.*rankEnd=\\d+.*")) {
+        Matcher matcher = RANK_RANGE_PATTERN.matcher(rankRange);
+        if (!matcher.matches()) {
             LOG.info("validate AppendOnlyFirstNFunction only supports constant rankRange, got {}", rankRange);
+            return false;
+        }
+        long rankStart;
+        long rankEnd;
+        try {
+            rankStart = Long.parseLong(matcher.group(1));
+            rankEnd = Long.parseLong(matcher.group(2));
+        } catch (NumberFormatException exception) {
+            LOG.info("validate AppendOnlyFirstNFunction unparsable rankRange {}", rankRange);
+            return false;
+        }
+        if (rankStart < 1 || rankEnd < rankStart || rankEnd == Long.MAX_VALUE) {
+            LOG.info("validate AppendOnlyFirstNFunction invalid or unbounded rank range {}", rankRange);
             return false;
         }
         if (CollectionUtil.isNullOrEmpty(sortFieldIds) || CollectionUtil.isNullOrEmpty(sortAscendingOrders)

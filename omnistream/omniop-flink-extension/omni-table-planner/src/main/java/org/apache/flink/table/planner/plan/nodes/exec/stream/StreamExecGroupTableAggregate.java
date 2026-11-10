@@ -22,7 +22,6 @@
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
 
 import org.apache.calcite.rel.core.AggregateCall;
-import org.apache.flink.FlinkVersion;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonCreator;
@@ -42,7 +41,6 @@ import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
-import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeMetadata;
 import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
 import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
@@ -89,12 +87,6 @@ import java.util.Map;
  * field, so the operator is never replaced and keeps the plain Java path. This mirrors the
  * count_char scalar-UDF point-name whitelist precedent (group.sql / Nexmark Q14).
  */
-@ExecNodeMetadata(
-        name = "stream-exec-group-table-aggregate",
-        version = 1,
-        producedTransformations = StreamExecGroupTableAggregate.GROUP_TABLE_AGGREGATE_TRANSFORMATION,
-        minPlanVersion = FlinkVersion.v1_15,
-        minStateVersion = FlinkVersion.v1_15)
 public class StreamExecGroupTableAggregate extends ExecNodeBase<RowData>
         implements StreamExecNode<RowData>, SingleTransformationTranslator<RowData> {
 

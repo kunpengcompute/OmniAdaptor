@@ -644,6 +644,13 @@ public class RexNodeUtil {
         if (rexNode instanceof RexCall) {
             RexCall rexCall = (RexCall) rexNode;
             List<RexNode> operands = rexCall.getOperands();
+            // AS(...) is a transparent rename (Table API select() emits AS($i, 'name') for
+            // plain column references): evaluate the aliased operand directly and drop the
+            // alias literal. Without this the whole Calc is flagged INVALID and vetoes the
+            // native replacement of every operator chained with it.
+            if (rexCall.getKind() == SqlKind.AS) {
+                return buildJsonMap(operands.get(0));
+            }
             SqlOperator operator = rexCall.getOperator();
             String operatorName = operator.getName();
             BinaryExprType binaryType = resolveOperatorType(binaryOperatorMap, operatorName);

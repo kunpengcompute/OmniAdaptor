@@ -153,13 +153,17 @@ public final class OmniGraphOverride {
         }
         if (performanceMode) {
             // performance mode supports all op temporarily.Some op will be proposed in the future.
+            // GroupTableAggregate: the native Top2 whitelist operator (GroupTableAggregateFunction);
+            // missing here would break BOTH the SQL job-type detection (getJobType) and the
+            // per-operator validation gate (validateOperatorByNameForOmniTask) for Table API plans.
             SUPPORT_OP_NAME.addAll(Arrays.asList(
                     "Calc",
                     "LookupJoin",
                     "WatermarkAssigner",
                     "StreamRecordTimestampInserter",
                     "ConstraintEnforcer",
-                    "GroupAggregate"));
+                    "GroupAggregate",
+                    "GroupTableAggregate"));
         } else {
             SUPPORT_OP_NAME.addAll(Arrays.asList(
                     "Calc",

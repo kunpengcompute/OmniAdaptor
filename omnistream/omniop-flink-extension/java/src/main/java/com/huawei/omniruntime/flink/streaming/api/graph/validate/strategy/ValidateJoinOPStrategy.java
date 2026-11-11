@@ -29,7 +29,7 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateJoinOPStrategy.class);
     // LeftSemiJoin (EXISTS) / LeftAntiJoin (NOT EXISTS) share StreamingSemiAntiJoinOperator.
     private static final Set<String> SUPPORT_JOIN_TYPE =
-        new HashSet<>(Arrays.asList("InnerJoin", "LeftOuterJoin", "LeftSemiJoin", "LeftAntiJoin"));
+        new HashSet<>(Arrays.asList("InnerJoin", "LeftOuterJoin", "RightOuterJoin", "FullOuterJoin", "LeftSemiJoin", "LeftAntiJoin"));
     private static final List<String> SUPPORT_JOIN_KEY_TYPES = Collections.singletonList("BIGINT");
 
     private static boolean nonEquiConditionCheck(Map<String, Object> condition, int inputSize) {
@@ -95,15 +95,20 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
         // i.e. count is always 1). Therefore JoinKeyContainsUniqueKey inputs --
         // e.g. the deduplicated subquery side produced by IN (subquery) rewrites --
         // are handled correctly by the generic NoUniqueKey path.
+        // InputSideHasUniqueKey inputs are also covered: update/retract messages carry the
+        // full old row, so locating state entries by row content is equivalent to locating
+        // them by unique key, and the per-row count stays 1 for unique-key inputs.
         if (!operatorInfoMap.get("leftInputSpec").equals("NoUniqueKey")
-                && !operatorInfoMap.get("leftInputSpec").equals("JoinKeyContainsUniqueKey")) {
-            LOG.warn("leftInputSpec only supports NoUniqueKey/JoinKeyContainsUniqueKey");
+                && !operatorInfoMap.get("leftInputSpec").equals("JoinKeyContainsUniqueKey")
+                && !operatorInfoMap.get("leftInputSpec").equals("InputSideHasUniqueKey")) {
+            LOG.warn("leftInputSpec only supports NoUniqueKey/JoinKeyContainsUniqueKey/InputSideHasUniqueKey");
             return false;
         }
 
         if (!operatorInfoMap.get("rightInputSpec").equals("NoUniqueKey")
-                && !operatorInfoMap.get("rightInputSpec").equals("JoinKeyContainsUniqueKey")) {
-            LOG.warn("rightInputSpec only supports NoUniqueKey/JoinKeyContainsUniqueKey");
+                && !operatorInfoMap.get("rightInputSpec").equals("JoinKeyContainsUniqueKey")
+                && !operatorInfoMap.get("rightInputSpec").equals("InputSideHasUniqueKey")) {
+            LOG.warn("rightInputSpec only supports NoUniqueKey/JoinKeyContainsUniqueKey/InputSideHasUniqueKey");
             return false;
         }
 
@@ -114,6 +119,14 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
             // non-equi semi/anti falls back to vanilla.
             if (joinType.equals("LeftSemiJoin") || joinType.equals("LeftAntiJoin")) {
                 LOG.warn("Semi/anti join supports equi-key only in v1, fall back for non-equi condition");
+                return false;
+            }
+            // v1: RIGHT/FULL outer join supports equi-key only. numAssociate is a per-key match
+            // counter; a non-equi predicate that filters out all pairs of a key would need the
+            // eager null-padding row emitted for the outer row, which is not guaranteed on every
+            // interleaving, so fall back to vanilla to keep results identical.
+            if (joinType.equals("RightOuterJoin") || joinType.equals("FullOuterJoin")) {
+                LOG.warn("Right/Full outer join supports equi-key only in v1, fall back for non-equi condition");
                 return false;
             }
             if (!nonEquiConditionCheck((Map<String, Object>) condition, outputTypes.size())) {

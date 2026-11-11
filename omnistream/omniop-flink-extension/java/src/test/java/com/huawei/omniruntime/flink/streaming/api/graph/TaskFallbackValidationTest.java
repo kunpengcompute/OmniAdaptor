@@ -74,6 +74,14 @@ public class TaskFallbackValidationTest {
     }
 
     @Test
+    public void supportedSinkWriterFactoryIsNotForcedToFallback() {
+        StreamNode sink = node(1, "Sink: jdq sink", "{}");
+        when(sink.getOperatorFactory()).thenReturn(mock(
+                org.apache.flink.streaming.runtime.operators.sink.SinkWriterOperatorFactory.class));
+        assertTrue(sinkStages(sink).isEmpty());
+    }
+
+    @Test
     public void writerAndEndInSameTaskFormFallbackSinkStages() {
         StreamNode writer = node(1, "StreamingFileWriter", "{}");
         StreamNode end = node(2, "Sink: end", "{}");

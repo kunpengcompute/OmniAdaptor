@@ -1349,10 +1349,12 @@ public final class OmniGraphOverride {
     }
 
     private static boolean isWriterOrCommitter(StreamNode node) {
+        // Operator names alone are not enough: native-capable sinks such as JDQ
+        // may also be named "Writer" or "Committer". Only force known Flink
+        // file-sink stages or Paimon stages to the stock runtime here.
         String name = node.getOperatorName();
-        return node.getOperatorFactory() instanceof SinkWriterOperatorFactory
-                || node.getOperatorFactory() instanceof CommitterOperatorFactory
-                || (name != null && (name.contains("Writer") || name.contains("Committer")));
+        return requiresFlinkFileSink(name, node.getOperatorFactory())
+                || (name != null && name.toLowerCase(Locale.ROOT).contains("paimon"));
     }
 
     private static boolean isPaimonSinkAdapter(StreamNode node) {

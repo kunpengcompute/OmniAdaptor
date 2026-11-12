@@ -616,7 +616,6 @@ public class StreamingJobGraphGenerator {
         }
 
         StateBackend stateBackend = streamGraph.getStateBackend();
-        OmniGraphOverride.setStateBackend(stateBackend);
         // temp operate, will delete later
         if (validateDataStreamBackend(jobType, stateBackend)) {
             return;

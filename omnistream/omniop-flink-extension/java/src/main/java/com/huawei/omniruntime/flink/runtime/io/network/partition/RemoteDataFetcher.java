@@ -127,13 +127,8 @@ public class RemoteDataFetcher implements Runnable {
         running = false;
         readyChannels.close();
         remoteDataFetcherExecutorService.shutdownNow();
-        try {
-            if (!remoteDataFetcherExecutorService.awaitTermination(30, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("Remote fetcher did not stop for " + taskName);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new GeneralRuntimeException("Interrupted stopping remote fetcher", e);
+        if (!awaitTerminationUninterruptibly(remoteDataFetcherExecutorService, 30, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Remote fetcher did not stop for " + taskName);
         }
         // Native invocation has completed before this cleanup. Recycle queued Java
         // input instead of forwarding additional buffers into a finished native task.
@@ -148,16 +143,35 @@ public class RemoteDataFetcher implements Runnable {
         // Native cleanup publishes a stop marker after releasing its input buffers.
         // Let the recycler consume that marker before task-owned native memory is freed.
         bufferRecyclingExecutorService.shutdown();
-        try {
-            if (!bufferRecyclingExecutorService.awaitTermination(30, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("Native buffer recycler did not stop for " + taskName);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new GeneralRuntimeException("Interrupted stopping native buffer recycler", e);
+        if (!awaitTerminationUninterruptibly(bufferRecyclingExecutorService, 30, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Native buffer recycler did not stop for " + taskName);
         }
         LOG.info("Buffer recycling executor service for task {} has been shut down.", taskName);
         LOG.info(" stop RemoteDataFetcher thread completely......................................for {}", taskName);
+    }
+
+    private static boolean awaitTerminationUninterruptibly(
+            ExecutorService executorService, long timeout, TimeUnit timeUnit) {
+        boolean interrupted = false;
+        long remainingNanos = timeUnit.toNanos(timeout);
+        long deadline = System.nanoTime() + remainingNanos;
+        try {
+            while (true) {
+                try {
+                    return executorService.awaitTermination(remainingNanos, TimeUnit.NANOSECONDS);
+                } catch (InterruptedException exception) {
+                    interrupted = true;
+                    remainingNanos = deadline - System.nanoTime();
+                    if (remainingNanos <= 0) {
+                        return executorService.isTerminated();
+                    }
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
 

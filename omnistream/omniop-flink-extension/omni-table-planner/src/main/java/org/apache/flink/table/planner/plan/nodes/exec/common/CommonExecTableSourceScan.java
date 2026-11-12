@@ -287,10 +287,17 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
     private void setSourceInfo(SourceTransformation<?, ?, ?> transformation,
         Map<String, Object> jsonMap, Source source) {
         jsonMap.put("format", "kafka");
-        String deserializationSchema = getDeserializationSchema(source);
-        jsonMap.put("deserializationSchema", deserializationSchema);
+        Object deserializationSchema = getDeserializationSchema(source);
+        String schemaName = deserializationSchema == null ? "" : deserializationSchema.getClass().getSimpleName();
+        jsonMap.put("deserializationSchema", schemaName);
+        if ("JsonRowDataDeserializationSchema".equals(schemaName)) {
+            boolean ignoreParseErrors = ReflectionUtils.retrievePrivateField(deserializationSchema, "ignoreParseErrors");
+            boolean failOnMissingField = ReflectionUtils.retrievePrivateField(deserializationSchema, "failOnMissingField");
+            jsonMap.put("ignoreParseErrors", ignoreParseErrors);
+            jsonMap.put("failOnMissingField", failOnMissingField);
+        }
         boolean hasMetadata = true;
-        if (!deserializationSchema.isEmpty()) {
+        if (deserializationSchema != null) {
             Object kafkaRecordDeserializationSchema = ReflectionUtils
                     .retrievePrivateField(source, "deserializationSchema");
             Object kafkaDeserializationSchema = ReflectionUtils.retrievePrivateField(
@@ -383,41 +390,37 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
         }
     }
 
-    private String getDeserializationSchema(Source source) {
-        String emptyName = "";
+    private Object getDeserializationSchema(Source source) {
         if (!source.getClass().getSimpleName().equals("KafkaSource")) {
-            return emptyName;
+            return null;
         }
         Object kafkaRecordDeserializationSchema = ReflectionUtils.retrievePrivateField(source, "deserializationSchema");
         if (kafkaRecordDeserializationSchema.getClass().getSimpleName().equals("KafkaValueOnlyDeserializerWrapper")) {
-            return emptyName;
+            return null;
         }
         if (kafkaRecordDeserializationSchema.getClass().getSimpleName()
             .equals("KafkaValueOnlyDeserializationSchemaWrapper")) {
-            return ReflectionUtils.retrievePrivateField(kafkaRecordDeserializationSchema, "deserializationSchema")
-                .getClass().getSimpleName();
+            return ReflectionUtils.retrievePrivateField(kafkaRecordDeserializationSchema, "deserializationSchema");
         }
         if (!kafkaRecordDeserializationSchema.getClass().getSimpleName().equals("KafkaDeserializationSchemaWrapper")) {
-            return emptyName;
+            return null;
         }
 
         Object kafkaDeserializationSchema = ReflectionUtils.retrievePrivateField(
             kafkaRecordDeserializationSchema, "kafkaDeserializationSchema");
         if (kafkaDeserializationSchema.getClass().getName().equals(
             "org.apache.flink.streaming.connectors.kafka.internals.KafkaDeserializationSchemaWrapper")) {
-            return ReflectionUtils.retrievePrivateField(kafkaDeserializationSchema, "deserializationSchema")
-                .getClass().getSimpleName();
+            return ReflectionUtils.retrievePrivateField(kafkaDeserializationSchema, "deserializationSchema");
         }
 
         if (!kafkaDeserializationSchema.getClass().getSimpleName().equals("DynamicKafkaDeserializationSchema")) {
-            return emptyName;
+            return null;
         }
         Object keyDeserialization = ReflectionUtils.retrievePrivateField(
             kafkaDeserializationSchema, "keyDeserialization");
         if (keyDeserialization != null) {
-            return emptyName;
+            return null;
         }
-        return ReflectionUtils.retrievePrivateField(
-            kafkaDeserializationSchema, "valueDeserialization").getClass().getSimpleName();
+        return ReflectionUtils.retrievePrivateField(kafkaDeserializationSchema, "valueDeserialization");
     }
 }

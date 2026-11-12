@@ -38,6 +38,10 @@ public class KafkaFormatPojo {
 
     private String deserializationSchema;
 
+    private boolean ignoreParseErrors;
+
+    private boolean failOnMissingField;
+
     private boolean hasMetadata;
 
     private List<String> outputNames;
@@ -114,6 +118,22 @@ public class KafkaFormatPojo {
 
     public void setDeserializationSchema(String deserializationSchema) {
         this.deserializationSchema = deserializationSchema;
+    }
+
+    public boolean isIgnoreParseErrors() {
+        return ignoreParseErrors;
+    }
+
+    public void setIgnoreParseErrors(boolean ignoreParseErrors) {
+        this.ignoreParseErrors = ignoreParseErrors;
+    }
+
+    public boolean isFailOnMissingField() {
+        return failOnMissingField;
+    }
+
+    public void setFailOnMissingField(boolean failOnMissingField) {
+        this.failOnMissingField = failOnMissingField;
     }
 
     public boolean isHasMetadata() {

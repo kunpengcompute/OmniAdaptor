@@ -24,6 +24,7 @@ package org.apache.flink.table.planner.plan.nodes.exec.common;
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
+import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
@@ -49,6 +50,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.util.RexNodeUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.utils.JavaScalaConversionUtil;
+import org.apache.flink.table.planner.utils.ShortcutUtils;
 import org.apache.flink.table.planner.utils.TableConfigUtils;
 import org.apache.flink.table.runtime.operators.CodeGenOperatorFactory;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
@@ -131,7 +133,10 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
         return localTimeZone;
     }
 
-    private String getExtraDescription(String oldDescription, Transformation<RowData> inputTransform) {
+    private String getExtraDescription(
+            String oldDescription,
+            Transformation<RowData> inputTransform,
+            RexBuilder rexBuilder) {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
         HashMap<Integer, Integer> accessIndexMap = new HashMap<>();
         HashMap<Integer, Integer> fieldCountMap = new HashMap<>();
@@ -196,13 +201,13 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
                     indicesList.add(fieldRefMap);
                 }
             } else {
-                indicesList.add(RexNodeUtil.buildJsonMap(rexNode));
+                indicesList.add(RexNodeUtil.buildJsonMap(rexNode, rexBuilder));
             }
         }
         // get condition info
         Map<String, Object> conditionMap = null;
         if (condition != null) {
-            conditionMap = RexNodeUtil.buildJsonMap(condition);
+            conditionMap = RexNodeUtil.buildJsonMap(condition, rexBuilder);
         }
         Map<String, Object> jsonMap = new LinkedHashMap<>();
         jsonMap.put("originDescription", oldDescription);
@@ -248,7 +253,11 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
                 inputTransform.getParallelism());
         localTimeZone = TableConfigUtils.getLocalTimeZone(config);
         String oldDescription = transformation.getDescription();
-        transformation.setDescription(getExtraDescription(oldDescription, inputTransform));
+        transformation.setDescription(
+                getExtraDescription(
+                        oldDescription,
+                        inputTransform,
+                        new RexBuilder(ShortcutUtils.unwrapTypeFactory(planner))));
         return transformation;
     }
 }

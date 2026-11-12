@@ -86,13 +86,15 @@ public class OmniCreditBasedSequenceNumberingViewReader
     // parks on the task queue forever and one thread leaks per view reader per job.
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Object localChannelLocker = new Object();
+    private boolean downStreamIsNative = true;
 
     OmniCreditBasedSequenceNumberingViewReader(
-            InputChannelID receiverId, int initialCredit, PartitionRequestQueue requestQueue) {
+            InputChannelID receiverId, int initialCredit, PartitionRequestQueue requestQueue, boolean downStreamIsNative) {
         super(receiverId, initialCredit, requestQueue);
         this.initialCredit = initialCredit;
         numCreditsAvailable = initialCredit;
         initDirectBuffers();
+        this.downStreamIsNative = downStreamIsNative;
     }
 
     /**
@@ -151,7 +153,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
             // Step 1 — Native bind first: Java readView is not occupied yet on failure.
             LOG.info("requestSubpartitionView for task: {} ## {}", taskName.substring(0, 15), subPartitionIndex);
             nativeCreditBasedSequenceNumberingViewReaderRef = createNativeCreditBasedSequenceNumberingViewReader(
-                    nativeTaskRef, statusAddress, partitionId, subPartitionIndex);
+                    nativeTaskRef, statusAddress, partitionId, subPartitionIndex, downStreamIsNative);
             if (nativeCreditBasedSequenceNumberingViewReaderRef == -1) {
                 LOG.error("create nativeCreditBasedSequenceNumberingViewReader failed");
                 throw new PartitionNotFoundException(resultPartitionId);
@@ -265,7 +267,7 @@ public class OmniCreditBasedSequenceNumberingViewReader
                                 this.nativeCreditBasedSequenceNumberingViewReaderRef);
                         nativeCreditBasedSequenceNumberingViewReaderRef =
                                 createNativeCreditBasedSequenceNumberingViewReader(nativeTaskRef, statusAddress,
-                                        partitionId, subPartitionIndex);
+                                        partitionId, subPartitionIndex, downStreamIsNative);
                         if (nativeCreditBasedSequenceNumberingViewReaderRef != -1) {
                             localChannelLocker.notifyAll();
                         }
@@ -663,7 +665,8 @@ public class OmniCreditBasedSequenceNumberingViewReader
             long nativeTaskRef,
             long statusAddress,
             String partitionId,
-            int subPartitionIndex);
+            int subPartitionIndex,
+            boolean downStreamIsNative);
 
     /**
      * callFirstDataAvailableNotification

@@ -632,21 +632,48 @@ public class StreamingJobGraphGenerator {
 
         checkSourceOperator(jobType);
 
-        boolean validateRes = true;
+        boolean requiresJobFallback = false;
+        Set<Integer> endpointFallbackVertices = new HashSet<>();
         boolean shouldDoSpiltWatermark = false;
         for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
             shouldDoSpiltWatermark = OmniGraphOverride.checkSplitWatermark(vertexEntry, this.chainInfos, shouldDoSpiltWatermark);
             LOG.info(vertexEntry.toString() + " shouldDoSpiltWatermark : " + shouldDoSpiltWatermark);
-            boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos, this.chainedConfigs, this.vertexConfigs, jobType);
-            if (!vertexValidateRes && jobType.equals(JobType.SQL)) {
-                validateRes = false;
+            boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos,
+                    this.chainedConfigs, this.vertexConfigs, jobType, endpointFallbackVertices);
+            if (!vertexValidateRes && !endpointFallbackVertices.contains(vertexEntry.getKey())) {
+                requiresJobFallback = true;
+                LOG.info("Whole job fallback required by vertex {} ({})", vertexEntry.getKey(),
+                        vertexEntry.getValue().getName());
             }
         }
-        if (!validateRes && jobType.equals(JobType.SQL) && !OmniGraphOverride.isSupportTaskFallback()) {
-            for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
-                StreamConfig vertexConfig = new StreamConfig(vertexEntry.getValue().getConfiguration());
-                vertexConfig.setUseOmniEnabled(false);
+
+        if (requiresJobFallback) {
+            // Freeze the final engine choice before deriving any input/partition format metadata.
+            for (JobVertex vertex : jobVertices.values()) {
+                new StreamConfig(vertex.getConfiguration()).setUseOmniEnabled(false);
             }
+            for (StreamConfig config : vertexConfigs.values()) {
+                config.setUseOmniEnabled(false);
+            }
+            for (Map<Integer, StreamConfig> configs : chainedConfigs.values()) {
+                for (StreamConfig config : configs.values()) {
+                    config.setUseOmniEnabled(false);
+                }
+            }
+        }
+
+        for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
+            JobVertex jobVertex = vertexEntry.getValue();
+            StreamConfig config = new StreamConfig(vertexEntry.getValue().getConfiguration());
+            List<JobEdge> jobEdges = jobVertex.getInputs();
+            LOG.info("overrideVertices >> " + jobVertex.getName() + " jobEdge size is " + jobEdges.size());
+            List<Boolean> upstreamNative = new ArrayList<>(jobEdges.size());
+            for (JobEdge jobEdge : jobEdges) {
+                JobVertex upstreamVertex = jobEdge.getSource().getProducer();
+                StreamConfig upstreamConfig = new StreamConfig(upstreamVertex.getConfiguration());
+                upstreamNative.add(upstreamConfig.isUseOmniEnabled());
+            }
+            config.setUpstreamNative(upstreamNative.toString());
         }
         
         // Build partition OmniFlag map for each vertex

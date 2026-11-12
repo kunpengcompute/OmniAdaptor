@@ -45,6 +45,7 @@ import org.apache.flink.streaming.api.operators.SimpleInputFormatOperatorFactory
 import org.apache.flink.streaming.api.operators.SimpleOperatorFactory;
 import org.apache.flink.streaming.api.operators.SourceOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperator;
+import org.apache.flink.streaming.api.operators.StreamMap;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.runtime.operators.sink.CommitterOperatorFactory;
 import org.apache.flink.streaming.runtime.operators.sink.SinkWriterOperatorFactory;
@@ -298,6 +299,16 @@ public final class OmniGraphOverride {
                                                     Map<Integer, StreamConfig> vertexConfigs,
                                                     JobType jobType) {
 
+        return validateVertexForOmniTask(vertexEntry, chainInfos, chainedConfigs, vertexConfigs,
+                jobType, new HashSet<>());
+    }
+
+    public static boolean validateVertexForOmniTask(Map.Entry<Integer, JobVertex> vertexEntry,
+            Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos,
+            Map<Integer, Map<Integer, StreamConfig>> chainedConfigs,
+            Map<Integer, StreamConfig> vertexConfigs, JobType jobType,
+            Set<Integer> endpointFallbackVertices) {
+
         StreamConfig vertexConfig = new StreamConfig(vertexEntry.getValue().getConfiguration());
         Integer vertexID = vertexEntry.getKey();
         LOG.info("validateVertexForOmniTask : vertexID is {}, and vertexName {}",
@@ -306,7 +317,10 @@ public final class OmniGraphOverride {
         JobVertex jobVertex = vertexEntry.getValue();
         refreshJobCsvFileSinkFlag(chainInfos);
 
-        if (validateVertexChainInfoForOmniTask(vertexID, chainInfos, chainedConfigs, jobVertex, vertexConfigs, jobType)) {
+        Set<Integer> sinkFallbackNodes = collectSinkFallbackNodes(chainInfos);
+        endpointFallbackVertices.remove(vertexID);
+        if (validateVertexChainInfoForOmniTask(vertexID, chainInfos, chainedConfigs, jobVertex, vertexConfigs,
+                jobType, endpointFallbackVertices, sinkFallbackNodes)) {
             LOG.info("validateVertexForOmniTask  true for : vertexID is {}, and vertexName {}", vertexID, vertexConfig.getOperatorName());
             vertexConfig.setUseOmniEnabled(true);
             return true;
@@ -373,7 +387,9 @@ public final class OmniGraphOverride {
     private static boolean validateVertexChainInfoForOmniTask(Integer vertexID,
                                                               Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos,
                                                               Map<Integer, Map<Integer, StreamConfig>> chainedConfigs, JobVertex jobVertex,
-                                                              Map<Integer, StreamConfig> vertexConfigs, JobType jobType) {
+                                                              Map<Integer, StreamConfig> vertexConfigs, JobType jobType,
+                                                              Set<Integer> endpointFallbackVertices,
+                                                              Set<Integer> sinkFallbackNodes) {
         // walkthrough each operator
         StreamingJobGraphGenerator.OperatorChainInfo chainInfo = chainInfos.get(vertexID);
         if (chainInfo == null) {
@@ -383,14 +399,29 @@ public final class OmniGraphOverride {
 
         StreamGraph streamGraph = chainInfo.getStreamGraph();
         List<StreamNode> chainedNode = chainInfo.getAllChainedNodes();
+        boolean unsupported = false;
+        boolean endpointOnly = true;
         for (StreamNode node : chainedNode) {
-            if (validateNodeForOmniTask(vertexID, vertexConfigs, jobType, streamGraph, node)) {
-                return false;
+            boolean sinkFallback = sinkFallbackNodes.contains(node.getId());
+            if (sinkFallback || validateNodeForOmniTask(vertexID, vertexConfigs, jobType, streamGraph, node)) {
+                unsupported = true;
+                endpointOnly &= sinkFallback || isFallbackEndpoint(node);
+                if (sinkFallback) {
+                    LOG.info("Sink-stage fallback: vertex={}, operator={}", vertexID, node.getOperatorName());
+                }
             }
         }
 
+        if (unsupported) {
+            if (endpointOnly) {
+                endpointFallbackVertices.add(vertexID);
+            }
+            LOG.info("Task fallback: vertex={}, endpointOnly={}", vertexID, endpointOnly);
+            return false;
+        }
+
         if (FALLBACK_ON_ZONE_SENSITIVE_LTZ_CAST && chainHasZoneSensitiveLtzCast(chainedNode)) {
-            String sessionTimeZone = chainSessionTimeZone(chainedNode);
+            String sessionTimeZone = chainSessionTimeZone(chainedNode, streamGraph);
             if (!isUtcTimeZone(sessionTimeZone)) {
                 LOG.info("validateVertexChainInfoForOmniTask chainInfo of vertex ID {} falls back to stock Flink: "
                         + "the chain casts between TIMESTAMP and TIMESTAMP_LTZ while the session time "
@@ -505,7 +536,17 @@ public final class OmniGraphOverride {
     }
 
     /** 描述符里的 timeZone 即作业的 table.local-time-zone（例：GMT+08:00 / UTC）。 */
-    private static String chainSessionTimeZone(List<StreamNode> chainedNodes) {
+    private static String chainSessionTimeZone(List<StreamNode> chainedNodes, StreamGraph streamGraph) {
+        // Prefer the effective SQL session setting when it is carried by StreamGraph.
+        if (streamGraph != null) {
+            java.util.Optional<String> configuredTimeZone = streamGraph.getConfiguration().getOptional(
+                    org.apache.flink.configuration.ConfigOptions.key("table.local-time-zone")
+                            .stringType().noDefaultValue());
+            if (configuredTimeZone.isPresent() && !configuredTimeZone.get().trim().isEmpty()) {
+                return configuredTimeZone.get();
+            }
+        }
+
         ObjectMapper mapper = new ObjectMapper();
         for (StreamNode node : chainedNodes) {
             String description = node.getOperatorDescription();
@@ -681,11 +722,15 @@ public final class OmniGraphOverride {
 
     public static JobType getJobType(Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {
         JobType jobType = JobType.NULL;
+        Set<Integer> sinkFallbackNodes = collectSinkFallbackNodes(chainInfos);
         boolean onlySourceAndSink = true;
         List<String> inputTypeList = new ArrayList<>();
         for (StreamingJobGraphGenerator.OperatorChainInfo chainInfo : chainInfos.values()) {
             List<StreamNode> chainedNode = chainInfo.getAllChainedNodes();
             for (StreamNode node : chainedNode) {
+                if (sinkFallbackNodes.contains(node.getId())) {
+                    continue;
+                }
                 String operatorName = node.getOperatorName();
                 if (isSource(operatorName)) {
                     jobType = getSourceJobType(node, operatorName, jobType, inputTypeList);
@@ -1194,6 +1239,23 @@ public final class OmniGraphOverride {
         if (!isSourceSupportNative) {
             return false;
         }
+        if (operatorFactory instanceof SourceOperatorFactory) {
+            Source source = ReflectionUtils.retrievePrivateField(operatorFactory, "source");
+            String sourceName = source.getClass().getSimpleName();
+            if ("FileSource".equals(sourceName)) {
+                Object readerFormat = ReflectionUtils.retrievePrivateField(source, "readerFormat");
+                if (!(readerFormat instanceof org.apache.flink.connector.file.src.impl.StreamFormatAdapter)) {
+                    LOG.info("FileSource reader format {} has no native descriptor implementation; using Flink",
+                            readerFormat == null ? "null" : readerFormat.getClass().getSimpleName());
+                    return false;
+                }
+            }
+            if (!"KafkaSource".equals(sourceName) && !"NexmarkSource".equals(sourceName)
+                    && !"FileSource".equals(sourceName)) {
+                LOG.info("Source {} has no native descriptor implementation; using Flink", sourceName);
+                return false;
+            }
+        }
         // VALUES-based sources (SimpleInputFormatOperatorFactory) are not supported
         // in native SQL execution because OmniStream does not handle them
         if (operatorFactory instanceof SimpleInputFormatOperatorFactory) {
@@ -1233,6 +1295,90 @@ public final class OmniGraphOverride {
             LOG.warn("operatorDescription read jsonString to Map failed!", e);
         }
         return jsonMap;
+    }
+
+    /** Find terminal sink stages without absorbing ordinary computation into the sink. */
+    static Set<Integer> collectSinkFallbackNodes(
+            Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {
+        Map<Integer, StreamNode> nodes = new HashMap<>();
+        for (StreamingJobGraphGenerator.OperatorChainInfo chain : chainInfos.values()) {
+            if (chain != null) {
+                for (StreamNode node : chain.getAllChainedNodes()) {
+                    nodes.put(node.getId(), node);
+                }
+            }
+        }
+        Set<Integer> terminalStages = new HashSet<>();
+        boolean changed;
+        do {
+            changed = false;
+            for (StreamNode node : nodes.values()) {
+                if (!terminalStages.contains(node.getId()) && isSinkStage(node)
+                        && node.getOutEdges().stream().allMatch(
+                                edge -> terminalStages.contains(edge.getTargetId()))) {
+                    terminalStages.add(node.getId());
+                    changed = true;
+                }
+            }
+        } while (changed);
+
+        // Writers/committers and Paimon adapters use Flink, including downstream end stages.
+        Set<Integer> fallback = new HashSet<>();
+        Queue<Integer> pending = new LinkedList<>();
+        for (Integer id : terminalStages) {
+            StreamNode node = nodes.get(id);
+            if (isWriterOrCommitter(node) || isPaimonSinkAdapter(node)) {
+                pending.add(id);
+            }
+        }
+        while (!pending.isEmpty()) {
+            Integer id = pending.poll();
+            if (!fallback.add(id)) {
+                continue;
+            }
+            for (StreamEdge edge : nodes.get(id).getOutEdges()) {
+                pending.add(edge.getTargetId());
+            }
+        }
+        return fallback;
+    }
+
+    private static boolean isSinkStage(StreamNode node) {
+        String name = node.getOperatorName();
+        return (name != null && isSink(name)) || isWriterOrCommitter(node) || isPaimonSinkAdapter(node);
+    }
+
+    private static boolean isWriterOrCommitter(StreamNode node) {
+        // Operator names alone are not enough: native-capable sinks such as JDQ
+        // may also be named "Writer" or "Committer". Only force known Flink
+        // file-sink stages or Paimon stages to the stock runtime here.
+        String name = node.getOperatorName();
+        return requiresFlinkFileSink(name, node.getOperatorFactory())
+                || (name != null && name.toLowerCase(Locale.ROOT).contains("paimon"));
+    }
+
+    private static boolean isPaimonSinkAdapter(StreamNode node) {
+        if (!(node.getOperatorFactory() instanceof SimpleOperatorFactory)) {
+            return false;
+        }
+        StreamOperator<?> operator = node.getOperator();
+        if (!(operator instanceof StreamMap)) {
+            return false;
+        }
+        Object function = ((StreamMap<?, ?>) operator).getUserFunction();
+        // No Paimon dependency: recognize only its builder-generated conversion lambdas.
+        return function != null && function.getClass().getName().startsWith(
+                "org.apache.paimon.flink.sink.FlinkSinkBuilder$$Lambda$");
+    }
+
+    static boolean isFallbackEndpoint(StreamNode node) {
+        String name = node.getOperatorName();
+        if (name == null) {
+            return false;
+        }
+        // A source/sink name alone must not turn an internal operator into a boundary.
+        return (isSource(name) && node.getInEdges().isEmpty())
+                || (isSink(name) && node.getOutEdges().isEmpty());
     }
 
     public static boolean isSource(String operatorName) {
@@ -1322,6 +1468,7 @@ public final class OmniGraphOverride {
     }
 
     private static boolean containsTableStreamOperator(Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {
+        Set<Integer> sinkFallbackNodes = collectSinkFallbackNodes(chainInfos);
         boolean onlySourceAndSink = true;
         List<String> inputTypeList = new ArrayList<>();
         for (StreamingJobGraphGenerator.OperatorChainInfo chainInfo : chainInfos.values()) {
@@ -1329,6 +1476,9 @@ public final class OmniGraphOverride {
             for (int i = chainedNode.size() - 1; i >= 0; i--) {
 
                 StreamNode node = chainedNode.get(i);
+                if (sinkFallbackNodes.contains(node.getId())) {
+                    continue;
+                }
                 String operatorName = node.getOperatorName();
                 if (isSource(operatorName)) {
                     if (isSourceSql(node, operatorName)) {

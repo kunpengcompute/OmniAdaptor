@@ -945,8 +945,8 @@ public final class OmniGraphOverride {
                 Object sink = ReflectionUtils.retrievePrivateField(factory, "sink");
                 return sink instanceof FileSink;
             } catch (RuntimeException e) {
-                LOG.warn("Cannot inspect committer; using Flink", e);
-                return true;
+                LOG.debug("Cannot identify committer sink type; do not force file-sink fallback", e);
+                return false;
             }
         }
         return false;

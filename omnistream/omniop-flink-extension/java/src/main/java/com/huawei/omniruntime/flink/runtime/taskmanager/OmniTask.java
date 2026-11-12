@@ -1017,9 +1017,11 @@ public class OmniTask extends Task {
                 for (int i = 0; i < numberOfChannels; i++) {
                     InputChannel inputChannel = inputGateWithMetrics.getChannel(i);
                     if (inputChannel instanceof RemoteInputChannel) {
-                        RemoteInputChannel remoteInputChannel = (RemoteInputChannel) inputChannel;
-                        OmniRemoteInputChannel omniRemoteInputChannel = new OmniRemoteInputChannel(remoteInputChannel);
-                        remoteInputChannels.add(omniRemoteInputChannel);
+                        if (!(inputChannel instanceof OmniRemoteInputChannel)) {
+                            throw new GeneralRuntimeException(
+                                    "Remote channel was not created by Omni recovery adapter");
+                        }
+                        remoteInputChannels.add((OmniRemoteInputChannel) inputChannel);
                     } else if (inputChannel instanceof LocalInputChannel) {
                         LocalInputChannel localInputChannel = (LocalInputChannel) inputChannel;
                         boolean targetIsNative = upstreamTaskNative;
@@ -1038,7 +1040,7 @@ public class OmniTask extends Task {
                 OriginalTaskDataFetcher originalTaskDataFetcher = new OriginalTaskDataFetcher(nativeTaskRef,
                         this.getTaskInfo().getTaskNameWithSubtasks(), jobType);
                 if (!remoteInputChannels.isEmpty()) {
-                    originalTaskDataFetcher.createAndStartRemoteDataFetcher(remoteInputChannels);
+                    originalTaskDataFetcher.createAndStartRemoteDataFetcher(remoteInputChannels, this::failExternally);
                 }
                 if (!localInputChannels.isEmpty()) {
                     originalTaskDataFetcher.createAndStartLocalDataFetcher(localInputChannels);

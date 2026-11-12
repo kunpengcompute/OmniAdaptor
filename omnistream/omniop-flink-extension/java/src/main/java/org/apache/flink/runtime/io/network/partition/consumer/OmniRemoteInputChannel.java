@@ -13,99 +13,80 @@ package org.apache.flink.runtime.io.network.partition.consumer;
 
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.util.Optional;
 
-/**
- * OmniRemoteInputChannel
- *
- * @since 2025-04-27
- */
-public class OmniRemoteInputChannel {
-    private RemoteInputChannel remoteInputChannel;
-    private boolean isConnected = false;
-    private boolean dataReceived = false;
+import org.apache.flink.metrics.Counter;
+import org.apache.flink.runtime.checkpoint.channel.ChannelStateWriter;
+import org.apache.flink.runtime.io.network.ConnectionID;
+import org.apache.flink.runtime.io.network.ConnectionManager;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 
-    public OmniRemoteInputChannel(RemoteInputChannel remoteInputChannel) {
-        this.remoteInputChannel = remoteInputChannel;
-    }
+/** Reuses Flink's receive queue, sequence checks and credit management. */
+public class OmniRemoteInputChannel extends RemoteInputChannel {
+    private volatile Runnable dataAvailableListener;
+    private boolean connected;
 
-    public RemoteInputChannel getRemoteInputChannel() {
-        return remoteInputChannel;
-    }
-
-    public void setRemoteInputChannel(RemoteInputChannel remoteInputChannel) {
-        this.remoteInputChannel = remoteInputChannel;
+    public OmniRemoteInputChannel(
+            SingleInputGate inputGate, int channelIndex, ResultPartitionID partitionId,
+            int consumedSubpartitionIndex, ConnectionID connectionId,
+            ConnectionManager connectionManager, int initialBackoff, int maxBackoff,
+            int networkBuffersPerChannel, Counter numBytesIn, Counter numBuffersIn,
+            ChannelStateWriter stateWriter) {
+        super(inputGate, channelIndex, partitionId, consumedSubpartitionIndex,
+                connectionId, connectionManager, initialBackoff, maxBackoff,
+                networkBuffersPerChannel, numBytesIn, numBuffersIn, stateWriter);
     }
 
     public boolean isConnected() {
-        return isConnected;
+        return connected;
     }
 
     public void setConnected(boolean connected) {
-        isConnected = connected;
+        this.connected = connected;
     }
 
-    /**
-     * getChannelIndex
-     *
-     * @return int
-     */
-    public int getChannelIndex() {
-        return remoteInputChannel.getChannelIndex();
-    }
-
-    /**
-     * getGateIndex
-     *
-     * @return int
-     */
     public int getGateIndex() {
-        return remoteInputChannel.getChannelInfo().getGateIdx();
+        return getChannelInfo().getGateIdx();
     }
 
-    /**
-     * getNextBuffer
-     *
-     * @return Optional<InputChannel.BufferAndAvailability>
-     * @throws IOException IOException
-     * @throws InterruptedException InterruptedException
-     * @throws IOException IOException
-     */
-    public Optional<InputChannel.BufferAndAvailability> getNextBuffer()
-            throws IOException, InterruptedException, IOException {
-        return remoteInputChannel.getNextBuffer();
+    // Widen visibility for the native fetcher, which lives outside this package.
+    @Override
+    public Optional<InputChannel.BufferAndAvailability> getNextBuffer() throws IOException {
+        // The native fetcher consumes this channel directly, bypassing InputGate.checkError().
+        checkError();
+        return super.getNextBuffer();
     }
 
-    /**
-     * getSingleInputGateConsumedSubpartitionIndex
-     *
-     * @return int
-     */
-    public int getSingleInputGateConsumedSubpartitionIndex() {
-        Class clazz = SingleInputGate.class;
-        try {
-            Field field = clazz.getDeclaredField("consumedSubpartitionIndex");
-            field.setAccessible(true);
-            return field.getInt(this.remoteInputChannel.inputGate);
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException(e);
-        } catch (NoSuchFieldException e) {
-            throw new RuntimeException(e);
+    @Override
+    public void releaseAllResources() throws IOException {
+        super.releaseAllResources();
+    }
+
+    public void setDataAvailableListener(Runnable listener) {
+        dataAvailableListener = listener;
+        // Also probe once for data or an asynchronous error arriving before registration.
+        if (listener != null) {
+            listener.run();
         }
     }
 
-    public void setDataReceived(boolean dataReceived) {
-        this.dataReceived = dataReceived;
-    }
-    public boolean isDataReceived() {
-        return dataReceived;
-    }
-    public void resumeConsumption() throws IOException {
-        remoteInputChannel.resumeConsumption();
+    @Override
+    protected void notifyChannelNonEmpty() {
+        Runnable listener = dataAvailableListener;
+        if (listener == null) {
+            super.notifyChannelNonEmpty();
+        } else {
+            listener.run();
+        }
     }
 
-    public void releaseAllResources() throws IOException {
-        remoteInputChannel.releaseAllResources();
+    @Override
+    public void notifyPriorityEvent(int sequenceNumber) {
+        Runnable listener = dataAvailableListener;
+        if (listener == null) {
+            super.notifyPriorityEvent(sequenceNumber);
+        } else {
+            listener.run();
+        }
     }
 }

@@ -30,8 +30,6 @@ import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
 import org.apache.flink.connector.file.sink.FileSink;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertex;
-import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.runtime.state.hashmap.HashMapStateBackend;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
@@ -181,7 +179,9 @@ public final class OmniGraphOverride {
                     "WatermarkAssigner",
                     "StreamRecordTimestampInserter",
                     "ConstraintEnforcer",
-                    "GroupAggregate"));
+                    "GroupAggregate",
+                    "Deduplicate",
+                    "Rank"));
         } else {
             SUPPORT_OP_NAME.addAll(Arrays.asList(
                     "Calc",
@@ -261,27 +261,14 @@ public final class OmniGraphOverride {
             "DECIMAL128",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));
 
-    /**
-     * setStateBackend
-     *
-     * @param stateBackend backend
-     */
-    public static void setStateBackend(StateBackend stateBackend) {
-        if (performanceMode && stateBackend != null && !(stateBackend instanceof HashMapStateBackend)) {
-            SUPPORT_OP_NAME.clear();
-            SUPPORT_OP_NAME.addAll(
-                    Arrays.asList("Calc", "Correlate", "WatermarkAssigner", "StreamRecordTimestampInserter",
-                            "ConstraintEnforcer"));
-        }
-    }
-
 
     public static void setNext() {
         if (performanceMode) {
             SUPPORT_OP_NAME.clear();
             SUPPORT_OP_NAME.addAll(
                     Arrays.asList("Calc", "Correlate", "WatermarkAssigner", "StreamRecordTimestampInserter",
-                            "ConstraintEnforcer"));
+                            "ConstraintEnforcer",
+                            "GroupAggregate", "Deduplicate", "Rank"));
         }
     }
 

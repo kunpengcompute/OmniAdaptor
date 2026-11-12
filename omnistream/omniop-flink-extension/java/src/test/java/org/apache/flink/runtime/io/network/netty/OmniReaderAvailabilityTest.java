@@ -36,7 +36,7 @@ class OmniReaderAvailabilityTest {
         int stops;
         int releases;
         Reader(int credit, PartitionRequestQueue queue) throws Exception {
-            super(new InputChannelID(), credit, queue);
+            super(new InputChannelID(), credit, queue, true);
             setTaskName("remote-reader-availability-test");
             Field ref = OmniCreditBasedSequenceNumberingViewReader.class
                     .getDeclaredField("nativeCreditBasedSequenceNumberingViewReaderRef");

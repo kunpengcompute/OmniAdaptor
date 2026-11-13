@@ -145,6 +145,9 @@ public class StreamingJobGraphGenerator {
 
     private static final Logger LOG = LoggerFactory.getLogger(StreamingJobGraphGenerator.class);
 
+    private static final ConfigOption<Boolean> SOURCE_SINK_TASK_FALLBACK_ENABLED =
+            ConfigOptions.key("omni.task-fallback.source-sink.enabled").booleanType().defaultValue(false);
+
     // ------------------------------------------------------------------------
     private final ClassLoader userClassloader;
     private final StreamGraph streamGraph;
@@ -632,6 +635,9 @@ public class StreamingJobGraphGenerator {
         checkSourceOperator(jobType);
 
         boolean requiresJobFallback = false;
+        boolean sourceSinkTaskFallbackEnabled =
+                streamGraph.getConfiguration().get(SOURCE_SINK_TASK_FALLBACK_ENABLED);
+        LOG.info("Source/Sink task fallback enabled: {}", sourceSinkTaskFallbackEnabled);
         Set<Integer> endpointFallbackVertices = new HashSet<>();
         boolean shouldDoSpiltWatermark = false;
         for (Map.Entry<Integer, JobVertex> vertexEntry : jobVertices.entrySet()) {
@@ -639,7 +645,8 @@ public class StreamingJobGraphGenerator {
             LOG.info(vertexEntry.toString() + " shouldDoSpiltWatermark : " + shouldDoSpiltWatermark);
             boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos,
                     this.chainedConfigs, this.vertexConfigs, jobType, endpointFallbackVertices);
-            if (!vertexValidateRes && !endpointFallbackVertices.contains(vertexEntry.getKey())) {
+            if (!vertexValidateRes && (!sourceSinkTaskFallbackEnabled
+                    || !endpointFallbackVertices.contains(vertexEntry.getKey()))) {
                 requiresJobFallback = true;
                 LOG.info("Whole job fallback required by vertex {} ({})", vertexEntry.getKey(),
                         vertexEntry.getValue().getName());

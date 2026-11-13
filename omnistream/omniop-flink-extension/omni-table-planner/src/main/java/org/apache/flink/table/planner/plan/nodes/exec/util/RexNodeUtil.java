@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -92,6 +93,8 @@ public class RexNodeUtil {
         specialOperatorMap.put("HASH_CODE", SpecialExprType.HASH_CODE);
         specialOperatorMap.put("IS NULL", SpecialExprType.IS_NULL);
         specialOperatorMap.put("IS NOT NULL", SpecialExprType.IS_NOT_NULL);
+        specialOperatorMap.put("IS FALSE", SpecialExprType.IS_FALSE);
+        specialOperatorMap.put("IS NOT FALSE", SpecialExprType.IS_NOT_FALSE);
         specialOperatorMap.put("PROCTIME_MATERIALIZE", SpecialExprType.PROCTIME);
         specialOperatorMap.put("PROCTIME", SpecialExprType.PROCTIME);
         specialOperatorMap.put("EXTRACT", SpecialExprType.EXTRACT);
@@ -117,6 +120,7 @@ public class RexNodeUtil {
 
     static {
         unaryOperatorMap.put("-", UnaryExprType.NEGATION);
+        unaryOperatorMap.put("NOT", UnaryExprType.NOT);
         unaryOperatorMap.put("IS TRUE", UnaryExprType.IS_TRUE);
         unaryOperatorMap.put("IS NOT TRUE", UnaryExprType.IS_NOT_TRUE);
     }
@@ -157,6 +161,7 @@ public class RexNodeUtil {
 
     public enum UnaryExprType {
         NEGATION,
+        NOT,
         IS_TRUE,
         IS_NOT_TRUE
     }
@@ -191,6 +196,8 @@ public class RexNodeUtil {
         CHAR_LENGTH,
         IS_NULL,
         IS_NOT_NULL,
+        IS_FALSE,
+        IS_NOT_FALSE,
         PROCTIME,
         EXTRACT,
         DATE_FORMAT,
@@ -646,6 +653,13 @@ public class RexNodeUtil {
                         List<Map<String, Object>> notnullArgList = new ArrayList<>();
                         notnullArgList.add(buildJsonMap(operands.get(0)));
                         jsonMap.put("arguments", notnullArgList);
+                        break;
+                    case IS_FALSE:
+                    case IS_NOT_FALSE:
+                        jsonMap.put("exprType", "FUNCTION");
+                        setDataType(rexCall, jsonMap, "returnType");
+                        jsonMap.put("function_name", specialType == SpecialExprType.IS_FALSE ? "is_false" : "is_not_false");
+                        jsonMap.put("arguments", Collections.singletonList(buildJsonMap(operands.get(0))));
                         break;
                     case TO_TIMESTAMP_LTZ:
                         jsonMap.put("exprType", "FUNCTION");

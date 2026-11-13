@@ -121,11 +121,6 @@ public class ValidateJoinOPStrategy extends AbstractValidateOperatorStrategy {
                 LOG.warn("Semi/anti join supports equi-key only in v1, fall back for non-equi condition");
                 return false;
             }
-            // RIGHT/FULL outer joins handle non-equi conditions the same way as Flink:
-            // the matcher (of()) applies the non-equi filter per candidate BEFORE any
-            // numAssociate counting, so key-equal pairs rejected by the predicate do not
-            // increment the count and the outer row keeps its null padding. Verified by
-            // StreamJoinOuter_sql_test.sql cases 6/7 (dual-mode normalized comparison).
             if (!nonEquiConditionCheck((Map<String, Object>) condition, outputTypes.size())) {
                 return false;
             }

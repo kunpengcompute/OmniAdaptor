@@ -15,6 +15,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.AbstractValidateOperatorStrategy;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateCalcOPStrategy;
+import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateChangelogNormalizeOPStrategy;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateOperatorStrategyFactory;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateValuesOPStrategy;
 import com.huawei.omniruntime.flink.utils.DescriptionUtil;
@@ -965,7 +966,16 @@ public final class OmniGraphOverride {
                 || validateUpsertKafkaKey(jsonMap, "outputTypes");
     }
 
-    private static boolean validateUpsertKafkaKey(Map<String, Object> description, String fieldTypes) {
+    /**
+     * upsert-kafka 主键校验，source 与 sink 共享同一契约：原生 upsert-kafka source
+     * {@code DynamicKafkaDeserializationSchema} 与 sink {@code DynamicKafkaRecordSerializationSchema}
+     * 均支持复合主键及白名单内非 BIGINT 主键列类型，因此两侧统一收敛到
+     * {@link ValidateChangelogNormalizeOPStrategy#supportsGroupKeyColumns}（与 ChangelogNormalize
+     * 分组键语义共享唯一来源），避免两侧契约分叉。
+     *
+     * <p>包可见以便同包单测覆盖（复合键 / 单键各一条校验用例）。
+     */
+    static boolean validateUpsertKafkaKey(Map<String, Object> description, String fieldTypes) {
         Object keyProjection = description.get("keyProjection");
         Object rowTypes = description.get(fieldTypes);
         if (!(keyProjection instanceof List) || !(rowTypes instanceof List)) {
@@ -973,12 +983,7 @@ public final class OmniGraphOverride {
         }
         List<?> keys = (List<?>) keyProjection;
         List<?> types = (List<?>) rowTypes;
-        if (keys.size() != 1 || !(keys.get(0) instanceof Integer)) {
-            return false;
-        }
-        int index = (Integer) keys.get(0);
-        return index >= 0 && index < types.size() && types.get(index) instanceof String
-                && "BIGINT".equals(AbstractValidateOperatorStrategy.stripNotNull((String) types.get(index)));
+        return ValidateChangelogNormalizeOPStrategy.supportsGroupKeyColumns(types, keys);
     }
 
     /**

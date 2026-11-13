@@ -188,6 +188,8 @@ public class StreamExecChangelogNormalize extends ExecNodeBase<RowData>
         ObjectMapper mapper = JacksonMapperFactory.createObjectMapper();
         ObjectNode description = mapper.createObjectNode();
         description.put("processFunction", processFunctionName);
+        description.put("inputInsertOnly", false);
+        description.put("generateInsert", true);
         description.set("inputTypes", mapper.valueToTree(DescriptionUtil.getFieldTypeList(rowType.getFields())));
         description.set("grouping", mapper.valueToTree(uniqueKeys));
         description.put("generateUpdateBefore", generateUpdateBefore);

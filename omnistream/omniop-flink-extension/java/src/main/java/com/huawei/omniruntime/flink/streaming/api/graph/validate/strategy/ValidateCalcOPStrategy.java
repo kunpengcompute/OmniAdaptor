@@ -40,7 +40,7 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
             "NOT_EQUAL",
             "DATE_FORMAT",
             "count_char"));
-    private static final Set<String> SUPPORT_UNARYOP_NAME = new HashSet<>(Arrays.asList("CAST", "NEGATION"));
+    private static final Set<String> SUPPORT_UNARYOP_NAME = new HashSet<>(Arrays.asList("CAST", "NEGATION", "NOT"));
 
     @SuppressWarnings("unchecked")
     @Override
@@ -175,9 +175,11 @@ public class ValidateCalcOPStrategy extends AbstractValidateOperatorStrategy {
                     LOG.info("ERROR: Cannot parse expr in an unary expression: {}", unaryOperatorType);
                     return false;
                 }
-                // we currently only deal with a fake CAST
 
-                LOG.info("WARNING: CAST/NEGATION might not be supported.");
+                if (!"NOT".equals(unaryOperatorType)) {
+                    // we currently only deal with a fake CAST
+                    LOG.info("WARNING: CAST/NEGATION might not be supported.");
+                }
                 return true;
             case "LITERAL":
                 if (!exprMap.containsKey("dataType") || !exprMap.containsKey("isNull")) {

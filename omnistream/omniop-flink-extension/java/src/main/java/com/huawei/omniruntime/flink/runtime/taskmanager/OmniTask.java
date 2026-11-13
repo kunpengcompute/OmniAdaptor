@@ -223,6 +223,8 @@ public class OmniTask extends Task {
 
     private boolean deleteNativeTaskInJavaSide = false;
 
+    private final Object nativeTaskLifecycleLock = new Object();
+
     // Set once the native run loop has returned and ownership of the native task has passed to the
     // native ResultPartitionManager, which frees it after all produced partitions are consumed.
     // From that point nativeTaskRef may dangle at any moment and must not be passed to native code.
@@ -408,21 +410,28 @@ public class OmniTask extends Task {
                         t);
             }
 
-            //待优化
-            if(deleteNativeTaskInJavaSide){
-                deleteNativeTask(nativeTaskRef);
-            } else if (nativeTaskRef != 0) {
-                // Last thing this task does: hand the native task to the native
-                // ResultPartitionManager, which deletes it once every partition it produced has
-                // been consumed. It must come after the metrics de-registration above, because
-                // from here on the task may be freed at any moment - during this call, or later on
-                // a netty thread - and nothing may read through nativeTaskRef afterwards.
-                nativeTaskReleased = true;
-                LOG.info("Handing native task {} to the native ResultPartitionManager for task {} ({})",
-                        nativeTaskRef, taskNameWithSubtask, executionId);
-                notifyNativeTaskRunFinished(nativeTaskRef);
-                LOG.info("Handed over native task {} for task {}; it is deleted natively once every "
-                        + "partition it produced has been consumed", nativeTaskRef, taskNameWithSubtask);
+            synchronized (nativeTaskLifecycleLock) {
+                if (nativeTaskRef != 0 && !nativeTaskReleased) {
+                    final long taskRef = nativeTaskRef;
+                    // Publish the terminal state before native deletion/handoff. cancelExecution()
+                    // uses the same lock, so it either finishes cancellation first or observes that
+                    // the native task is no longer usable.
+                    nativeTaskReleased = true;
+                    nativeTaskRef = 0L;
+
+                    if (deleteNativeTaskInJavaSide) {
+                        deleteNativeTask(taskRef);
+                    } else {
+                        // Last thing this task does: hand the native task to the native
+                        // ResultPartitionManager, which deletes it once every partition it produced
+                        // has been consumed. The task may be deleted during this call.
+                        LOG.info("Handing native task {} to the native ResultPartitionManager for task {} ({})",
+                                taskRef, taskNameWithSubtask, executionId);
+                        notifyNativeTaskRunFinished(taskRef);
+                        LOG.info("Handed over native task {} for task {}; it is deleted natively once every "
+                                + "partition it produced has been consumed", taskRef, taskNameWithSubtask);
+                    }
+                }
             }
         }
     }
@@ -740,17 +749,19 @@ public class OmniTask extends Task {
     @Override
     public void cancelExecution() {
         super.cancelExecution();
-        if (!isNativeTaskUsable()) {
-            // The native task already finished and is owned by the native side; nothing left to cancel.
-            return;
-        }
-        if (jobType.equals(JobType.SQL)
-            && nameOfInvokableClass.equals("org.apache.flink.streaming.runtime.tasks.SourceOperatorStreamTask")) {
-            cancelTask(nativeTaskRef);
-        }
-        // for stream situation, we could not check which task is native or java
-        if (jobType != null && jobType.equals(JobType.STREAM)) {
-            cancelTask(nativeTaskRef);
+        synchronized (nativeTaskLifecycleLock) {
+            if (!isNativeTaskUsable()) {
+                // The native task already finished and is owned by the native side; nothing left to cancel.
+                return;
+            }
+            if (jobType == JobType.SQL
+                && nameOfInvokableClass.equals("org.apache.flink.streaming.runtime.tasks.SourceOperatorStreamTask")) {
+                cancelTask(nativeTaskRef);
+            }
+            // for stream situation, we could not check which task is native or java
+            if (jobType == JobType.STREAM) {
+                cancelTask(nativeTaskRef);
+            }
         }
     }
 

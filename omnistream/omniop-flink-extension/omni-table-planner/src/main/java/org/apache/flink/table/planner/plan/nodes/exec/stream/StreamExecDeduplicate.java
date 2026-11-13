@@ -250,6 +250,7 @@ public class StreamExecDeduplicate extends ExecNodeBase<RowData>
         jsonMap.put("rowtimeIndex", rowtimeIndex);
         jsonMap.put("generateUpdateBefore", generateUpdateBefore);
         jsonMap.put("generateInsert", generateInsert);
+        jsonMap.put("inputInsertOnly", true);
         jsonMap.put("keepLastRow", keepLastRow);
         jsonMap.put("miniBatchSize", miniBatchSize);
         jsonMap.put("isRowtime", isRowtime);

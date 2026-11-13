@@ -15,6 +15,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.AbstractValidateOperatorStrategy;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateCalcOPStrategy;
+import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateChangelogNormalizeOPStrategy;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateOperatorStrategyFactory;
 import com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy.ValidateValuesOPStrategy;
 import com.huawei.omniruntime.flink.utils.DescriptionUtil;
@@ -962,10 +963,20 @@ public final class OmniGraphOverride {
             return false;
         }
         return !Boolean.TRUE.equals(jsonMap.get("upsertMode"))
-                || validateUpsertKafkaKey(jsonMap, "outputTypes");
+                || validateUpsertKafkaKey(jsonMap, "outputTypes", true);
     }
 
+    /**
+     * upsert-kafka 主键校验。sink 侧（2 参版本）沿用旧契约：仅接受单 BIGINT 主键；
+     * source 侧（allowCompositeKey=true）放开复合主键，主键列类型规则收敛到
+     * {@link ValidateChangelogNormalizeOPStrategy}（ChangelogNormalize 分组键语义的唯一来源）。
+     */
     private static boolean validateUpsertKafkaKey(Map<String, Object> description, String fieldTypes) {
+        return validateUpsertKafkaKey(description, fieldTypes, false);
+    }
+
+    private static boolean validateUpsertKafkaKey(Map<String, Object> description, String fieldTypes,
+            boolean allowCompositeKey) {
         Object keyProjection = description.get("keyProjection");
         Object rowTypes = description.get(fieldTypes);
         if (!(keyProjection instanceof List) || !(rowTypes instanceof List)) {
@@ -973,6 +984,9 @@ public final class OmniGraphOverride {
         }
         List<?> keys = (List<?>) keyProjection;
         List<?> types = (List<?>) rowTypes;
+        if (allowCompositeKey) {
+            return ValidateChangelogNormalizeOPStrategy.supportsGroupKeyColumns(types, keys);
+        }
         if (keys.size() != 1 || !(keys.get(0) instanceof Integer)) {
             return false;
         }

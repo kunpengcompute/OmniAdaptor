@@ -89,6 +89,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.IntStream;
@@ -324,9 +325,9 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
                             aggInputRowType,
                             JavaScalaConversionUtil.toScala(group.getAggCalls()),
                             new boolean[group.getAggCalls().size()],
-                            false, // needRetraction
-                            true, // isStateBackendDataViews
-                            true); // needDistinctInfo
+                            false,
+                            true,
+                            true);
             final LogicalType[] accTypes =
                     Arrays.stream(aggInfoList.getAccTypes())
                             .map(LogicalTypeDataTypeConverter::fromDataTypeToLogicalType)
@@ -410,12 +411,12 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
 
     private static String extractAggFunctionName(AggregateCall aggCall) {
         String name = aggCall.getAggregation().kind.toString();
-        // planner variants like $SUM0 keep the $ prefix; strip it like the
-        // ValidateAggOPStrategy does. $SUM0 stays out of the whitelist.
+        // planner variants like $SUM0 keep the $ prefix; strip it so the
+        // whitelist (which lists SUM0 explicitly) can match the base name.
         if (name.contains("$")) {
             name = name.replace("$", "");
         }
-        return name.toUpperCase();
+        return name.toUpperCase(Locale.ROOT);
     }
 
     private String getExtraDescription(
@@ -574,9 +575,9 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
                         aggInputRowType,
                         JavaScalaConversionUtil.toScala(aggCalls),
                         new boolean[aggCalls.size()],
-                        false, // needRetraction
-                        true, // isStateBackendDataViews
-                        true); // needDistinctInfo
+                        false,
+                        true,
+                        true);
 
         LogicalType[] fieldTypes = inputRowType.getChildren().toArray(new LogicalType[0]);
         AggsHandlerCodeGenerator generator =
@@ -584,7 +585,7 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
                         ctx,
                         relBuilder,
                         JavaScalaConversionUtil.toScala(Arrays.asList(fieldTypes)),
-                        false); // copyInputField
+                        false);
 
         GeneratedAggsHandleFunction genAggsHandler =
                 generator
@@ -662,9 +663,9 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
                         aggInputType,
                         JavaScalaConversionUtil.toScala(aggCalls),
                         aggCallNeedRetractions,
-                        true, // needInputCount,
-                        true, // isStateBackendDataViews
-                        true); // needDistinctInfo
+                        true,
+                        true,
+                        true);
 
         LogicalType[] fieldTypes = inputType.getChildren().toArray(new LogicalType[0]);
         AggsHandlerCodeGenerator generator =
@@ -672,7 +673,7 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
                         ctx,
                         relBuilder,
                         JavaScalaConversionUtil.toScala(Arrays.asList(fieldTypes)),
-                        false); // copyInputField
+                        false);
 
         GeneratedAggsHandleFunction genAggsHandler =
                 generator

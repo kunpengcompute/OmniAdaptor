@@ -187,6 +187,7 @@ public final class OmniGraphOverride {
                     "DropUpdateBefore"));
         }
         SUPPORT_KAFKA_SCHEMA_TYPE.add("JsonRowDataDeserializationSchema");
+        SUPPORT_KAFKA_SCHEMA_TYPE.add("DebeziumJsonDeserializationSchema");
         OP_NAME_OF_SQL.addAll(Arrays.asList("Calc", "GroupAggregate", "LocalGroupAggregate", "GlobalGroupAggregate",
                 "IncrementalGroupAggregate", "Join", "LookupJoin", "WindowAggregate", "WindowJoin", "GroupWindowAggregate",
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",
@@ -956,6 +957,10 @@ public final class OmniGraphOverride {
                 || !SUPPORT_KAFKA_SCHEMA_TYPE.contains((String) jsonMap.get("deserializationSchema"))) {
             return false;
         }
+        if ("DebeziumJsonDeserializationSchema".equals(jsonMap.get("deserializationSchema"))
+                && !validateDebeziumSource(jsonMap)) {
+            return false;
+        }
         if (!jsonMap.containsKey("hasMetadata") || !(jsonMap.get("hasMetadata") instanceof Boolean)
                 || (Boolean) jsonMap.get("hasMetadata")) {
             return false;
@@ -986,6 +991,75 @@ public final class OmniGraphOverride {
         List<?> keys = (List<?>) keyProjection;
         List<?> types = (List<?>) rowTypes;
         return ValidateChangelogNormalizeOPStrategy.supportsGroupKeyColumns(types, keys);
+    }
+
+    /**
+     * Native metadata columns supported by the Debezium JSON source. {@code source.properties}
+     * is MAP-typed and deliberately excluded: that column falls back to the Java runtime.
+     */
+    private static final Set<String> DEBEZIUM_NATIVE_METADATA = new HashSet<>(Arrays.asList(
+            "schema",
+            "ingestion-timestamp",
+            "source.timestamp",
+            "source.database",
+            "source.schema",
+            "source.table"));
+
+    /**
+     * Validates the native debezium-json source contract:
+     * <ul>
+     *   <li>Only the scalar format metadata columns (schema, ingestion-timestamp, source.*) are
+     *       natively supported. The MAP-typed {@code source.properties} column falls back to the
+     *       Java runtime, matching Flink's semantics.</li>
+     *   <li>Native temporal columns are limited to millisecond precision (precision &le; 3), so
+     *       higher-precision TIMESTAMP/TIME columns must fall back to Java to avoid data loss.</li>
+     * </ul>
+     */
+    static boolean validateDebeziumSource(Map<String, Object> jsonMap) {
+        Object metadata = jsonMap.get("debeziumMetadata");
+        if (metadata instanceof List) {
+            for (Object key : (List<?>) metadata) {
+                if (!(key instanceof String) || !DEBEZIUM_NATIVE_METADATA.contains((String) key)) {
+                    LOG.info("debezium-json metadata '{}' is not native, fall back to Flink.", key);
+                    return false;
+                }
+            }
+        }
+        Object outputTypes = jsonMap.get("outputTypes");
+        if (!(outputTypes instanceof List)) {
+            return false;
+        }
+        for (Object typeObj : (List<?>) outputTypes) {
+            if (!(typeObj instanceof String)) {
+                return false;
+            }
+            String type = AbstractValidateOperatorStrategy.stripNotNull((String) typeObj);
+            if (isHighPrecisionTemporalType(type)) {
+                LOG.info("debezium-json temporal type '{}' exceeds native millisecond precision, fall back to Flink.",
+                        type);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isHighPrecisionTemporalType(String type) {
+        if (type.startsWith("TIMESTAMP_WITHOUT_TIME_ZONE(")
+                || type.startsWith("TIMESTAMP_WITH_LOCAL_TIME_ZONE(")
+                || type.startsWith("TIMESTAMP(")
+                || type.startsWith("TIME_WITHOUT_TIME_ZONE(")) {
+            int open = type.indexOf('(');
+            int close = type.indexOf(')');
+            if (open >= 0 && close > open) {
+                try {
+                    return Integer.parseInt(type.substring(open + 1, close).trim()) > 3;
+                } catch (NumberFormatException e) {
+                    return true;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     /**

@@ -183,13 +183,15 @@ public final class OmniGraphOverride {
                     "WindowTableFunction",
                     "StreamRecordTimestampInserter",
                     "ConstraintEnforcer",
-                    "ChangelogNormalize"));
+                    "ChangelogNormalize",
+                    "DropUpdateBefore"));
         }
         SUPPORT_KAFKA_SCHEMA_TYPE.add("JsonRowDataDeserializationSchema");
         OP_NAME_OF_SQL.addAll(Arrays.asList("Calc", "GroupAggregate", "LocalGroupAggregate", "GlobalGroupAggregate",
                 "IncrementalGroupAggregate", "Join", "LookupJoin", "WindowAggregate", "WindowJoin", "GroupWindowAggregate",
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",
-                "Limit", "WindowTableFunction", "StreamRecordTimestampInserter", "ConstraintEnforcer", "ChangelogNormalize"));
+                "Limit", "WindowTableFunction", "StreamRecordTimestampInserter", "ConstraintEnforcer", "ChangelogNormalize",
+                "DropUpdateBefore"));
         // Snapshot the baseline whitelist determined by performanceMode, so that setStateBackend()/setNext()
         // restrictions can be reset per job. Must be taken inside the static block AFTER SUPPORT_OP_NAME is
         // populated (field initializers would capture the still-empty set).

@@ -1288,10 +1288,14 @@ public final class OmniGraphOverride {
     static Set<Integer> collectSinkFallbackNodes(
             Map<Integer, StreamingJobGraphGenerator.OperatorChainInfo> chainInfos) {
         Map<Integer, StreamNode> nodes = new HashMap<>();
+        Set<Integer> nativeCsvWriters = new HashSet<>();
         for (StreamingJobGraphGenerator.OperatorChainInfo chain : chainInfos.values()) {
             if (chain != null) {
                 for (StreamNode node : chain.getAllChainedNodes()) {
                     nodes.put(node.getId(), node);
+                    if (computeFileSinkCsvNative(node) && !isCheckpointingEnabled(chain.getStreamGraph())) {
+                        nativeCsvWriters.add(node.getId());
+                    }
                 }
             }
         }
@@ -1314,7 +1318,7 @@ public final class OmniGraphOverride {
         Queue<Integer> pending = new LinkedList<>();
         for (Integer id : terminalStages) {
             StreamNode node = nodes.get(id);
-            if (isWriterOrCommitter(node) || isPaimonSinkAdapter(node)) {
+            if ((isWriterOrCommitter(node) && !nativeCsvWriters.contains(id)) || isPaimonSinkAdapter(node)) {
                 pending.add(id);
             }
         }

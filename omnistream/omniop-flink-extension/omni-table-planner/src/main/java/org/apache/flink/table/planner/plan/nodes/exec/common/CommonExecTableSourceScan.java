@@ -65,6 +65,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.MultipleTransformationTran
 import org.apache.flink.table.planner.plan.nodes.exec.spec.DynamicTableSourceSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
+import org.apache.flink.table.planner.plan.nodes.exec.util.UpsertKafkaPlanUtils;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.TransformationMetadata;
 import org.apache.flink.table.planner.plan.utils.ReflectionUtils;
 import org.apache.flink.table.planner.utils.ShortcutUtils;
@@ -286,7 +287,7 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
     private void setSourceInfo(SourceTransformation<?, ?, ?> transformation,
         Map<String, Object> jsonMap, Source source) {
         jsonMap.put("format", "kafka");
-        String deserializationSchema = getDeserializationSchema(source);
+        String deserializationSchema = getDeserializationSchema(source, jsonMap);
         jsonMap.put("deserializationSchema", deserializationSchema);
         boolean hasMetadata = true;
         if (!deserializationSchema.isEmpty()) {
@@ -370,7 +371,7 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
         }
     }
 
-    private String getDeserializationSchema(Source source) {
+    private String getDeserializationSchema(Source source, Map<String, Object> jsonMap) {
         String emptyName = "";
         if (!source.getClass().getSimpleName().equals("KafkaSource")) {
             return emptyName;
@@ -401,10 +402,20 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
         }
         Object keyDeserialization = ReflectionUtils.retrievePrivateField(
             kafkaDeserializationSchema, "keyDeserialization");
-        if (keyDeserialization != null) {
+        Object valueDeserialization = ReflectionUtils.retrievePrivateField(
+                kafkaDeserializationSchema, "valueDeserialization");
+        String valueSchema = valueDeserialization == null ? emptyName : valueDeserialization.getClass().getSimpleName();
+        if (UpsertKafkaPlanUtils.isUpsertMode(kafkaDeserializationSchema)) {
+            jsonMap.put("upsertMode", true);
+            if (!UpsertKafkaPlanUtils.isSupportedJsonDecoder(keyDeserialization)
+                    || !UpsertKafkaPlanUtils.isSupportedJsonDecoder(valueDeserialization)) {
+                return emptyName;
+            }
+            UpsertKafkaPlanUtils.populateSourceDescriptor(
+                    jsonMap, kafkaDeserializationSchema, keyDeserialization, valueDeserialization);
+        } else if (keyDeserialization != null) {
             return emptyName;
         }
-        return ReflectionUtils.retrievePrivateField(
-            kafkaDeserializationSchema, "valueDeserialization").getClass().getSimpleName();
+        return valueSchema;
     }
 }

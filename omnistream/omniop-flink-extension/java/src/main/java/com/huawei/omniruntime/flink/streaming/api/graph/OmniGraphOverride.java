@@ -963,20 +963,19 @@ public final class OmniGraphOverride {
             return false;
         }
         return !Boolean.TRUE.equals(jsonMap.get("upsertMode"))
-                || validateUpsertKafkaKey(jsonMap, "outputTypes", true);
+                || validateUpsertKafkaKey(jsonMap, "outputTypes");
     }
 
     /**
-     * upsert-kafka 主键校验。sink 侧（2 参版本）沿用旧契约：仅接受单 BIGINT 主键；
-     * source 侧（allowCompositeKey=true）放开复合主键，主键列类型规则收敛到
-     * {@link ValidateChangelogNormalizeOPStrategy}（ChangelogNormalize 分组键语义的唯一来源）。
+     * upsert-kafka 主键校验，source 与 sink 共享同一契约：原生 upsert-kafka source
+     * {@code DynamicKafkaDeserializationSchema} 与 sink {@code DynamicKafkaRecordSerializationSchema}
+     * 均支持复合主键及白名单内非 BIGINT 主键列类型，因此两侧统一收敛到
+     * {@link ValidateChangelogNormalizeOPStrategy#supportsGroupKeyColumns}（与 ChangelogNormalize
+     * 分组键语义共享唯一来源），避免两侧契约分叉。
+     *
+     * <p>包可见以便同包单测覆盖（复合键 / 单键各一条校验用例）。
      */
-    private static boolean validateUpsertKafkaKey(Map<String, Object> description, String fieldTypes) {
-        return validateUpsertKafkaKey(description, fieldTypes, false);
-    }
-
-    private static boolean validateUpsertKafkaKey(Map<String, Object> description, String fieldTypes,
-            boolean allowCompositeKey) {
+    static boolean validateUpsertKafkaKey(Map<String, Object> description, String fieldTypes) {
         Object keyProjection = description.get("keyProjection");
         Object rowTypes = description.get(fieldTypes);
         if (!(keyProjection instanceof List) || !(rowTypes instanceof List)) {
@@ -984,15 +983,7 @@ public final class OmniGraphOverride {
         }
         List<?> keys = (List<?>) keyProjection;
         List<?> types = (List<?>) rowTypes;
-        if (allowCompositeKey) {
-            return ValidateChangelogNormalizeOPStrategy.supportsGroupKeyColumns(types, keys);
-        }
-        if (keys.size() != 1 || !(keys.get(0) instanceof Integer)) {
-            return false;
-        }
-        int index = (Integer) keys.get(0);
-        return index >= 0 && index < types.size() && types.get(index) instanceof String
-                && "BIGINT".equals(AbstractValidateOperatorStrategy.stripNotNull((String) types.get(index)));
+        return ValidateChangelogNormalizeOPStrategy.supportsGroupKeyColumns(types, keys);
     }
 
     /**

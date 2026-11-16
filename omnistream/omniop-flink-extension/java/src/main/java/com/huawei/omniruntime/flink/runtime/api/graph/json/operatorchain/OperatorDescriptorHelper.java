@@ -314,6 +314,9 @@ public class OperatorDescriptorHelper {
             boolean emitProgressiveWatermarks = ReflectionUtils.retrievePrivateField(
                 sourceOperatorFactory, "emitProgressiveWatermarks");
             kafkaFormatPojo.setEmitProgressiveWatermarks(emitProgressiveWatermarks);
+            if (kafkaFormatPojo.getUpsertMode() == null) {
+                kafkaFormatPojo.setUpsertMode(false);
+            }
             String description = JsonHelper.toJson(kafkaFormatPojo);
             opDesc.setDescription(description);
         } else {

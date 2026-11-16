@@ -14,8 +14,11 @@ package com.huawei.omniruntime.flink.streaming.api.graph.validate.strategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Validate strategy for the {@code DropUpdateBefore} operator.
@@ -27,6 +30,45 @@ import java.util.Map;
  */
 public class ValidateDropUpdateBeforeOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Logger LOG = LoggerFactory.getLogger(ValidateDropUpdateBeforeOPStrategy.class);
+
+    private static final Set<String> EXTRA_SUPPORT_DATA_TYPE =
+            new HashSet<>(Arrays.asList("DATE"));
+
+    @Override
+    public boolean validateDataTypes(List<List<String>> dataTypesList) {
+        return dataTypesList.stream()
+                .flatMap(List::stream)
+                .allMatch(type -> {
+                    String originalType = type;
+                    type = stripNotNull(type);
+
+                    if (type.matches("^VARCHAR\\([^)]*\\)$")) {
+                        LOG.info("converted to VARCHAR");
+                        type = "VARCHAR";
+                    }
+
+                    if (type.matches("^CHAR\\([^)]*\\)$")) {
+                        LOG.info("converted to CHAR");
+                        type = "CHAR";
+                    }
+
+                    if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
+                        LOG.info("converted to DECIMAL64");
+                        type = "DECIMAL64";
+                    }
+
+                    if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
+                        LOG.info("converted to DECIMAL128");
+                        type = "DECIMAL128";
+                    }
+
+                    if (!SUPPORT_DATA_TYPE.contains(type) && !EXTRA_SUPPORT_DATA_TYPE.contains(type)) {
+                        LOG.info("Unsupported data type: '{}' (original: '{}')", type, originalType);
+                        return false;
+                    }
+                    return true;
+                });
+    }
 
     @Override
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {

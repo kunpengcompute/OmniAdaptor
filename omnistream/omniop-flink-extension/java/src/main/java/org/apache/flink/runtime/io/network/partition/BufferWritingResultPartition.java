@@ -30,6 +30,7 @@ import com.huawei.omniruntime.flink.runtime.io.network.partition.OmniPipelinedSu
 
 import com.huawei.omniruntime.flink.streaming.api.graph.JobType;
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
@@ -542,6 +543,13 @@ public abstract class BufferWritingResultPartition extends ResultPartition {
     public void alignedBarrierTimeout(long checkpointId) throws IOException {
         for (ResultSubpartition subpartition : subpartitions) {
             subpartition.alignedBarrierTimeout(checkpointId);
+        }
+    }
+
+    @Override
+    public void abortCheckpoint(long checkpointId, CheckpointException cause) {
+        for (ResultSubpartition subpartition : subpartitions) {
+            subpartition.abortCheckpoint(checkpointId, cause);
         }
     }
 }

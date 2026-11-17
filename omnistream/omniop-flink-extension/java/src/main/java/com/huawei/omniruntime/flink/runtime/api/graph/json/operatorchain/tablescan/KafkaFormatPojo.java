@@ -42,7 +42,7 @@ public class KafkaFormatPojo {
 
     private List<String> outputTypes;
 
-    private Boolean upsertMode;
+    private boolean upsertMode;
 
     private List<Integer> keyProjection;
 
@@ -140,11 +140,11 @@ public class KafkaFormatPojo {
         this.outputTypes = outputTypes;
     }
 
-    public Boolean getUpsertMode() {
+    public boolean getUpsertMode() {
         return upsertMode;
     }
 
-    public void setUpsertMode(Boolean upsertMode) {
+    public void setUpsertMode(boolean upsertMode) {
         this.upsertMode = upsertMode;
     }
 

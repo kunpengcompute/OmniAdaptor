@@ -81,6 +81,7 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -173,7 +174,7 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
                             .getTransformation();
             meta.fill(transformation);
             transformation.setOutputType(outputTypeInfo);
-            transformation.setDescription(getExtraDescription(transformation));
+            transformation.setDescription(getExtraDescription(transformation, tableSource));
             return transformation;
         } else if (provider instanceof TransformationScanProvider) {
             final Transformation<RowData> transformation =
@@ -238,7 +239,8 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
             InternalTypeInfo<RowData> outputTypeInfo,
             String operatorName);
 
-    private String getExtraDescription(Transformation<RowData> transformation) {
+    private String getExtraDescription(
+            Transformation<RowData> transformation, ScanTableSource tableSource) {
         if (!(transformation instanceof SourceTransformation)) {
             return transformation.getDescription();
         }
@@ -252,7 +254,7 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
 
         jsonMap.put("originDescription", transformation.getDescription());
 
-        setSourceInfo((SourceTransformation<?, ?, ?>) transformation, jsonMap, source);
+        setSourceInfo((SourceTransformation<?, ?, ?>) transformation, jsonMap, source, tableSource);
 
         List<String> outputNameList = new ArrayList<>();
         List<String> outputTypeList = new ArrayList<>();
@@ -285,9 +287,15 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
     }
 
     private void setSourceInfo(SourceTransformation<?, ?, ?> transformation,
-        Map<String, Object> jsonMap, Source source) {
+        Map<String, Object> jsonMap, Source source, ScanTableSource tableSource) {
         jsonMap.put("format", "kafka");
         String deserializationSchema = getDeserializationSchema(source, jsonMap);
+        if ("DebeziumJsonDeserializationSchema".equals(deserializationSchema)
+                && !setDebeziumFormatInfo(tableSource, jsonMap)) {
+            // failed to extract the debezium-json format options, mark the source unsupported so
+            // that the vertex falls back to the Java runtime.
+            deserializationSchema = "";
+        }
         jsonMap.put("deserializationSchema", deserializationSchema);
         boolean hasMetadata = true;
         if (!deserializationSchema.isEmpty()) {
@@ -308,6 +316,59 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
         jsonMap.put("properties", properties);
         WatermarkStrategy<?> watermarkStrategy = transformation.getWatermarkStrategy();
         setWatermarkStrategy(watermarkStrategy, jsonMap);
+    }
+
+    /**
+     * Extracts the native debezium-json format options from the table source's value decoding
+     * format and writes them into the operator description consumed by the C++ runtime.
+     *
+     * @return true when all options were successfully extracted.
+     */
+    private boolean setDebeziumFormatInfo(ScanTableSource tableSource, Map<String, Object> jsonMap) {
+        Object format = null;
+        try {
+            format = unwrapDecodingFormat(
+                    ReflectionUtils.retrievePrivateField(tableSource, "valueDecodingFormat"));
+            if (format == null) {
+                LOG.warn("debezium-json valueDecodingFormat is absent on {}",
+                        tableSource.getClass().getName());
+                return false;
+            }
+            jsonMap.put("debeziumSchemaInclude",
+                    Boolean.TRUE.equals(readFormatOption(format, "schemaInclude")));
+            jsonMap.put("debeziumIgnoreParseErrors",
+                    Boolean.TRUE.equals(readFormatOption(format, "ignoreParseErrors")));
+            Object timestampFormat = readFormatOption(format, "timestampFormat");
+            jsonMap.put("debeziumTimestampFormat",
+                    timestampFormat == null ? "SQL" : String.valueOf(timestampFormat));
+            Object metadataKeys = readFormatOption(format, "metadataKeys");
+            jsonMap.put("debeziumMetadata",
+                    metadataKeys == null ? Collections.emptyList() : metadataKeys);
+            return true;
+        } catch (RuntimeException e) {
+            LOG.warn("Failed to extract debezium-json format options from {}: {}",
+                    format == null ? tableSource.getClass().getName() : format.getClass().getName(),
+                    e.toString(), e);
+            return false;
+        }
+    }
+
+    private static Object unwrapDecodingFormat(Object format) {
+        if (format instanceof Optional) {
+            format = ((Optional<?>) format).orElse(null);
+        }
+        return format != null && "DecodingFormatWrapper".equals(format.getClass().getSimpleName())
+                ? ReflectionUtils.retrievePrivateField(format, "innerDecodingFormat")
+                : format;
+    }
+
+    private static Object readFormatOption(Object format, String field) {
+        try {
+            return ReflectionUtils.retrievePrivateField(format, field);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException(
+                    "missing field '" + field + "' on " + format.getClass().getName(), e);
+        }
     }
 
     private void setWatermarkStrategy(WatermarkStrategy<?> watermarkStrategy, Map<String, Object> jsonMap) {

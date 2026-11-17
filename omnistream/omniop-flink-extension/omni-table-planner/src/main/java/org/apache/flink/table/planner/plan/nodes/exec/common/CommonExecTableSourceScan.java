@@ -325,22 +325,49 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
      * @return true when all options were successfully extracted.
      */
     private boolean setDebeziumFormatInfo(ScanTableSource tableSource, Map<String, Object> jsonMap) {
+        Object format = null;
         try {
-            Object valueDecodingFormat =
-                    ReflectionUtils.retrievePrivateField(tableSource, "valueDecodingFormat");
-            Object schemaInclude = ReflectionUtils.retrievePrivateField(valueDecodingFormat, "schemaInclude");
-            Object ignoreParseErrors =
-                    ReflectionUtils.retrievePrivateField(valueDecodingFormat, "ignoreParseErrors");
-            Object timestampFormat = ReflectionUtils.retrievePrivateField(valueDecodingFormat, "timestampFormat");
-            Object metadataKeys = ReflectionUtils.retrievePrivateField(valueDecodingFormat, "metadataKeys");
-            jsonMap.put("debeziumSchemaInclude", Boolean.TRUE.equals(schemaInclude));
-            jsonMap.put("debeziumIgnoreParseErrors", Boolean.TRUE.equals(ignoreParseErrors));
-            jsonMap.put("debeziumTimestampFormat", timestampFormat == null ? "SQL" : String.valueOf(timestampFormat));
-            jsonMap.put("debeziumMetadata", metadataKeys == null ? Collections.emptyList() : metadataKeys);
+            format = unwrapDecodingFormat(
+                    ReflectionUtils.retrievePrivateField(tableSource, "valueDecodingFormat"));
+            if (format == null) {
+                LOG.warn("debezium-json valueDecodingFormat is absent on {}",
+                        tableSource.getClass().getName());
+                return false;
+            }
+            jsonMap.put("debeziumSchemaInclude",
+                    Boolean.TRUE.equals(readFormatOption(format, "schemaInclude")));
+            jsonMap.put("debeziumIgnoreParseErrors",
+                    Boolean.TRUE.equals(readFormatOption(format, "ignoreParseErrors")));
+            Object timestampFormat = readFormatOption(format, "timestampFormat");
+            jsonMap.put("debeziumTimestampFormat",
+                    timestampFormat == null ? "SQL" : String.valueOf(timestampFormat));
+            Object metadataKeys = readFormatOption(format, "metadataKeys");
+            jsonMap.put("debeziumMetadata",
+                    metadataKeys == null ? Collections.emptyList() : metadataKeys);
             return true;
         } catch (RuntimeException e) {
-            LOG.warn("Failed to extract debezium-json format options, fall back to Flink: {}", e.getMessage());
+            LOG.warn("Failed to extract debezium-json format options from {}: {}",
+                    format == null ? tableSource.getClass().getName() : format.getClass().getName(),
+                    e.toString(), e);
             return false;
+        }
+    }
+
+    private static Object unwrapDecodingFormat(Object format) {
+        if (format instanceof Optional) {
+            format = ((Optional<?>) format).orElse(null);
+        }
+        return format != null && "DecodingFormatWrapper".equals(format.getClass().getSimpleName())
+                ? ReflectionUtils.retrievePrivateField(format, "innerDecodingFormat")
+                : format;
+    }
+
+    private static Object readFormatOption(Object format, String field) {
+        try {
+            return ReflectionUtils.retrievePrivateField(format, field);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException(
+                    "missing field '" + field + "' on " + format.getClass().getName(), e);
         }
     }
 

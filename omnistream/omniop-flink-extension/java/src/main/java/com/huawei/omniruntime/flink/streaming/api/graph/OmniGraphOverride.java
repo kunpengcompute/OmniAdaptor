@@ -960,11 +960,22 @@ public final class OmniGraphOverride {
                 || !SUPPORT_KAFKA_SCHEMA_TYPE.contains((String) jsonMap.get("deserializationSchema"))) {
             return false;
         }
-        if ("DebeziumJsonDeserializationSchema".equals(jsonMap.get("deserializationSchema"))
-                && !validateDebeziumSource(jsonMap)) {
-            return false;
-        }
-        if (!jsonMap.containsKey("hasMetadata") || !(jsonMap.get("hasMetadata") instanceof Boolean)
+        boolean isDebezium = "DebeziumJsonDeserializationSchema"
+                .equals(jsonMap.get("deserializationSchema"));
+        if (isDebezium) {
+            if (!validateDebeziumSource(jsonMap)) {
+                return false;
+            }
+            Object hasMetadata = jsonMap.get("hasMetadata");
+            Object declaredMetadata = jsonMap.get("debeziumMetadata");
+            boolean declaresMetadata = declaredMetadata instanceof List
+                    && !((List<?>) declaredMetadata).isEmpty();
+            if (!(hasMetadata instanceof Boolean) || ((Boolean) hasMetadata) != declaresMetadata) {
+                LOG.info("Inconsistent Debezium hasMetadata/debeziumMetadata, fall back to Flink.");
+                return false;
+            }
+        } else if (!jsonMap.containsKey("hasMetadata")
+                || !(jsonMap.get("hasMetadata") instanceof Boolean)
                 || (Boolean) jsonMap.get("hasMetadata")) {
             return false;
         }

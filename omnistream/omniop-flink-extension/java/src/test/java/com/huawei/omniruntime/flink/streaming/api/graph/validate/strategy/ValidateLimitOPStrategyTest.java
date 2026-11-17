@@ -162,6 +162,24 @@ class ValidateLimitOPStrategyTest {
         varchar.put("inputTypes", Arrays.asList("VARCHAR(2000)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)"));
         varchar.put("outputTypes", Arrays.asList("VARCHAR(2000)", "TIMESTAMP_WITHOUT_TIME_ZONE(3)"));
         assertTrue(strategy.executeValidateOperator(varchar));
+
+        // DATE (int days), TIME(0-3) (long millis) and CHAR are supported natively.
+        Map<String, Object> dateCharTime = validDescription();
+        dateCharTime.put("inputTypes", Arrays.asList("DATE", "CHAR", "TIME_WITHOUT_TIME_ZONE(3)"));
+        dateCharTime.put("outputTypes", Arrays.asList("DATE", "CHAR", "TIME_WITHOUT_TIME_ZONE(3)"));
+        assertTrue(strategy.executeValidateOperator(dateCharTime));
+
+        Map<String, Object> time0 = validDescription();
+        time0.put("inputTypes", Arrays.asList("TIME_WITHOUT_TIME_ZONE(0)"));
+        time0.put("outputTypes", Arrays.asList("TIME_WITHOUT_TIME_ZONE(0)"));
+        assertTrue(strategy.executeValidateOperator(time0));
+
+        // Types still unsupported natively are rejected.
+        for (String type : Arrays.asList("DOUBLE", "DECIMAL64(10,0)", "TIME_WITHOUT_TIME_ZONE(4)")) {
+            Map<String, Object> rejected = validDescription();
+            rejected.put("inputTypes", Arrays.asList("BIGINT", type));
+            assertFalse(strategy.executeValidateOperator(rejected), "type: " + type);
+        }
     }
 
     @Test

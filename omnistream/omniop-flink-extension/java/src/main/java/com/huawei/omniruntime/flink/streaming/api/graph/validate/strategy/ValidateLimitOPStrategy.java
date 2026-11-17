@@ -52,12 +52,19 @@ public class ValidateLimitOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Pattern RANK_RANGE_PATTERN = Pattern.compile("rankStart=(\\d+),\\s*rankEnd=(\\d+)");
 
     // Limit-specific type whitelist aligned with the native output column copy:
-    // AppendOnlyTopNFunction::copyColumn supports INT/LONG/BOOLEAN/VARCHAR plus
-    // the TIMESTAMP variants; everything else falls back to vanilla Flink.
+    // AppendOnlyTopNFunction::copyColumn supports INT/LONG/BOOLEAN/VARCHAR/CHAR plus
+    // DATE32 (int days), TIME_WITHOUT_TIME_ZONE (long millis) and the TIMESTAMP
+    // variants; everything else falls back to vanilla Flink.
     private static final Set<String> SUPPORT_LIMIT_TYPES = new HashSet<>(Arrays.asList(
             "BIGINT",
             "INTEGER",
             "BOOLEAN",
+            "CHAR",
+            "DATE",
+            "TIME_WITHOUT_TIME_ZONE(0)",
+            "TIME_WITHOUT_TIME_ZONE(1)",
+            "TIME_WITHOUT_TIME_ZONE(2)",
+            "TIME_WITHOUT_TIME_ZONE(3)",
             "VARCHAR",
             "VARCHAR(2147483647)",
             "VARCHAR(2000)",

@@ -189,8 +189,9 @@ public final class OmniGraphOverride {
                     "DropUpdateBefore",
                     "OverAggregate"));
         }
-        SUPPORT_KAFKA_SCHEMA_TYPE.add("JsonRowDataDeserializationSchema");
-        SUPPORT_KAFKA_SCHEMA_TYPE.add("DebeziumJsonDeserializationSchema");
+        SUPPORT_KAFKA_SCHEMA_TYPE.addAll(Arrays.asList(
+                "JsonRowDataDeserializationSchema",
+                "DebeziumJsonDeserializationSchema"));
         OP_NAME_OF_SQL.addAll(Arrays.asList("Calc", "GroupAggregate", "LocalGroupAggregate", "GlobalGroupAggregate",
                 "IncrementalGroupAggregate", "Join", "LookupJoin", "WindowAggregate", "WindowJoin", "GroupWindowAggregate",
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",

@@ -39,8 +39,9 @@ import java.util.regex.Pattern;
  * both be EMPTY lists, the rank range must be a constant with a bounded rankEnd
  * (OFFSET without FETCH is rejected by the planner itself), outputRankNumber
  * must be false, and the row types must fit the native output paths (the
- * Top-N output column copy supports BIGINT/INTEGER/BOOLEAN/VARCHAR/TIMESTAMP
- * only - DOUBLE/DECIMAL/TIME/DATE fall back to vanilla Flink).
+ * Top-N output column copy supports BIGINT/INTEGER/BOOLEAN/VARCHAR/CHAR plus
+ * DATE (int days) and TIME(0-3) (long millis) and the TIMESTAMP variants -
+ * DOUBLE/DECIMAL and other types fall back to vanilla Flink).
  */
 public class ValidateLimitOPStrategy extends AbstractValidateOperatorStrategy {
 
@@ -52,12 +53,19 @@ public class ValidateLimitOPStrategy extends AbstractValidateOperatorStrategy {
     private static final Pattern RANK_RANGE_PATTERN = Pattern.compile("rankStart=(\\d+),\\s*rankEnd=(\\d+)");
 
     // Limit-specific type whitelist aligned with the native output column copy:
-    // AppendOnlyTopNFunction::copyColumn supports INT/LONG/BOOLEAN/VARCHAR plus
-    // the TIMESTAMP variants; everything else falls back to vanilla Flink.
+    // AppendOnlyTopNFunction::copyColumn supports INT/LONG/BOOLEAN/VARCHAR/CHAR plus
+    // DATE32 (int days), TIME_WITHOUT_TIME_ZONE (long millis) and the TIMESTAMP
+    // variants; everything else falls back to vanilla Flink.
     private static final Set<String> SUPPORT_LIMIT_TYPES = new HashSet<>(Arrays.asList(
             "BIGINT",
             "INTEGER",
             "BOOLEAN",
+            "CHAR",
+            "DATE",
+            "TIME_WITHOUT_TIME_ZONE(0)",
+            "TIME_WITHOUT_TIME_ZONE(1)",
+            "TIME_WITHOUT_TIME_ZONE(2)",
+            "TIME_WITHOUT_TIME_ZONE(3)",
             "VARCHAR",
             "VARCHAR(2147483647)",
             "VARCHAR(2000)",
@@ -147,8 +155,14 @@ public class ValidateLimitOPStrategy extends AbstractValidateOperatorStrategy {
         for (List<String> dataTypes : dataTypesList) {
             for (String type : dataTypes) {
                 String normalized = stripNotNull(type);
+                // Some description paths emit the precision form (CHAR(n)/VARCHAR(n)),
+                // e.g. OmniGraphOverride normalizes the same pattern for source types;
+                // DescriptionUtil currently emits the bare names, keep both working.
                 if (normalized.matches("^VARCHAR\\([^)]*\\)$")) {
                     normalized = "VARCHAR";
+                }
+                if (normalized.matches("^CHAR\\([^)]*\\)$")) {
+                    normalized = "CHAR";
                 }
                 if (!SUPPORT_LIMIT_TYPES.contains(normalized)) {
                     LOG.info("validateStreamLimit not support: data type '{}' (original: '{}')", normalized, type);

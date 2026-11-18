@@ -164,10 +164,18 @@ class ValidateLimitOPStrategyTest {
         assertTrue(strategy.executeValidateOperator(varchar));
 
         // DATE (int days), TIME(0-3) (long millis) and CHAR are supported natively.
+        // CHAR uses the real precision form (CHAR(n)) from description paths that
+        // append lengths (e.g. the source-type whitelist path); the bare name
+        // from DescriptionUtil must also keep working.
         Map<String, Object> dateCharTime = validDescription();
-        dateCharTime.put("inputTypes", Arrays.asList("DATE", "CHAR", "TIME_WITHOUT_TIME_ZONE(3)"));
-        dateCharTime.put("outputTypes", Arrays.asList("DATE", "CHAR", "TIME_WITHOUT_TIME_ZONE(3)"));
+        dateCharTime.put("inputTypes", Arrays.asList("DATE", "CHAR(1)", "TIME_WITHOUT_TIME_ZONE(3)"));
+        dateCharTime.put("outputTypes", Arrays.asList("DATE", "CHAR(1)", "TIME_WITHOUT_TIME_ZONE(3)"));
         assertTrue(strategy.executeValidateOperator(dateCharTime));
+
+        Map<String, Object> bareChar = validDescription();
+        bareChar.put("inputTypes", Arrays.asList("DATE", "CHAR", "CHAR(10)"));
+        bareChar.put("outputTypes", Arrays.asList("DATE", "CHAR", "CHAR(10)"));
+        assertTrue(strategy.executeValidateOperator(bareChar));
 
         Map<String, Object> time0 = validDescription();
         time0.put("inputTypes", Arrays.asList("TIME_WITHOUT_TIME_ZONE(0)"));

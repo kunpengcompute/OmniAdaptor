@@ -396,8 +396,9 @@ final class DateTimeExprHandlers {
         }
 
         jsonMap.put("exprType", "FUNCTION");
-        // All extractors return an INT (0/1-based small integer).
-        jsonMap.put("returnType", 1);
+        // Flink EXTRACT / YEAR / HOUR / MONTH return BIGINT. The vectorized
+        // flink_* kernels are registered to write int64 so the sink sees OMNI_LONG.
+        jsonMap.put("returnType", RexNodeUtil.RexTypeToIdMap.get("BIGINT"));
         List<Object> args = new LinkedList<>();
         args.add(RexNodeUtil.buildJsonMap(operands.get(1)));
         if (operands.get(1).getType().getSqlTypeName() == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {

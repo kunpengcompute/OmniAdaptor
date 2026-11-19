@@ -27,19 +27,25 @@ import java.util.Set;
 /**
  * Validates the JSON description injected by the StreamExecOverAggregate planner patch.
  *
- * <p>Only descriptions carrying the "processFunction":"ProcTimeUnboundedPrecedingFunction"
- * marker reach this strategy: every other OVER shape (rowtime frame, bounded frame,
- * non-whitelisted aggregates, FILTER / DISTINCT / constant arguments) keeps the plain
- * planner text, fails the JSON parse in OmniGraphOverride and falls back to Java.
- * The strategy re-checks the whitelist as defense in depth and must stay in sync
- * with the C++ operator (ProcTimeUnboundedPrecedingFunction) and the planner-side
- * eligibility check.
+ * <p>Only descriptions carrying a native "processFunction" marker reach this
+ * strategy: "ProcTimeUnboundedPrecedingFunction" (processing-time UNBOUNDED
+ * PRECEDING frame) or "ProcTimeRowsBoundedPrecedingFunction" (processing-time
+ * ROWS N PRECEDING frame, which must also carry a positive "precedingOffset"
+ * window size). Every other OVER shape (rowtime frame, RANGE bounded frame,
+ * non-whitelisted aggregates, FILTER / DISTINCT / constant arguments) keeps
+ * the plain planner text, fails the JSON parse in OmniGraphOverride and falls
+ * back to Java. The strategy re-checks the whitelist as defense in depth and
+ * must stay in sync with the C++ operators and the planner-side eligibility
+ * check.
  */
 public class ValidateOverAggOPStrategy extends AbstractValidateOperatorStrategy {
 
     private static final Logger LOG = LoggerFactory.getLogger(ValidateOverAggOPStrategy.class);
 
-    private static final String NATIVE_PROCESS_FUNCTION = "ProcTimeUnboundedPrecedingFunction";
+    private static final String NATIVE_UNBOUNDED_PROCESS_FUNCTION = "ProcTimeUnboundedPrecedingFunction";
+
+    private static final String NATIVE_ROWS_BOUNDED_PROCESS_FUNCTION =
+            "ProcTimeRowsBoundedPrecedingFunction";
 
     /**
      * SUM0 is listed explicitly: the planner rewrites SUM(x) into
@@ -66,11 +72,31 @@ public class ValidateOverAggOPStrategy extends AbstractValidateOperatorStrategy 
         // 1. the marker must be present: descriptions without it are not the
         //    native-compatible shape and must not be validated as such.
         Object processFunction = operatorInfoMap.get("processFunction");
-        if (!(processFunction instanceof String)
-                || !NATIVE_PROCESS_FUNCTION.equals(processFunction)) {
+        if (!(processFunction instanceof String)) {
             LOG.info("OverAggregate description without the native processFunction marker: {}",
                     processFunction);
             return false;
+        }
+        String functionMarker = (String) processFunction;
+        boolean rowsBoundedFrame = NATIVE_ROWS_BOUNDED_PROCESS_FUNCTION.equals(functionMarker);
+        if (!rowsBoundedFrame && !NATIVE_UNBOUNDED_PROCESS_FUNCTION.equals(functionMarker)) {
+            LOG.info("OverAggregate description without the native processFunction marker: {}",
+                    processFunction);
+            return false;
+        }
+
+        // 1b. ROWS-bounded descriptions must carry the window size. The native
+        //     operator refuses a non-positive precedingOffset at construction,
+        //     so a malformed payload fails validation here and falls back to
+        //     Java instead of failing the job at runtime.
+        if (rowsBoundedFrame) {
+            Object precedingOffset = operatorInfoMap.get("precedingOffset");
+            if (!(precedingOffset instanceof Number)
+                    || ((Number) precedingOffset).longValue() <= 0) {
+                LOG.info("RowsBounded OverAggregate description has no positive precedingOffset: {}",
+                        precedingOffset);
+                return false;
+            }
         }
 
         Map<String, Object> aggInfoListMap = (Map<String, Object>) operatorInfoMap.get("aggInfoList");

@@ -47,7 +47,7 @@ public class ValidateAggOPStrategy extends AbstractValidateOperatorStrategy {
 
     static {
         SUPPORT_AGG_FUNCTION_DATATYPE.put("MAX", Arrays.asList("BIGINT", "VARCHAR(2147483647)"));
-        SUPPORT_AGG_FUNCTION_DATATYPE.put("AVG", Collections.singletonList("BIGINT"));
+        SUPPORT_AGG_FUNCTION_DATATYPE.put("AVG", Arrays.asList("BIGINT", "INTEGER"));
         SUPPORT_AGG_FUNCTION_DATATYPE.put("COUNT", Collections.singletonList("BIGINT"));
         SUPPORT_AGG_FUNCTION_DATATYPE.put("MIN", Arrays.asList("BIGINT", "VARCHAR(2147483647)"));
         SUPPORT_AGG_FUNCTION_DATATYPE.put("SUM", Collections.singletonList("BIGINT"));

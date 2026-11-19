@@ -12,6 +12,12 @@
 package com.huawei.omniruntime.flink.table.types.logical;
 
 import org.apache.flink.table.types.logical.BigIntType;
+import org.apache.flink.table.types.logical.BooleanType;
+import org.apache.flink.table.types.logical.CharType;
+import org.apache.flink.table.types.logical.DecimalType;
+import org.apache.flink.table.types.logical.DoubleType;
+import org.apache.flink.table.types.logical.IntType;
+import org.apache.flink.table.types.logical.LocalZonedTimestampType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.TimestampKind;
 import org.apache.flink.table.types.logical.TimestampType;
@@ -40,11 +46,22 @@ public class LogicalTypeDescriptor {
      */
     public static final String TIMESTAMP = "TIMESTAMP";
 
+    public static final String TIMESTAMP_LTZ = "TIMESTAMP_LTZ";
+
     /**
      * unsolved
      */
     public static final String UNRESOLVED = "UNRESOLVED";
 
+    public static final String DECIMAL = "DECIMAL";
+
+    public static final String BOOLEAN = "BOOLEAN";
+
+    public static final String INTEGER = "INTEGER";
+
+    public static final String CHAR = "CHAR";
+
+    public static final String DOUBLE = "DOUBLE";
 
     // the type format should be
     //  { type : "typename",
@@ -105,6 +122,12 @@ public class LogicalTypeDescriptor {
         return typeDescriptor;
     }
 
+    public static JSONObject createJSONDescriptorTimestampLtzType(LocalZonedTimestampType timestampType) {
+        JSONObject typeDescriptor = createBasicTypeObject(TIMESTAMP_LTZ, timestampType.isNullable());
+        typeDescriptor.put("precision", timestampType.getPrecision());
+        return typeDescriptor;
+    }
+
     /**
      * createJSONDescriptorUNRESOLVED
      *
@@ -115,6 +138,66 @@ public class LogicalTypeDescriptor {
         JSONObject typeDescriptor = createBasicTypeObject(UNRESOLVED, type.isNullable());
         typeDescriptor.put("meta", type);
         return typeDescriptor;
+    }
+
+    public static JSONObject createJSONDescriptorDecimalType(DecimalType decimalType) {
+        JSONObject typeDescriptor = createBasicTypeObject(DECIMAL, decimalType.isNullable());
+        typeDescriptor.put("precision", decimalType.getPrecision());
+        typeDescriptor.put("scale", decimalType.getScale());
+        return typeDescriptor;
+    }
+
+    public static JSONObject createJSONDescriptorBooleanType(BooleanType booleanType) {
+        return createBasicTypeObject(BOOLEAN, booleanType.isNullable());
+    }
+
+    public static JSONObject createJSONDescriptorIntType(IntType intType) {
+        return createBasicTypeObject(INTEGER, intType.isNullable());
+    }
+
+    public static JSONObject createJSONDescriptorCharType(CharType charType) {
+        JSONObject typeDescriptor = createBasicTypeObject(CHAR, charType.isNullable());
+        typeDescriptor.put("length", charType.getLength());
+        return typeDescriptor;
+    }
+
+    public static JSONObject createJSONDescriptorDoubleType(DoubleType doubleType) {
+        return createBasicTypeObject(DOUBLE, doubleType.isNullable());
+    }
+
+    /**
+     * 生成 csvSpec.fields[] 用的类型描述，native 侧按同样的 logicalType 名解析；
+     * 不支持的类型返回 null。
+     */
+    public static JSONObject createCsvFieldDescriptor(LogicalType type) {
+        if (type instanceof BigIntType) {
+            return createJSONDescriptorBigIntType((BigIntType) type);
+        }
+        if (type instanceof VarCharType) {
+            return createJSONDescriptorVarCharType((VarCharType) type);
+        }
+        if (type instanceof CharType) {
+            return createJSONDescriptorCharType((CharType) type);
+        }
+        if (type instanceof TimestampType) {
+            return createJSONDescriptorTimestampType((TimestampType) type);
+        }
+        if (type instanceof LocalZonedTimestampType) {
+            return createJSONDescriptorTimestampLtzType((LocalZonedTimestampType) type);
+        }
+        if (type instanceof DecimalType) {
+            return createJSONDescriptorDecimalType((DecimalType) type);
+        }
+        if (type instanceof BooleanType) {
+            return createJSONDescriptorBooleanType((BooleanType) type);
+        }
+        if (type instanceof IntType) {
+            return createJSONDescriptorIntType((IntType) type);
+        }
+        if (type instanceof DoubleType) {
+            return createJSONDescriptorDoubleType((DoubleType) type);
+        }
+        return null;
     }
 }
 

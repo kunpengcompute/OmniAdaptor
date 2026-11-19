@@ -29,6 +29,15 @@
     ],
     "not_supported_list": []
   },
+  "OverAggregate": {
+    "is_supported": true,
+    "supported_list": [
+      "INT",
+      "BIGINT",
+      "VARCHAR(2147483647)"
+    ],
+    "not_supported_list": []
+  },
   "LocalGroupAggregate": {
     "is_supported": true,
     "supported_list": [

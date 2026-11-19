@@ -20,6 +20,7 @@ public class ValidateOperatorStrategyFactory {
 
     static {
         strategyMap.put("GroupAggregate", new ValidateAggOPStrategy());
+        strategyMap.put("OverAggregate", new ValidateOverAggOPStrategy());
         strategyMap.put("WindowAggregate", new ValidateWindowAggOPStrategy());
         strategyMap.put("LocalWindowAggregate", new ValidateWindowAggOPStrategy());
         strategyMap.put("GlobalWindowAggregate", new ValidateWindowAggOPStrategy());
@@ -31,10 +32,13 @@ public class ValidateOperatorStrategyFactory {
         strategyMap.put("Calc", new ValidateCalcOPStrategy());
         strategyMap.put("Expand", new ValidateExpandOPStrategy());
         strategyMap.put("Deduplicate", new ValidateDeduplicateOPStrategy());
+        strategyMap.put("ChangelogNormalize", new ValidateChangelogNormalizeOPStrategy());
         strategyMap.put("WatermarkAssigner", new ValidateWatermarkOPStrategy());
         strategyMap.put("Rank", new ValidateRankOPStrategy());
         // strategyMap.put("Limit", new ValidateLimitOPStrategy());
         // strategyMap.put("WindowTableFunction", new ValidateWindowTableFunctionOPStrategy());
+        strategyMap.put("DropUpdateBefore", new ValidateDropUpdateBeforeOPStrategy());
+        strategyMap.put("SinkMaterializer", new ValidateSinkMaterializerOPStrategy());
         strategyMap.put("GroupTableAggregate", new ValidateGroupTableAggOPStrategy());
     }
 

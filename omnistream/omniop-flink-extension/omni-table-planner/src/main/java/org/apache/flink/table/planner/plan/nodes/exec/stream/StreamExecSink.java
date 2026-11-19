@@ -48,6 +48,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecCalc;
 import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecSink;
 import org.apache.flink.table.planner.plan.nodes.exec.spec.DynamicTableSinkSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.util.DescriptionUtil;
+import org.apache.flink.table.planner.plan.nodes.exec.util.UpsertKafkaPlanUtils;
 import org.apache.flink.table.planner.plan.nodes.exec.util.RexNodeUtil;
 import org.apache.flink.table.planner.utils.TableConfigUtils;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
@@ -212,13 +213,13 @@ public class StreamExecSink extends CommonExecSink implements StreamExecNode<Obj
                 inputUpsertKey);
 
         localTimeZone = TableConfigUtils.getLocalTimeZone(config);
-        String oldDescription = transformation.getDescription();
-        transformation.setDescription(getExtraDescription(oldDescription, inputTransform));
+        transformation.setDescription(getExtraDescription(transformation.getDescription(), inputTransform, tableSink));
 
         return transformation;
     }
 
-    private String getExtraDescription(String oldDescription, Transformation<RowData> inputTransform) {
+    private String getExtraDescription(
+            String oldDescription, Transformation<RowData> inputTransform, DynamicTableSink tableSink) {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
         HashMap<Integer, Integer> accessIndexMap = new HashMap<>();
         HashMap<Integer, Integer> fieldCountMap = new HashMap<>();
@@ -270,6 +271,9 @@ public class StreamExecSink extends CommonExecSink implements StreamExecNode<Obj
         jsonMap.put("inputTypes", inputTypeList);
         jsonMap.put("outputTypes", outputTypeList);
         jsonMap.put("timeZone", localTimeZone.getId());
+        if (UpsertKafkaPlanUtils.isUpsertKafkaSink(tableSink)) {
+            UpsertKafkaPlanUtils.populateSinkProjection(jsonMap, tableSink);
+        }
         String jsonString = "";
         try {
             jsonString = objectMapper.writeValueAsString(jsonMap);

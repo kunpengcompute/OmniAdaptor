@@ -754,14 +754,7 @@ public class OmniTask extends Task {
                 // The native task already finished and is owned by the native side; nothing left to cancel.
                 return;
             }
-            if (jobType == JobType.SQL
-                && nameOfInvokableClass.equals("org.apache.flink.streaming.runtime.tasks.SourceOperatorStreamTask")) {
-                cancelTask(nativeTaskRef);
-            }
-            // for stream situation, we could not check which task is native or java
-            if (jobType == JobType.STREAM) {
-                cancelTask(nativeTaskRef);
-            }
+            cancelTask(nativeTaskRef);
         }
     }
 

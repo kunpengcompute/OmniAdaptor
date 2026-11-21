@@ -470,6 +470,18 @@ public final class OmniGraphOverride {
 
         StreamGraph streamGraph = chainInfo.getStreamGraph();
         List<StreamNode> chainedNode = chainInfo.getAllChainedNodes();
+        // filesystem+csv sink：行类型超出 native CSV 编码能力时整链回退；
+        // 仅作用于 csv 文件 sink，其它 sink 的类型白名单不受 job 级标记与节点遍历顺序影响。
+        for (StreamNode node : chainedNode) {
+            String csvOperatorName = node.getOperatorName();
+            if (csvOperatorName != null && csvOperatorName.contains("StreamingFileWriter")
+                    && !csvSinkRowTypeAllowed(node)) {
+                LOG.info("validateVertexChainInfoForOmniTask chainInfo of vertex ID {} falls back to stock "
+                                + "Flink: the csv file sink {} cannot encode its row types natively",
+                        vertexID, csvOperatorName);
+                return false;
+            }
+        }
         for (StreamNode node : chainedNode) {
             if (validateNodeForOmniTask(vertexID, vertexConfigs, jobType, streamGraph, node)) {
                 return false;

@@ -302,9 +302,12 @@ public final class OmniGraphOverride {
                 vertexID, vertexConfig.getOperatorName());
 
         JobVertex jobVertex = vertexEntry.getValue();
-        refreshJobCsvFileSinkFlag(chainInfos);
+        if (jobType == JobType.SQL) {
+            refreshJobCsvFileSinkFlag(chainInfos);
+        }
 
-        Set<Integer> sinkFallbackNodes = collectSinkFallbackNodes(chainInfos);
+        Set<Integer> sinkFallbackNodes = jobType == JobType.SQL
+                ? collectSinkFallbackNodes(chainInfos) : java.util.Collections.emptySet();
         endpointFallbackVertices.remove(vertexID);
         if (validateVertexChainInfoForOmniTask(vertexID, chainInfos, chainedConfigs, jobVertex, vertexConfigs,
                 jobType, endpointFallbackVertices, sinkFallbackNodes)) {
@@ -391,6 +394,10 @@ public final class OmniGraphOverride {
         for (StreamNode node : chainedNode) {
             boolean sinkFallback = sinkFallbackNodes.contains(node.getId());
             if (sinkFallback || validateNodeForOmniTask(vertexID, vertexConfigs, jobType, streamGraph, node)) {
+                // Preserve DataStream validation order and task-local rejection.
+                if (jobType == JobType.STREAM) {
+                    return false;
+                }
                 unsupported = true;
                 endpointOnly &= sinkFallback || isFallbackEndpoint(node);
                 if (sinkFallback) {

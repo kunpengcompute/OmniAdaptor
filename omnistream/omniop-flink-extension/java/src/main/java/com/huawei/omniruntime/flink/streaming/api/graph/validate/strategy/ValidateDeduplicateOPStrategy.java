@@ -30,9 +30,10 @@ public class ValidateDeduplicateOPStrategy extends AbstractValidateOperatorStrat
     @Override
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {
         boolean isRowtime = (boolean) operatorInfoMap.get("isRowtime");
-        // not support ProcTimeDeduplicateOperator , just support RowtimeDeduplicateOperator
-        if (!isRowtime) {
-            LOG.info("validateVertexChainInfoForOmniTask not support isRowtime is {}", isRowtime);
+        // ProcTime supports keep-first (seen-flag) and keep-last (comboId + retract).
+        if (!isRowtime && operatorInfoMap.get("keepLastRow") == null) {
+            LOG.info("validateVertexChainInfoForOmniTask ProcTime Deduplicate missing keepLastRow, isRowtime={}",
+                    isRowtime);
             return false;
         }
         List<String> inputTypeList = (ArrayList<String>) operatorInfoMap.get("inputTypes");

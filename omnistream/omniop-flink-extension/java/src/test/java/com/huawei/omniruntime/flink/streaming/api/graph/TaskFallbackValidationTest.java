@@ -82,6 +82,12 @@ public class TaskFallbackValidationTest {
     }
 
     @Test
+    public void sinkNameContainingPaimonDoesNotIdentifyItsImplementation() {
+        assertTrue(sinkStages(node(1, "Sink: paimon_named_kafka", "{}")).isEmpty());
+        assertFalse(OmniGraphOverride.isPaimonImplementation(StreamOperatorFactory.class));
+    }
+
+    @Test
     public void writerAndEndInSameTaskFormFallbackSinkStages() {
         StreamNode writer = node(1, "StreamingFileWriter", "{}");
         StreamNode end = node(2, "Sink: end", "{}");
@@ -90,9 +96,9 @@ public class TaskFallbackValidationTest {
     }
 
     @Test
-    public void writerAndGlobalCommitterAcrossTasksBothFallBack() {
-        StreamNode writer = node(1, "Writer : paimon", "{}");
-        StreamNode committer = node(2, "Global Committer : paimon", "{}");
+    public void fileWriterAndEndAcrossTasksBothFallBack() {
+        StreamNode writer = node(1, "StreamingFileWriter", "{}");
+        StreamNode committer = node(2, "PartitionCommitter", "{}");
         StreamNode end = node(3, "end: Writer", "{}");
         connect(writer, committer);
         connect(committer, end);
@@ -116,7 +122,7 @@ public class TaskFallbackValidationTest {
     @Test
     public void ordinaryMapBeforeWriterIsStillMiddleComputation() {
         StreamNode map = node(1, "Map", "{}");
-        StreamNode writer = node(2, "Writer : paimon", "{}");
+        StreamNode writer = node(2, "StreamingFileWriter", "{}");
         connect(map, writer);
         Set<Integer> stages = sinkStages(map, writer);
         assertFalse(stages.contains(1));

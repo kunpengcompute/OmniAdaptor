@@ -624,6 +624,12 @@ public class StreamingJobGraphGenerator {
 
         try {
             JsonNode rootNode = objectMapper.readTree(desc);
+            // The BinaryRowData path supports projection without a filter only.
+            JsonNode condition = rootNode.get("condition");
+            if (condition != null && !condition.isNull()) {
+                return false;
+            }
+
             JsonNode indices = rootNode.get("indices");
 
             if (indices != null && indices.isArray()) {

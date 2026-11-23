@@ -55,10 +55,6 @@ public class ValidateWindowTableFunctionOPStrategy extends AbstractValidateOpera
                         type = "VARCHAR";
                     }
 
-                    if (type.matches("^CHAR\\([^)]*\\)$")) {
-                        type = "CHAR";
-                    }
-
                     if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
                         type = "DECIMAL64";
                     }

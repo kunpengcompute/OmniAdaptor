@@ -86,7 +86,7 @@ class ValidateWindowTableFunctionOPStrategyTest {
     void testAllCoveredTypes() {
         List<String> types = Arrays.asList(
                 "VARCHAR(9)",
-                "CHAR(1)",
+                "CHAR",
                 "BIGINT",
                 "INTEGER",
                 "BOOLEAN",

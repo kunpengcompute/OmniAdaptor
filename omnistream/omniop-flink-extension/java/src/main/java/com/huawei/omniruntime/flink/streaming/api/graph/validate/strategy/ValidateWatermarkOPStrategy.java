@@ -51,10 +51,6 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
                         type = "VARCHAR";
                     }
 
-                    if (type.matches("^CHAR\\([^)]*\\)$")) {
-                        type = "CHAR";
-                    }
-
                     if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
                         type = "DECIMAL64";
                     }

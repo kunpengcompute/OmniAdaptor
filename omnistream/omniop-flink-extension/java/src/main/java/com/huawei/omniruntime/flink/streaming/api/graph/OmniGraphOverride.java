@@ -123,7 +123,7 @@ public final class OmniGraphOverride {
     private static List<TaskType> taskTypes = new LinkedList<>();
     private static List<Map<Integer, OperatorType>> operatorTypes = new LinkedList<>();
 
-    private static boolean supportTaskFallback = true;
+    private static boolean supportTaskFallback = false;
 
 
     private static final Set<String> SUPPORT_OP_NAME = new HashSet<>();
@@ -775,7 +775,7 @@ public final class OmniGraphOverride {
         jobType = JobType.NULL;
         taskTypes.clear();
         operatorTypes.clear();
-        supportTaskFallback = true;
+        supportTaskFallback = false;
         isSourceSupportNative = true;
         isSinkSupportNative = true;
         isConstraintEnforcerSupportNative = true;

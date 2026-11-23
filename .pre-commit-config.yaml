@@ -12,6 +12,8 @@ repos:
     hooks:
       - id: trailing-whitespace        # 移除行尾空白字符
       - id: end-of-file-fixer          # 确保文件以换行符结尾
+      - id: mixed-line-ending          # 统一换行为 LF，避免 Windows 检出 CRLF 时 hook 反复改写
+        args: ["--fix=lf"]
       - id: check-yaml                 # 校验 YAML 文件语法
       - id: check-json                 # 校验 JSON 文件语法
       - id: check-xml                  # 校验 XML 文件语法
@@ -40,3 +42,8 @@ repos:
         language: system
         files: \.java$
         pass_filenames: false
+  # gitleaks：敏感信息/密钥扫描（golang 钩子，由 pre-commit 自动编译，需本机安装 Go）
+  - repo: https://gitcode.com/GitHub_Trending/gi/gitleaks # 国内网络可使用gitcode镜像仓加速下载
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

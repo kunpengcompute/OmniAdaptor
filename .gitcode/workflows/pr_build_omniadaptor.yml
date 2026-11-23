@@ -1,0 +1,59 @@
+name: Build OmniAdaptor Job
+
+on:
+  workflow_call:
+    inputs:
+      docker_img:
+        required: true
+        type: string
+      pr_id:
+        required: true
+        type: string
+      target_branch:
+        required: true
+        type: string
+      jdk_version:
+        required: true
+        type: string
+jobs:
+  JOB_Compile:
+    name: Compile
+    select: selected_by_default
+    runs-on: ["self-hosted", "openeuler", "arm", "cpu=16" ]
+    container:
+      image: ${{ inputs.docker_img }}
+    env:
+      jdk_version: ${{ inputs.jdk_version }}
+    steps:
+      # restore 端精确 key 每次唯一、只靠前缀取最近一份；save 端用唯一 key 靠"全部未命中即落盘"写新缓存
+      - name: maven_cache_tag
+        id: mct
+        run: |-
+          printf 'tag=%s\n' "${ATOMGIT_RUN_ID:-$(date +%s)}" >> "$ATOMGIT_OUTPUT"
+      - name: restore_maven_cache
+        uses: cache
+        with:
+          path: /home/jenkins/agent/build_cache/.maven_cache
+          key: maven-compile-hit-${{ steps.mct.outputs.tag }}
+          restore-keys: |
+            maven-compile-
+      - name: fast_checkout
+        identifier: fast_checkout
+        uses: checkout
+        with:
+          allow-unsafe-pr-checkout: true
+          ref: refs/merge-requests/${{ inputs.pr_id }}/merge
+          path: OmniAdaptor       # 与下方脚本路径一致；init_env 不依赖目录名
+      - name: build
+        run: |-
+          if [ -f OmniAdaptor/.gitcode/scripts/OmniAdator_build.sh ]; then
+            bash OmniAdaptor/.gitcode/scripts/OmniAdator_build.sh compile
+          else
+            echo "ERROR: OmniAdator_build.sh 在预合入代码中均不存在"; exit 1
+          fi
+      - name: save_maven_cache
+        if: ${{ always() }}
+        uses: cache
+        with:
+          path: /home/jenkins/agent/build_cache/.maven_cache
+          key: maven-compile-${{ steps.mct.outputs.tag }}

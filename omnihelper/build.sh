@@ -42,21 +42,24 @@ get_architecture() {
 # 获取架构信息
 ARCH=$(get_architecture)
 
-if [ -d "build_venv" ]; then
-    source build_venv/bin/activate
-else
-    echo "create virtualenv"
-    python3 -m venv build_venv
-    source build_venv/bin/activate
-fi
+python3 -c 'import ssl' 2>/dev/null || {
+    echo "ERROR: python3 无法 import ssl（$(python3 -c 'import sys; print(sys.executable, sys.version.split()[0])')），请检查镜像" >&2
+    exit 1
+}
+
+echo "create virtualenv"
+rm -rf build_venv
+python3 -m venv build_venv
+source build_venv/bin/activate
 
 echo "install dependencies"
 
+PIP_ARGS=(-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com --retries 5 --timeout 30)
 if [ "$(uname -m)" == "aarch64" ]; then
-    pip3 install ${SCRIPT_DIR}[dev,kerberos] -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+    python -m pip install "${SCRIPT_DIR}[dev,kerberos]" "${PIP_ARGS[@]}"
 else
     # CentOS7 x86_64 gssapi
-    CFLAGS="-std=c99" pip3 install ${SCRIPT_DIR}[dev,kerberos] -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+    CFLAGS="-std=c99" python -m pip install "${SCRIPT_DIR}[dev,kerberos]" "${PIP_ARGS[@]}"
 fi
 
 # 使用绝对路径

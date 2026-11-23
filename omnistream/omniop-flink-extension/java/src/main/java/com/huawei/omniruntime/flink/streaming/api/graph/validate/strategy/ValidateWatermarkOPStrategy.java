@@ -35,6 +35,42 @@ public class ValidateWatermarkOPStrategy extends AbstractValidateOperatorStrateg
     private static final String DATETIME_PLUS_DAY_TIME = "datetime_plus_day_time";
     private static final String DATETIME_MINUS_DAY_TIME = "datetime_minus_day_time";
 
+    // WatermarkAssigner 只消费 rowtime 列，其余列整体透传；DATE 在 native 侧由 OMNI_DATE32 承载，
+    // 但共享白名单未包含 DATE。仅在本算子内放行，避免放宽其它算子的支持范围。
+    private static final Set<String> EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList("DATE"));
+
+    @Override
+    public boolean validateDataTypes(List<List<String>> dataTypesList) {
+        return dataTypesList.stream()
+                .flatMap(List::stream)
+                .allMatch(type -> {
+                    String originalType = type;
+                    type = stripNotNull(type);
+
+                    if (type.matches("^VARCHAR\\([^)]*\\)$")) {
+                        type = "VARCHAR";
+                    }
+
+                    if (type.matches("^CHAR\\([^)]*\\)$")) {
+                        type = "CHAR";
+                    }
+
+                    if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
+                        type = "DECIMAL64";
+                    }
+
+                    if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
+                        type = "DECIMAL128";
+                    }
+
+                    if (!SUPPORT_DATA_TYPE.contains(type) && !EXTRA_SUPPORT_DATA_TYPE.contains(type)) {
+                        LOG.info("Unsupported data type: '{}' (original: '{}')", type, originalType);
+                        return false;
+                    }
+                    return true;
+                });
+    }
+
     @Override
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {
         int inputSize = 0;

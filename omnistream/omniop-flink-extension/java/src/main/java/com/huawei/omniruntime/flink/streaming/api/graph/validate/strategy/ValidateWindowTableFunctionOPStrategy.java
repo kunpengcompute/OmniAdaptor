@@ -38,6 +38,43 @@ public class ValidateWindowTableFunctionOPStrategy extends AbstractValidateOpera
             "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
             "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)"));
 
+    // The operator only copies input columns by position and appends window columns, so it never
+    // interprets column values. DATE is carried natively as OMNI_DATE32 (see LogicalType), thus it
+    // can be accepted even though the shared whitelist does not include it.
+    private static final Set<String> EXTRA_SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList("DATE"));
+
+    @Override
+    public boolean validateDataTypes(List<List<String>> dataTypesList) {
+        return dataTypesList.stream()
+                .flatMap(List::stream)
+                .allMatch(type -> {
+                    String originalType = type;
+                    type = stripNotNull(type);
+
+                    if (type.matches("^VARCHAR\\([^)]*\\)$")) {
+                        type = "VARCHAR";
+                    }
+
+                    if (type.matches("^CHAR\\([^)]*\\)$")) {
+                        type = "CHAR";
+                    }
+
+                    if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
+                        type = "DECIMAL64";
+                    }
+
+                    if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
+                        type = "DECIMAL128";
+                    }
+
+                    if (!SUPPORT_DATA_TYPE.contains(type) && !EXTRA_SUPPORT_DATA_TYPE.contains(type)) {
+                        LOG.info("Unsupported data type: '{}' (original: '{}')", type, originalType);
+                        return false;
+                    }
+                    return true;
+                });
+    }
+
     @SuppressWarnings("unchecked")
     @Override
     public boolean executeValidateOperator(Map<String, Object> operatorInfoMap) {

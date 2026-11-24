@@ -45,34 +45,24 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
     private static final List<String> SUPPORT_ORDER_BY_TYPES = Arrays.asList("BIGINT",
             "TIMESTAMP_WITHOUT_TIME_ZONE(3)");
     private static final List<String> SUPPORT_FUNCTIONS =
-            Arrays.asList("AppendOnlyTopNFunction", "FastTop1Function", "AppendOnlyFirstNFunction", "RetractableTopNFunction");
+            Arrays.asList("AppendOnlyTopNFunction", "FastTop1Function", "AppendOnlyFirstNFunction", "RetractableTopNFunction",
+                    "UpdatableTopNFunction");
     private static final Pattern RANK_RANGE_PATTERN = Pattern.compile("rankStart=(\\d+),\\s*rankEnd=(\\d+)");
 
-    // RetractableTopNFunction (general Rank on retractable input): partition keys and sort
-    // keys may be any column type the native KeySelector / SortKeyCmp support; multi-column
-    // and mixed asc/desc orders are allowed. Type strings are normalized (VARCHAR(n)->VARCHAR).
-    private static final List<String> SUPPORT_RETRACTABLE_GROUP_KEY_TYPES = Arrays.asList(
+    // RetractableTopNFunction / UpdatableTopNFunction share one key-type whitelist: partition
+    // keys, sort keys and (for UpdatableTopNFunction) primary-key columns must be within the
+    // native KeySelector / SortKeyCmp / getKey(RowData*) support set. Multi-column and mixed
+    // asc/desc orders are allowed. Type strings are normalized (VARCHAR(n)->VARCHAR).
+    // STRING is the literal alias of VARCHAR(2147483647) (native maps it to OMNI_VARCHAR).
+    private static final List<String> SUPPORT_RANK_KEY_TYPES = Arrays.asList(
             "CHAR",
             "DATE",
             "BIGINT",
             "INTEGER",
             "VARCHAR",
+            "STRING",
             "DOUBLE",
             "BOOLEAN",
-            "TIME_WITHOUT_TIME_ZONE(0)",
-            "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
-            "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
-            "TIMESTAMP_WITHOUT_TIME_ZONE(2)",
-            "TIMESTAMP_WITHOUT_TIME_ZONE(3)",
-            "TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)");
-    private static final List<String> SUPPORT_RETRACTABLE_ORDER_BY_TYPES = Arrays.asList(
-            "BIGINT",
-            "INTEGER",
-            "DOUBLE",
-            "BOOLEAN",
-            "VARCHAR",
-            "CHAR",
-            "DATE",
             "TIME_WITHOUT_TIME_ZONE(0)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(0)",
             "TIMESTAMP_WITHOUT_TIME_ZONE(1)",
@@ -138,9 +128,19 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
             return false;
         }
 
-        if ("RetractableTopNFunction".equals(rankFunction)) {
-            // General Rank on a retractable (updating/deleting) changelog input.
+        if ("RetractableTopNFunction".equals(rankFunction) || "UpdatableTopNFunction".equals(rankFunction)) {
+            // General Rank on an updating changelog (RetractableTopNFunction) or on the
+            // UpdateFastStrategy append-only/upsert stream (UpdatableTopNFunction). Both
+            // share the native KeySelector / SortKeyCmp type support set, so they use the
+            // same partition-key and sort-key type validation.
             if (!validateRetractableTopNFunction(operatorInfoMap, inputTypeList, partitionKeys)) {
+                return false;
+            }
+            // UpdatableTopNFunction also projects the primary-key (unique-key) columns at
+            // runtime; validate them so unsupported types fall back to Flink instead of
+            // crashing in the native key selector.
+            if ("UpdatableTopNFunction".equals(rankFunction)
+                    && !validateUpdatablePrimaryKeys(operatorInfoMap, inputTypeList)) {
                 return false;
             }
         } else {
@@ -188,7 +188,7 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
                                                     List<Integer> partitionKeys) {
         for (int partitionKey : partitionKeys) {
             String keyType = normalizeType(inputTypeList.get(partitionKey));
-            if (!SUPPORT_RETRACTABLE_GROUP_KEY_TYPES.contains(keyType)) {
+            if (!SUPPORT_RANK_KEY_TYPES.contains(keyType)) {
                 LOG.info("failed inside retractable partition key type check {} ", keyType);
                 return false;
             }
@@ -202,8 +202,36 @@ public class ValidateRankOPStrategy extends AbstractValidateOperatorStrategy {
         }
         for (int sortId : sortFieldIds) {
             String sortType = normalizeType(inputTypeList.get(sortId));
-            if (!SUPPORT_RETRACTABLE_ORDER_BY_TYPES.contains(sortType)) {
+            if (!SUPPORT_RANK_KEY_TYPES.contains(sortType)) {
                 LOG.info("failed inside retractable sort key type check {} ", sortType);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Validates the primary-key (unique-key) columns of UpdatableTopNFunction. The native row-key
+     * selector (KeySelector::getKey(RowData*)) projects these columns at runtime and only handles
+     * the {@link #SUPPORT_RANK_KEY_TYPES} set, so reject anything else up front.
+     */
+    private boolean validateUpdatablePrimaryKeys(Map<String, Object> operatorInfoMap, List<String> inputTypeList) {
+        Object primaryKeysObj = operatorInfoMap.get("primaryKeys");
+        if (!(primaryKeysObj instanceof List) || ((List<?>) primaryKeysObj).isEmpty()) {
+            LOG.info("failed inside updatable primary keys missing/empty check");
+            return false;
+        }
+        for (Object keyObj : (List<?>) primaryKeysObj) {
+            if (!(keyObj instanceof Integer)) {
+                return false;
+            }
+            int col = (Integer) keyObj;
+            if (col < 0 || col >= inputTypeList.size()) {
+                return false;
+            }
+            String keyType = normalizeType(inputTypeList.get(col));
+            if (!SUPPORT_RANK_KEY_TYPES.contains(keyType)) {
+                LOG.info("failed inside updatable primary key type check {} ", keyType);
                 return false;
             }
         }

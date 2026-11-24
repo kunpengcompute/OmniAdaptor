@@ -21,15 +21,13 @@
 
 package org.apache.flink.table.planner.plan.nodes.exec.stream;
 
+import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_RANK_TOPN_CACHE_SIZE;
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 import org.apache.flink.FlinkVersion;
-import org.apache.flink.annotation.Experimental;
 import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.dag.Transformation;
-import org.apache.flink.configuration.ConfigOption;
-import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonCreator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -99,16 +97,6 @@ public class StreamExecRank extends ExecNodeBase<RowData>
         implements StreamExecNode<RowData>, SingleTransformationTranslator<RowData> {
 
     private static final Logger LOG = LoggerFactory.getLogger(StreamExecRank.class);
-
-    // It is a experimental config, will may be removed later.
-    @Experimental
-    public static final ConfigOption<Long> TABLE_EXEC_TOPN_CACHE_SIZE =
-            ConfigOptions.key("table.exec.topn.cache-size")
-                    .longType()
-                    .defaultValue(10000L)
-                    .withDescription(
-                            "TopN operator has a cache which caches partial state contents to reduce"
-                                    + " state access. Cache size is the number of records in each TopN task.");
 
     public static final String RANK_TRANSFORMATION = "rank";
 
@@ -205,7 +193,8 @@ public class StreamExecRank extends ExecNodeBase<RowData>
         }
         return typeList;
     }
-    private String getExtraDescription(String oldDescription, RowType inputType, RowType outputType, String processFunctionStr){
+    private String getExtraDescription(String oldDescription, RowType inputType, RowType outputType, String processFunctionStr,
+                                       int[] primaryKeys, long cacheSize){
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
         // Get inputTypeList
         List<String> inputTypeList = DescriptionUtil.getFieldTypeList(inputType.getFields());
@@ -227,9 +216,16 @@ public class StreamExecRank extends ExecNodeBase<RowData>
         jsonMap.put("rankRange", rankRange.toString());
         jsonMap.put("generateUpdateBefore", generateUpdateBefore);
         jsonMap.put("processFunction", processFunctionStr);
+        // UpdateFastStrategy: unique key (primary keys) that drives the rowKey selector of
+        // UpdatableTopNFunction; null for every other rank strategy.
+        if (primaryKeys != null && primaryKeys.length > 0) {
+            jsonMap.put("primaryKeys", primaryKeys);
+        }
         jsonMap.put("sortFieldIndices", sortFieldIndices);
         jsonMap.put("sortAscendingOrders", sortAscendingOrders);
         jsonMap.put("sortNullsIsLast", sortNullsIsLast);
+        // Carries table.exec.rank.topn-cache-size to the native rank functions.
+        jsonMap.put("cacheSize", cacheSize);
 
         String jsonString="";
         try {
@@ -285,12 +281,13 @@ public class StreamExecRank extends ExecNodeBase<RowData>
                         "StreamExecSortComparator",
                         RowType.of(sortSpec.getFieldTypes(inputType)),
                         sortSpecInSortKey);
-        long cacheSize = tableConfig.getConfiguration().getLong(TABLE_EXEC_TOPN_CACHE_SIZE);
+        long cacheSize = tableConfig.getConfiguration().get(TABLE_EXEC_RANK_TOPN_CACHE_SIZE);
         StateTtlConfig ttlConfig =
                 StateConfigUtil.createTtlConfig(tableConfig.getIdleStateRetention().toMillis());
 
         AbstractTopNFunction processFunction;
         String processFunctionStr = "";
+        int[] rankPrimaryKeys = null;
         if (rankStrategy instanceof RankProcessStrategy.AppendFastStrategy) {
             if (sortFields.length == 1
                     && TypeCheckUtils.isProcTime(inputType.getChildren().get(sortFields[0]))
@@ -352,6 +349,7 @@ public class StreamExecRank extends ExecNodeBase<RowData>
                 RankProcessStrategy.UpdateFastStrategy updateFastStrategy =
                         (RankProcessStrategy.UpdateFastStrategy) rankStrategy;
                 int[] primaryKeys = updateFastStrategy.getPrimaryKeys();
+                rankPrimaryKeys = primaryKeys;
                 RowDataKeySelector rowKeySelector =
                         KeySelectorUtil.getRowDataSelector(
                                 planner.getFlinkContext().getClassLoader(),
@@ -423,7 +421,8 @@ public class StreamExecRank extends ExecNodeBase<RowData>
                         inputRowTypeInfo);
         transform.setStateKeySelector(selector);
         transform.setStateKeyType(selector.getProducedType());
-        transform.setDescription(getExtraDescription(transform.getDescription(), inputType, (RowType) getOutputType(), processFunctionStr));
+        transform.setDescription(getExtraDescription(transform.getDescription(), inputType, (RowType) getOutputType(), processFunctionStr,
+                "UpdatableTopNFunction".equals(processFunctionStr) ? rankPrimaryKeys : null, cacheSize));
 
         return transform;
     }

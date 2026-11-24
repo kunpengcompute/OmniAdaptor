@@ -36,6 +36,7 @@ public class ValidateOperatorStrategyFactory {
         strategyMap.put("WatermarkAssigner", new ValidateWatermarkOPStrategy());
         strategyMap.put("Rank", new ValidateRankOPStrategy());
         strategyMap.put("Limit", new ValidateLimitOPStrategy());
+        strategyMap.put("WindowRank", new ValidateWindowRankOPStrategy());
         strategyMap.put("WindowTableFunction", new ValidateWindowTableFunctionOPStrategy());
         strategyMap.put("DropUpdateBefore", new ValidateDropUpdateBeforeOPStrategy());
         strategyMap.put("SinkMaterializer", new ValidateSinkMaterializerOPStrategy());

@@ -203,6 +203,7 @@ public final class OmniGraphOverride {
                     "WatermarkAssigner",
                     "Rank",
                     "Limit",
+                    "WindowRank",
                     "WindowTableFunction",
                     "SinkMaterializer",
                     "StreamRecordTimestampInserter",
@@ -217,8 +218,8 @@ public final class OmniGraphOverride {
         OP_NAME_OF_SQL.addAll(Arrays.asList("Calc", "GroupAggregate", "LocalGroupAggregate", "GlobalGroupAggregate",
                 "IncrementalGroupAggregate", "Join", "LookupJoin", "WindowAggregate", "WindowJoin", "GroupWindowAggregate",
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",
-                "Limit", "WindowTableFunction", "StreamRecordTimestampInserter", "ConstraintEnforcer", "ChangelogNormalize",
-                "DropUpdateBefore", "SinkMaterializer"));
+                "Limit", "WindowRank", "WindowTableFunction", "StreamRecordTimestampInserter", "ConstraintEnforcer",
+                "ChangelogNormalize", "DropUpdateBefore", "SinkMaterializer"));
         // Snapshot the baseline whitelist determined by performanceMode, so that setStateBackend()/setNext()
         // restrictions can be reset per job. Must be taken inside the static block AFTER SUPPORT_OP_NAME is
         // populated (field initializers would capture the still-empty set).

@@ -217,7 +217,7 @@ public class StreamingJobGraphGenerator {
         this.chainInfos = new HashMap<>();
 
         jobGraph = new JobGraph(jobID, streamGraph.getJobName());
-        
+
         jobGraph.getJobConfiguration()
                 .setString(
                         OmniRecoveryOptions.RECOVERY_SAVEPOINT_FORMAT_CONFIG_NAME,
@@ -617,7 +617,7 @@ public class StreamingJobGraphGenerator {
 
     private static boolean isCalcValidForRowData(StreamNode calcNode) {
         String desc = calcNode.getOperatorDescription();
-        
+
         if (desc == null || !desc.trim().startsWith("{")) {
             return false;
         }
@@ -633,7 +633,7 @@ public class StreamingJobGraphGenerator {
             JsonNode indices = rootNode.get("indices");
 
             if (indices != null && indices.isArray()) {
-                
+
                 for (JsonNode indexNode : indices) {
                     JsonNode exprType = indexNode.get("exprType");
                     if (exprType == null || !"FIELD_REFERENCE".equals(exprType.asText())) {
@@ -645,7 +645,7 @@ public class StreamingJobGraphGenerator {
         } catch (Exception e) {
             LOG.warn("Failed to parse StreamCalc description for operator {}", calcNode.getOperatorName(), e);
         }
-        
+
         return false;
     }
 
@@ -796,10 +796,10 @@ public class StreamingJobGraphGenerator {
             }
             config.setUpstreamNative(upstreamNative.toString());
         }
-        
+
         // Build partition OmniFlag map for each vertex
         buildAndStorePartitionOmniFlagMap();
-        
+
         OmniGraphOverride.clearTypeInfo();
     }
 

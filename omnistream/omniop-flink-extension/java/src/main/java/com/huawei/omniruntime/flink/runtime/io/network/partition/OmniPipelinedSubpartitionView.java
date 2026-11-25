@@ -183,6 +183,9 @@ public class OmniPipelinedSubpartitionView extends PipelinedSubpartitionView {
                 if (resBinaryRowData == 0) {
                     getNativeData();
                 }
+                if (resBinaryRowData == 0) {
+                    return null;
+                }
                 return sendBinaryRowData();
             } else {
                 int res = getNativeNextBuffer(localChannelReaderRef);

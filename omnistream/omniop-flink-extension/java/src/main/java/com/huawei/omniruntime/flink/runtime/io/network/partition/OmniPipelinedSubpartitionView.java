@@ -316,7 +316,7 @@ public class OmniPipelinedSubpartitionView extends PipelinedSubpartitionView {
                 // 7. int sequenceNumber(4)
                 sequenceNumber = outputBuffer.getInt();
 
-                LOG.info("decodeReadBufferForSQL, binaryRowDataAddress: {}, " +
+                LOG.debug("decodeReadBufferForSQL, binaryRowDataAddress: {}, " +
                                 "offset: {}, resBinaryRowData: {}, currentDataType: {}, backlog: {}, nextDataType: {}, sequenceNumber: {}",
                         binaryRowDataAddress, offset, resBinaryRowData, currentDataType,
                         backlog, nextDataType, sequenceNumber);
@@ -377,7 +377,7 @@ public class OmniPipelinedSubpartitionView extends PipelinedSubpartitionView {
 
     private ResultSubpartition.BufferAndBacklog sendBuffer()
     {
-        LOG.info("sendBinaryRowData, binaryRowDataResults: {}, curPos: {}", binaryRowDataResults, curPos);
+        LOG.debug("sendBinaryRowData, binaryRowDataResults: {}, curPos: {}", binaryRowDataResults, curPos);
         if (binaryRowDataResults == null || binaryRowDataResults.capacity() <= curPos || resBinaryRowData == 0) {
             return null;
         }
@@ -389,7 +389,7 @@ public class OmniPipelinedSubpartitionView extends PipelinedSubpartitionView {
         int length = binaryRowDataResults.getInt(curPos);
         long readPtr = binaryRowDataResults.getLong(curPos + 4);
         curPos += 12;
-        LOG.info("sendBinaryRowData, length: {}, readPtr: {}", length, readPtr);
+        LOG.debug("sendBinaryRowData, length: {}, readPtr: {}", length, readPtr);
 
         // 6. wrap the memory segment
         ByteBuffer resultBuffer = MemoryUtils.wrapUnsafeMemoryWithByteBuffer(readPtr, length);

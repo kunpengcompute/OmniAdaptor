@@ -133,13 +133,28 @@ public class OperatorDescriptorHelper {
             LOG.info("operatorFactory is {}", operatorFactory.getClass().getCanonicalName());
             handleSinkWriter(userCodeClassloader, operatorConfig, opDesc);
         } else if (operatorFactory instanceof CommitterOperatorFactory) {
-            if (!opDesc.getDescription().contains("batch")) {
-                Map<String, Object> jsonMap = new LinkedHashMap<>();
-                String jsonString = "{\"batch\":true}";
-                opDesc.setDescription(jsonString);
-            }
+            handleCommitter(operatorFactory, opDesc);
         }
         return opDesc;
+    }
+
+    private static void handleCommitter(StreamOperatorFactory<?> operatorFactory, OperatorPOJO opDesc) {
+        Map<String, Object> description = new LinkedHashMap<>();
+        description.put("batch", true);
+        Object sink = ReflectionUtils.retrievePrivateField(operatorFactory, "sink");
+        if (sink != null && "KafkaSink".equals(sink.getClass().getSimpleName())) {
+            Properties producerConfig = ReflectionUtils.retrievePrivateField(sink, "kafkaProducerConfig");
+            Map<String, String> config = new LinkedHashMap<>();
+            for (String key : producerConfig.stringPropertyNames()) {
+                config.put(key, producerConfig.getProperty(key));
+            }
+            description.put("kafkaProducerConfig", config);
+        }
+        try {
+            opDesc.setDescription(JacksonMapperFactory.createObjectMapper().writeValueAsString(description));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Cannot serialize committer descriptor", e);
+        }
     }
 
     private static void handleSinkWriter(ClassLoader userCodeClassloader, StreamConfig operatorConfig,

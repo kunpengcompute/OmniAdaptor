@@ -1,3 +1,13 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+
 """
 Flink 函数支持性检查模块
 
@@ -10,7 +20,7 @@ from omnihelper.flink.schema.type_normalizer import TypeNormalizer
 class FunctionSupportChecker:
     """
     函数支持性检查器
-    
+
     核心职责：
     1. 判断函数是否支持
     2. 检查函数参数类型是否兼容
@@ -20,7 +30,7 @@ class FunctionSupportChecker:
     def __init__(self, func_support_map, func_is_supported_types, cast_is_support_type):
         """
         初始化检查器
-        
+
         :param func_support_map: dict，函数支持状态映射
         :param func_is_supported_types: dict，函数支持类型列表映射
         :param cast_is_support_type: dict，CAST 函数类型转换白名单
@@ -32,7 +42,7 @@ class FunctionSupportChecker:
     def check_cast_function(self, input_type):
         """
         校验 CAST 函数的源类型和目标类型是否支持（白名单机制）
-        
+
         :param input_type: list，包含源类型和目标类型的列表
         :return: tuple，(is_supported, unsupported_types)
         """
@@ -62,7 +72,7 @@ class FunctionSupportChecker:
     def is_func_type_supported(self, func_name, param_types):
         """
         判断函数在给定参数类型下是否支持
-        
+
         :param func_name: str，函数名
         :param param_types: list，参数类型列表
         :return: tuple，(is_supported, unsupported_types)

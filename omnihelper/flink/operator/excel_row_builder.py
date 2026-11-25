@@ -1,3 +1,13 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+
 """
 Flink Excel 行生成模块
 
@@ -14,7 +24,7 @@ from omnihelper.flink.operator.metrics_parser import OperatorMetricsParser
 class ExcelRowBuilder:
     """
     Excel 行构建器
-    
+
     核心职责：
     1. 创建空的数据行（占位用）
     2. 创建包含算子或函数信息的数据行
@@ -25,7 +35,7 @@ class ExcelRowBuilder:
     def create_empty_row(job_id, task_id, status):
         """
         创建空的数据行
-        
+
         :param job_id: str，作业 ID
         :param task_id: str，任务 ID
         :param status: str，任务状态
@@ -54,7 +64,7 @@ class ExcelRowBuilder:
                    func_nested="", func_count=""):
         """
         创建包含算子或函数信息的数据行
-        
+
         :param job_id: str，作业 ID
         :param task_id: str，任务 ID
         :param status: str，状态
@@ -67,7 +77,7 @@ class ExcelRowBuilder:
         """
         is_supported_str = "是" if op.get("is_supported", False) else "否"
         task_status = (status == TaskStatus.SUCCESS)
-        
+
         return {
             ExcelColumns.JOB_ID: job_id,
             ExcelColumns.TASK_ID: task_id,
@@ -90,27 +100,27 @@ class ExcelRowBuilder:
     def build_rows_for_task(data):
         """
         构建任务的 Excel 行数据
-        
+
         :param data: dict，任务数据
         :return: list，Excel 行列表
         """
         job_id, task_id, status = data["jobid"], data["taskid"], data["status"]
         ops, func_list = data["ops"], data["func_list"]
-        
+
         if not ops and not func_list:
             if status != "SUCCESS":
                 return [ExcelRowBuilder.create_empty_row(job_id, task_id, status)]
             return []
-        
+
         rows, max_len = [], max(len(ops), len(func_list))
-        
+
         for i in range(max_len):
             row = ExcelRowBuilder.create_empty_row(job_id, task_id, status)
-            
+
             if i < len(ops):
                 op = ops[i]
                 row.update(ExcelRowBuilder.create_row(job_id, task_id, status, op=op))
-            
+
             if i < len(func_list):
                 func = func_list[i]
                 row.update({
@@ -119,7 +129,7 @@ class ExcelRowBuilder:
                     ExcelColumns.NESTED_CONTENT: func.get("nested_content", ""),
                     ExcelColumns.FUNC_FREQUENCY: str(func["times"]),
                 })
-            
+
             rows.append(row)
-        
+
         return rows

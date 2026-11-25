@@ -1,3 +1,13 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+
 """
 Flink 函数分析模块
 
@@ -16,7 +26,7 @@ from omnihelper.flink.operator.utils import ExpressionConverter
 class FunctionAnalyzer:
     """
     函数分析器
-    
+
     核心职责：
     1. 从描述文本中提取函数表达式
     2. 解析函数参数类型
@@ -59,7 +69,7 @@ class FunctionAnalyzer:
         """判断指定位置是否在 Sarg[...] 内部"""
         if pos < 0 or pos >= len(text):
             return False
-        
+
         sarg_count = 0
         i = 0
         while i < pos:
@@ -77,19 +87,19 @@ class FunctionAnalyzer:
         """从描述中提取操作符的左右操作数"""
         if not description or not func_name:
             return None, None
-        
+
         clean_desc = re.sub(r'<[^>]+>[\s:*\+\-]*', ' ', description)
         is_logical_op = func_name.upper() in ('AND', 'OR')
-        
+
         if is_logical_op:
             op_pattern = re.compile(r'\b' + re.escape(func_name) + r'\b', re.I)
         else:
             op_pattern = re.compile(re.escape(func_name), re.I)
-        
+
         for match in op_pattern.finditer(clean_desc):
             pos = match.start()
             op_end = match.end()
-            
+
             if func_name == '=' and op_end < len(clean_desc) and clean_desc[op_end] == '[':
                 continue
             if func_name == '=' and pos > 0 and clean_desc[pos - 1].isalpha():
@@ -104,7 +114,7 @@ class FunctionAnalyzer:
                 continue
             if FunctionAnalyzer._is_inside_sarg(clean_desc, pos):
                 continue
-            
+
             left_start = pos - 1
             depth = 0
             while left_start >= 0:
@@ -168,16 +178,16 @@ class FunctionAnalyzer:
         """从描述中提取函数的参数文本"""
         if not description or not func_name:
             return None
-        
+
         if FunctionAnalyzer._is_operator_func(func_name):
             left, right = self._extract_operator_operands_from_desc(func_name, description)
             if left is not None and right is not None:
                 return f"{left},{right}"
             return None
-        
+
         func_pattern = re.compile(re.escape(func_name) + r'\s*\(', re.I)
         match = func_pattern.search(description)
-        
+
         if not match:
             if FunctionAnalyzer._is_prefix_type_func(func_name):
                 prefix_pattern = re.compile(r"(?<![a-zA-Z])" + re.escape(func_name) + r"\s+", re.I)
@@ -192,7 +202,7 @@ class FunctionAnalyzer:
                             break
                     return prefix_content[:end_idx].strip()
             return None
-        
+
         start = match.end()
         depth = 1
         for i in range(start, len(description)):
@@ -211,7 +221,7 @@ class FunctionAnalyzer:
         current = []
         paren_depth = 0
         bracket_depth = 0
-        
+
         for char in text:
             if char == "(":
                 paren_depth += 1
@@ -230,7 +240,7 @@ class FunctionAnalyzer:
                 current = []
             else:
                 current.append(char)
-        
+
         if current:
             args.append("".join(current))
         return args
@@ -239,16 +249,16 @@ class FunctionAnalyzer:
         """提取完整函数表达式"""
         if not description:
             return ""
-        
+
         if FunctionAnalyzer._is_operator_func(func_name):
             left, right = self._extract_operator_operands_from_desc(func_name, description)
             if left is not None and right is not None:
                 return f"{left} {func_name} {right}"
             return func_name
-        
+
         func_pattern = re.compile(re.escape(func_name) + r'\s*\(', re.I)
         match = func_pattern.search(description)
-        
+
         if not match:
             if FunctionAnalyzer._is_prefix_type_func(func_name):
                 prefix_pattern = re.compile(r"(?<![a-zA-Z])" + re.escape(func_name) + r"\s+", re.I)
@@ -289,7 +299,7 @@ class FunctionAnalyzer:
                     if left_expr:
                         return f"{left_expr} {func_name}"
             return func_name
-        
+
         start = match.start()
         depth = 0
         for i in range(match.end() - 1, len(description)):
@@ -315,11 +325,11 @@ class FunctionAnalyzer:
                 func_pattern = re.compile(r'\b' + re.escape(func_name) + r'\b', re.I)
             else:
                 func_pattern = re.compile(re.escape(func_name), re.I)
-            
+
             for match in func_pattern.finditer(clean_desc):
                 pos = match.start()
                 op_end = match.end()
-                
+
                 if func_name == '=' and op_end < len(clean_desc) and clean_desc[op_end] == '[':
                     continue
                 if func_name == '=' and pos > 0 and clean_desc[pos - 1].isalpha():
@@ -336,7 +346,7 @@ class FunctionAnalyzer:
                     continue
                 if pos > 0 and (clean_desc[pos - 1].isalnum() or clean_desc[pos - 1] == '_'):
                     continue
-                
+
                 left_start = pos - 1
                 depth = 0
                 while left_start >= 0:
@@ -370,7 +380,7 @@ class FunctionAnalyzer:
                     left_start = 0
                 if left_start < 0:
                     left_start = 0
-                
+
                 right_end = op_end
                 depth = 0
                 while right_end < len(clean_desc):
@@ -389,7 +399,7 @@ class FunctionAnalyzer:
                         if right_end + 2 <= len(clean_desc) and clean_desc[right_end:right_end + 2].upper() == 'OR':
                             break
                     right_end += 1
-                
+
                 left_expr = clean_desc[left_start:pos].strip()
                 right_expr = clean_desc[op_end:right_end].strip()
                 if left_expr and right_expr:
@@ -454,7 +464,7 @@ class FunctionAnalyzer:
         input_types = []
         nested_content = ""
         func_name_lower = func_name.lower()
-        
+
         dict_entry = self.type_resolver.return_type_dict.get(func_name_lower)
         if dict_entry:
             return_type = dict_entry.get("return_type", "unknown")
@@ -520,13 +530,13 @@ class FunctionAnalyzer:
                         if source_type == "unknown":
                             has_unknown = True
                         input_types.append(source_type)
-                        
+
                         target_arg = arguments[1]
                         if isinstance(target_arg, dict):
                             target_type_str = target_arg.get("value", "").strip()
                         else:
                             target_type_str = str(target_arg).strip()
-                        
+
                         if target_type_str:
                             normalized_target = re.sub(r'\([^)]*\)', '', target_type_str).upper()
                             input_types.append(normalized_target)
@@ -640,11 +650,11 @@ class FunctionAnalyzer:
 
         pattern = re.compile(re.escape(func_name), re.I)
         match = pattern.search(description)
-        
+
         if match:
             pos = match.start()
             op_end = match.end()
-            
+
             left_start = pos - 1
             depth = 0
             while left_start >= 0:
@@ -662,9 +672,9 @@ class FunctionAnalyzer:
                 left_start -= 1
             else:
                 left_start = 0
-            
+
             left_expr = description[left_start:pos].strip()
-            
+
             if func_lower in ('is null', 'is not null', 'is true', 'is false', 'is not true', 'is not false'):
                 if left_expr:
                     left_type = self.type_resolver.resolve_expression_type(left_expr, input_schema)
@@ -680,11 +690,11 @@ class FunctionAnalyzer:
                     if left_type == "unknown":
                         has_unknown = True
                     input_types.append(left_type)
-                
+
                 right_start = op_end
                 while right_start < len(description) and description[right_start].isspace():
                     right_start += 1
-                
+
                 depth = 0
                 right_end = right_start
                 while right_end < len(description):
@@ -698,14 +708,14 @@ class FunctionAnalyzer:
                     elif depth == 0 and ch in (',', ')'):
                         break
                     right_end += 1
-                
+
                 right_expr = description[right_start:right_end].strip()
                 if right_expr:
                     right_type = self.type_resolver.resolve_expression_type(right_expr, input_schema)
                     if right_type == "unknown":
                         has_unknown = True
                     input_types.append(right_type)
-                
+
                 full_expr = description[left_start:right_end].strip()
                 if full_expr:
                     nested_content = full_expr
@@ -716,11 +726,11 @@ class FunctionAnalyzer:
                     if left_type == "unknown":
                         has_unknown = True
                     input_types.append(left_type)
-                
+
                 right_start = op_end
                 while right_start < len(description) and description[right_start].isspace():
                     right_start += 1
-                
+
                 depth = 0
                 and_pos = -1
                 temp_pos = right_start
@@ -735,7 +745,7 @@ class FunctionAnalyzer:
                             and_pos = temp_pos
                             break
                     temp_pos += 1
-                
+
                 if and_pos > 0:
                     first_expr = description[right_start:and_pos].strip()
                     if first_expr:
@@ -743,11 +753,11 @@ class FunctionAnalyzer:
                         if first_type == "unknown":
                             has_unknown = True
                         input_types.append(first_type)
-                    
+
                     second_start = and_pos + 3
                     while second_start < len(description) and description[second_start].isspace():
                         second_start += 1
-                    
+
                     depth = 0
                     second_end = second_start
                     while second_end < len(description):
@@ -761,14 +771,14 @@ class FunctionAnalyzer:
                         elif depth == 0 and ch in (',', ')'):
                             break
                         second_end += 1
-                    
+
                     second_expr = description[second_start:second_end].strip()
                     if second_expr:
                         second_type = self.type_resolver.resolve_expression_type(second_expr, input_schema)
                         if second_type == "unknown":
                             has_unknown = True
                         input_types.append(second_type)
-                
+
                 full_end = right_start
                 if and_pos > 0:
                     full_end = second_end
@@ -782,14 +792,14 @@ class FunctionAnalyzer:
                     if left_type == "unknown":
                         has_unknown = True
                     input_types.append(left_type)
-                
+
                 right_start = op_end
                 while right_start < len(description) and description[right_start].isspace():
                     right_start += 1
-                
+
                 while right_start < len(description) and description[right_start] != '(':
                     right_start += 1
-                
+
                 if right_start < len(description) and description[right_start] == '(':
                     depth = 1
                     right_end = right_start + 1
@@ -803,7 +813,7 @@ class FunctionAnalyzer:
                                 right_end += 1
                                 break
                         right_end += 1
-                    
+
                     args_str = description[right_start:right_end].strip()
                     if args_str:
                         nested_content = f"{left_expr} {func_name} {args_str}"
@@ -812,10 +822,10 @@ class FunctionAnalyzer:
                 right_start = op_end
                 while right_start < len(description) and description[right_start].isspace():
                     right_start += 1
-                
+
                 while right_start < len(description) and description[right_start] != '(':
                     right_start += 1
-                
+
                 if right_start < len(description) and description[right_start] == '(':
                     depth = 1
                     right_end = right_start + 1
@@ -829,7 +839,7 @@ class FunctionAnalyzer:
                                 right_end += 1
                                 break
                         right_end += 1
-                    
+
                     subquery = description[right_start:right_end].strip()
                     if subquery:
                         nested_content = f"{func_name} {subquery}"
@@ -857,14 +867,14 @@ class FunctionAnalyzer:
                 if t == "unknown":
                     has_unknown = True
                 input_types.append(t)
-                
+
                 value_arg = args[i + 1].strip()
                 value_arg = self._strip_outer_parens(value_arg)
                 t = self.type_resolver.resolve_expression_type(value_arg, input_schema)
                 if t == "unknown":
                     has_unknown = True
                 input_types.append(t)
-                
+
                 i += 2
             else:
                 value_arg = args[i].strip()
@@ -888,7 +898,7 @@ class FunctionAnalyzer:
 
         from omnihelper.flink.schema.type_resolver import FlinkTypeResolver
         original_expr, target_type_str = FlinkTypeResolver._wrap_split_alias_from_expr(args_str)
-        
+
         if original_expr == args_str and " AS " in args_str.upper():
             parts = re.split(r'\s+AS\s+', args_str, maxsplit=1, flags=re.I)
             if len(parts) == 2:
@@ -941,25 +951,25 @@ class FunctionAnalyzer:
         param_types_map = {}
         all_funcs = self.function_parser.parse_plan_description(description)
         processed_exprs = set()
-        
+
         for func_info in all_funcs:
             func_name = func_info.get("func", "")
             if not func_name:
                 continue
-            
+
             all_exprs = self._extract_all_func_expressions(func_name, description)
             if not all_exprs or all_exprs == [func_name]:
                 all_exprs = [func_name]
-            
+
             for expr in all_exprs:
                 if (func_name, expr) in processed_exprs:
                     continue
                 processed_exprs.add((func_name, expr))
-                
+
                 types, _ = self._resolve_func_param_types(func_name, expr, input_schema)
                 if types:
                     param_types_map[(func_name, expr)] = types
-        
+
         return param_types_map
 
     def analyze_operators_functions(self, description, task_id, input_schema=None):
@@ -972,15 +982,15 @@ class FunctionAnalyzer:
         unsupported_funcs = self.function_parser.analyze_unsupported_functions(
             description, param_types_map
         )
-        
+
         result = []
         for func in unsupported_funcs:
             func_name = func["func_name"]
-            
+
             all_exprs = self._extract_all_func_expressions(func_name, description)
             if not all_exprs or all_exprs == [func_name]:
                 all_exprs = [func_name]
-            
+
             seen = set()
             unique_exprs = []
             for expr in all_exprs:
@@ -997,13 +1007,13 @@ class FunctionAnalyzer:
                         input_types = param_types_map[key]
                     elif func_name in param_types_map:
                         input_types = param_types_map[func_name]
-                
+
                 if not input_types:
                     input_types, _ = self._resolve_func_param_types(func_name, expr, input_schema)
 
                 # 对每个表达式单独检查支持性
                 is_supported, unsupported_types = self.function_parser.is_func_type_supported(func_name, input_types)
-                
+
                 # 只有不支持的表达式才添加到结果中
                 if not is_supported:
                     entry = {
@@ -1016,5 +1026,5 @@ class FunctionAnalyzer:
                     if unsupported_types:
                         entry["unsupported_types"] = unsupported_types
                     result.append(entry)
-        
+
         return result

@@ -1,14 +1,16 @@
-"""
-   Flink 表结构读取模块
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 
-   Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
-   You can use this software according to the terms and conditions of the Mulan PSL v2.
-   You may obtain a copy of Mulan PSL v2 at:
-              http://license.coscl.org.cn/MulanPSL2
-   THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-   EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-   MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-   See the Mulan PSL v2 for more details.
+"""
+Flink 表结构读取模块
+
 
 模块功能说明:
     本模块负责从 CSV 文件中读取和解析 Flink 表结构信息，主要功能包括:
@@ -29,7 +31,7 @@ CSV 文件格式要求:
     - TABLE_NAME: 表名
     - FIELD_NAME: 字段名
     - FIELD_TYPE: 字段类型（支持嵌套类型如 ROW<name VARCHAR, age INT>）
-    
+
     嵌套类型跨行存储支持:
     - 当嵌套类型过长时，可拆分为多个 FIELD_TYPE_1, FIELD_TYPE_2... 列
     - 自动识别括号匹配并合并
@@ -78,10 +80,10 @@ class TableSchemaReader:
     ```python
     # 读取表结构
     schema = TableSchemaReader.read_table_schema("schema.csv")
-    
+
     # 构建字段类型映射
     column_type, table_column_type = TableSchemaReader.build_column_type_mapping(schema)
-    
+
     # 解析嵌套字段类型
     nested_type = TableSchemaReader.resolve_nested_field_type(col_info, ["address", "city"])
     ```
@@ -119,7 +121,7 @@ class TableSchemaReader:
         """
         # 初始化表结构字典，使用 defaultdict 自动创建列表
         table_schema = defaultdict(list)
-        
+
         # 参数校验：路径为空或文件不存在
         if not csv_path or not os.path.exists(csv_path):
             logger.warning(f"Table schema CSV file not found: {csv_path}")
@@ -128,7 +130,7 @@ class TableSchemaReader:
         try:
             # 读取 CSV 行数据
             rows = TableSchemaReader._read_csv_rows(csv_path)
-            
+
             # 遍历每行数据，构建表结构
             for table_name, field_name, field_type in rows:
                 # 跳过空值行
@@ -137,7 +139,7 @@ class TableSchemaReader:
 
                 # 类型标准化：将 STRING 转为 VARCHAR，INTEGER 转为 INT 等
                 normalized_type = TypeNormalizer.normalize_type(field_type)
-                
+
                 # 解析嵌套类型结构（仅 ROW 类型有嵌套字段）
                 nested_fields = TypeNormalizer.parse_row_type(field_type)
 
@@ -181,15 +183,15 @@ class TableSchemaReader:
         - _reconstruct_type_from_row 负责合并这些分段
         """
         rows = []
-        
+
         # 打开 CSV 文件，使用 utf-8 编码
         with open(csv_path, "r", encoding="utf-8") as f:
             # 创建 DictReader，自动解析第一行为列名
             reader = csv.DictReader(f)
-            
+
             # 获取必填列集合
             required = set(CsvColumns.get_required_columns())
-            
+
             # 验证必填列是否存在
             if not required.issubset(set(reader.fieldnames or [])):
                 logger.warning(
@@ -204,14 +206,14 @@ class TableSchemaReader:
                 table_name = row.get(CsvColumns.TABLE_NAME, "").strip()
                 field_name = row.get(CsvColumns.FIELD_NAME, "").strip()
                 field_type = row.get(CsvColumns.FIELD_TYPE, "").strip()
-                
+
                 # 跳过空值行
                 if not table_name or not field_name or not field_type:
                     continue
 
                 # 重建可能被拆分的类型字符串
                 field_type = TableSchemaReader._reconstruct_type_from_row(field_type, row)
-                
+
                 # 添加到结果列表
                 rows.append((table_name, field_name, field_type))
 
@@ -233,7 +235,7 @@ class TableSchemaReader:
         - FIELD_TYPE: "ROW<field1 INT"
         - FIELD_TYPE_1: "field2 VARCHAR"
         - FIELD_TYPE_2: "field3 BIGINT>"
-        
+
         处理算法:
         1. 统计类型字符串中 < 和 > 的数量
         2. 如果 < 数量 > > 数量，说明类型不完整
@@ -253,7 +255,7 @@ class TableSchemaReader:
         # 统计括号数量
         open_angle = field_type.count("<")
         close_angle = field_type.count(">")
-        
+
         # 括号已匹配，无需重建
         if open_angle <= close_angle:
             return field_type
@@ -369,7 +371,7 @@ class TableSchemaReader:
         使用示例:
         假设有如下类型定义:
         ROW<address ROW<city VARCHAR, street VARCHAR>>
-        
+
         column_info = {
             "field_type": "ROW",
             "nested_fields": [
@@ -383,7 +385,7 @@ class TableSchemaReader:
                 }
             ]
         }
-        
+
         resolve_nested_field_type(column_info, ["address", "city"]) -> "VARCHAR"
 
         递归终止条件:
@@ -397,10 +399,10 @@ class TableSchemaReader:
 
         # 当前层级的嵌套字段列表
         nested = column_info["nested_fields"]
-        
+
         # 保存最终找到的类型
         result_type = "unknown"
-        
+
         # 按路径逐级查找
         for part in field_path:
             found = False

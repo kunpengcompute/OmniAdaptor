@@ -1,3 +1,13 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+
 """
 Flink 算子指标解析模块
 
@@ -14,7 +24,7 @@ from collections import defaultdict
 class OperatorMetricsParser:
     """
     算子指标解析器
-    
+
     核心职责：
     1. 解析原始指标数据，按算子分组
     2. 计算算子活跃持续时间
@@ -36,7 +46,7 @@ class OperatorMetricsParser:
     def group_metrics_by_operator(raw_map):
         """
         将原始指标按算子分组
-        
+
         :param raw_map: dict，{完整指标ID: 值}
         :return: dict，{算子ID: {metric_name: 值}}
         """
@@ -47,7 +57,7 @@ class OperatorMetricsParser:
                 continue
             operator = ".".join(parts[:-1])
             metric = parts[-1]
-            
+
             if operator not in operator_stats:
                 operator_stats[operator] = {
                     "numRecordsIn": 0,
@@ -59,7 +69,7 @@ class OperatorMetricsParser:
                     "numBytesOut": 0,
                     "numBytesOutPerSecond": 0.0,
                 }
-            
+
             if metric in operator_stats[operator]:
                 val_f = OperatorMetricsParser.safe_float(val)
                 if "PerSecond" in metric:
@@ -124,16 +134,16 @@ class OperatorMetricsParser:
         """解析性能统计数据"""
         if not metrics_raw or not isinstance(metrics_raw, list):
             return {"operators": {}, "summary": {}, "analysis": {}}
-        
+
         valid_metrics = [item for item in metrics_raw if isinstance(item, dict) and 'id' in item and 'value' in item]
         if not valid_metrics:
             return {"operators": {}, "summary": {}, "analysis": {}}
-        
+
         raw_map = {item['id']: item['value'] for item in valid_metrics}
         operator_stats = OperatorMetricsParser.group_metrics_by_operator(raw_map)
         operator_stats = OperatorMetricsParser.calc_active_duration(operator_stats)
         summary = OperatorMetricsParser.calc_summary(operator_stats)
-        
+
         analysis = {}
         operators_by_type = {}
         if jobs is not None:

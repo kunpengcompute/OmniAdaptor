@@ -1,3 +1,13 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+
 """
 Flink 函数字典加载模块
 
@@ -15,7 +25,7 @@ from omnihelper.util.log import logger
 class FunctionDictionaryLoader:
     """
     函数字典加载器
-    
+
     核心职责：
     1. 加载函数字典配置文件
     2. 构建函数支持性映射
@@ -36,7 +46,7 @@ class FunctionDictionaryLoader:
     def load(self):
         """
         加载函数字典配置并构建匹配模式
-        
+
         :return: dict，包含所有加载的数据和模式
         """
         base_path = os.path.join(CommonUtil.get_execute_path(), "resources")
@@ -96,12 +106,12 @@ class FunctionDictionaryLoader:
             func_name = func.get("func_name")
             if not func_name:
                 continue
-            
+
             func_name_lower = func_name.lower()
             self.omni_functions.append(func_name_lower)
             self.func_support_map[func_name_lower] = func.get("is_support_func", False)
             self.func_is_supported_types[func_name_lower] = func.get("is_supported_type", [])
-            
+
             if func_name_lower == "cast" and func.get("cast_is_support_type"):
                 self.cast_is_support_type = func.get("cast_is_support_type")
 

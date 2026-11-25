@@ -1,14 +1,16 @@
-"""
-   Flink 函数解析模块
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 
-   Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
-   You can use this software according to the terms and conditions of the Mulan PSL v2.
-   You may obtain a copy of Mulan PSL v2 at:
-              http://license.coscl.org.cn/MulanPSL2
-   THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-   EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-   MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-   See the Mulan PSL v2 for more details.
+"""
+Flink 函数解析模块
+
 
 模块功能说明:
     本模块负责从 Flink 物理计划描述中解析函数调用信息，支持三种类型的函数识别:
@@ -35,7 +37,7 @@ from omnihelper.flink.function.pattern_matcher import FunctionPatternMatcher
 class FlinkFunctionParser:
     """
     Flink 函数解析器 - 核心类
-    
+
     协调各子模块完成函数解析：
     1. 加载函数字典
     2. 构建匹配模式

@@ -1,3 +1,13 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+
 """
 Flink 函数模式匹配模块
 
@@ -12,7 +22,7 @@ from omnihelper.util.log import logger
 class FunctionPatternMatcher:
     """
     函数模式匹配器
-    
+
     核心职责：
     1. 从描述文本中匹配函数调用、关键字和操作符
     2. 过滤误报场景
@@ -22,7 +32,7 @@ class FunctionPatternMatcher:
     def __init__(self, func_pattern, keywords_pattern, operator_pattern, support_checker):
         """
         初始化匹配器
-        
+
         :param func_pattern: re.Pattern，函数调用匹配模式
         :param keywords_pattern: re.Pattern，关键字匹配模式
         :param operator_pattern: re.Pattern，操作符匹配模式

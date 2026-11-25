@@ -103,15 +103,17 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * Stream {@link ExecNode} for time-based over operator.
  *
  * <p>OmniStream native patch: when the OVER window matches the native v1 whitelist
- * (processing-time UNBOUNDED PRECEDING frame, no constant arguments, no FILTER
- * clause, no DISTINCT, aggregate functions limited to SUM/COUNT/MAX/MIN over
- * BIGINT, partition keys over the native key whitelist), the transformation
- * description is extended with a JSON payload carrying the
- * "processFunction":"ProcTimeUnboundedPrecedingFunction" marker plus all the
- * metadata the native operator needs. OmniGraphOverride picks the marker up at
- * job-graph time and routes the vertex to the native operator. Everything
- * outside the whitelist keeps the plain planner description and therefore
- * stays on the Java path (silent fallback, byte-identical to stock Flink).
+ * (processing-time frames - UNBOUNDED PRECEDING or ROWS N PRECEDING -, no constant
+ * arguments, no FILTER clause, no DISTINCT, aggregate functions limited to
+ * SUM/COUNT/MAX/MIN over BIGINT, partition keys over the native key whitelist), the
+ * transformation description is extended with a JSON payload carrying the matching
+ * "processFunction" marker ("ProcTimeUnboundedPrecedingFunction" for the unbounded
+ * frame, "ProcTimeRowsBoundedPrecedingFunction" plus the "precedingOffset" window
+ * size for the ROWS-bounded frame) and all the metadata the native operator needs.
+ * OmniGraphOverride picks the marker up at job-graph time and routes the vertex to
+ * the native operator. Everything outside the whitelist keeps the plain planner
+ * description and therefore stays on the Java path (silent fallback,
+ * byte-identical to stock Flink).
  */
 @ExecNodeMetadata(
         name = "stream-exec-over-aggregate",
@@ -130,6 +132,14 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
 
     /** Native marker function name, matched by StreamOperatorFactory (C++). */
     private static final String NATIVE_PROCESS_FUNCTION = "ProcTimeUnboundedPrecedingFunction";
+
+    /**
+     * Native marker for the ROWS-bounded variant, matched by StreamOperatorFactory
+     * (C++). Its description additionally carries the "precedingOffset" window size
+     * (SQL "N PRECEDING" = N+1 rows including the current row).
+     */
+    private static final String NATIVE_ROWS_BOUNDED_PROCESS_FUNCTION =
+            "ProcTimeRowsBoundedPrecedingFunction";
 
     /**
      * Native v1 aggregate whitelist (mirrors ValidateOverAggOPStrategy).
@@ -247,6 +257,20 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
                         && group.getLowerBound().isUnbounded()
                         && group.getUpperBound().isCurrentRow();
 
+        // The bounded native-eligible frame: ROWS N PRECEDING -> CURRENT ROW.
+        // The RANGE bounded window needs timer-deferred emission and stays on
+        // the Java path in v1.
+        final boolean boundedRowsFrame =
+                group.getLowerBound().isPreceding()
+                        && !group.getLowerBound().isUnbounded()
+                        && group.getUpperBound().isCurrentRow()
+                        && group.isRows();
+
+        // Window size in rows for the ROWS-bounded frame, assigned in the
+        // bounded branch below (N+1 rows including the current row); 0 marks
+        // "not applicable" (unbounded frame, never injected downstream).
+        long precedingOffset = 0L;
+
         final CodeGeneratorContext ctx =
                 new CodeGeneratorContext(config, planner.getFlinkContext().getClassLoader());
         final KeyedProcessFunction<RowData, RowData, RowData> overProcessFunction;
@@ -275,7 +299,7 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
                         "the specific value is decimal which haven not supported yet.");
             }
             // bounded OVER window
-            final long precedingOffset = -1 * (long) boundValue + (group.isRows() ? 1 : 0);
+            precedingOffset = -1 * (long) boundValue + (group.isRows() ? 1 : 0);
             overProcessFunction =
                     createBoundedOverProcessFunction(
                             ctx,
@@ -314,11 +338,12 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
         transform.setStateKeyType(selector.getProducedType());
 
         // OmniStream native path: only the v1 whitelist (proc-time UNBOUNDED
-        // PRECEDING, plain single-argument SUM/COUNT/MAX/MIN over BIGINT,
-        // native key types, no constants / FILTER / DISTINCT) receives the
-        // JSON description; everything else keeps the plain planner
-        // description and falls back to Java at graph-validation time.
-        if (isNativeEligible(unboundedFrame, rowTimeIdx, constants, group, inputRowType)) {
+        // PRECEDING or ROWS N PRECEDING, plain single-argument
+        // SUM/COUNT/MAX/MIN over BIGINT, native key types, no constants /
+        // FILTER / DISTINCT) receives the JSON description; everything else
+        // keeps the plain planner description and falls back to Java at
+        // graph-validation time.
+        if (isNativeEligible(unboundedFrame, boundedRowsFrame, rowTimeIdx, constants, group, inputRowType)) {
             final AggregateInfoList aggInfoList =
                     AggregateUtil.transformToStreamAggregateInfoList(
                             planner.getTypeFactory(),
@@ -344,7 +369,11 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
                             accTypes,
                             aggValueTypes,
                             inputTransform,
-                            partitionKeys));
+                            partitionKeys,
+                            unboundedFrame
+                                    ? NATIVE_PROCESS_FUNCTION
+                                    : NATIVE_ROWS_BOUNDED_PROCESS_FUNCTION,
+                            unboundedFrame ? null : Long.valueOf(precedingOffset)));
             LOG.info("OverAggregate native description injected for {}", oldDescription);
         }
 
@@ -353,16 +382,24 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
 
     /**
      * Native v1 eligibility. Must stay in sync with the C++ operator whitelist
-     * (ProcTimeUnboundedPrecedingFunction) and with ValidateOverAggOPStrategy.
+     * (ProcTimeUnboundedPrecedingFunction / ProcTimeRowsBoundedPrecedingFunction)
+     * and with ValidateOverAggOPStrategy.
      */
     private boolean isNativeEligible(
             boolean unboundedFrame,
+            boolean boundedRowsFrame,
             int rowTimeIdx,
             List<RexLiteral> constants,
             OverSpec.GroupSpec group,
             RowType inputRowType) {
-        // Only the processing-time UNBOUNDED PRECEDING -> CURRENT ROW frame.
-        if (!unboundedFrame || rowTimeIdx >= 0) {
+        // Processing time only: rowtime windows need watermark logic.
+        if (rowTimeIdx >= 0) {
+            return false;
+        }
+        // v1 native frames: UNBOUNDED PRECEDING -> CURRENT ROW, or the ROWS
+        // N PRECEDING -> CURRENT ROW bounded frame. The RANGE bounded frame
+        // needs timer-deferred emission and stays on the Java path.
+        if (!unboundedFrame && !boundedRowsFrame) {
             return false;
         }
         // v1 does not model constant arguments like SUM(1) (TMP columns).
@@ -425,7 +462,9 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
             LogicalType[] accTypes,
             LogicalType[] aggValueTypes,
             Transformation<RowData> inputTransform,
-            int[] partitionKeys) {
+            int[] partitionKeys,
+            String processFunction,
+            Long precedingOffset) {
         ObjectMapper objectMapper = JacksonMapperFactory.createObjectMapper();
         List<String> inputTypeList = getInputTypes(inputTransform);
         List<String> outputTypeList = getOutputTypes();
@@ -448,7 +487,14 @@ public class StreamExecOverAggregate extends ExecNodeBase<RowData>
         aggInfoListMap.put("distinctInfos", new ArrayList<Map<String, Object>>());
 
         Map<String, Object> jsonMap = new LinkedHashMap<>();
-        jsonMap.put("processFunction", NATIVE_PROCESS_FUNCTION);
+        jsonMap.put("processFunction", processFunction);
+        // ROWS-bounded contract with the native operator: the injected window
+        // size is the same precedingOffset the Java function consumes
+        // (SQL "N PRECEDING" = N+1 rows including the current row); null
+        // (unbounded frame) omits the field.
+        if (precedingOffset != null) {
+            jsonMap.put("precedingOffset", precedingOffset);
+        }
         jsonMap.put("originDescription", oldDescription);
         jsonMap.put("inputTypes", inputTypeList);
         jsonMap.put("outputTypes", outputTypeList);

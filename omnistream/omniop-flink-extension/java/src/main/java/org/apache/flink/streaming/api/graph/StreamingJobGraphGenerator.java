@@ -645,8 +645,9 @@ public class StreamingJobGraphGenerator {
             LOG.info(vertexEntry.toString() + " shouldDoSpiltWatermark : " + shouldDoSpiltWatermark);
             boolean vertexValidateRes = OmniGraphOverride.validateVertexForOmniTask(vertexEntry, this.chainInfos,
                     this.chainedConfigs, this.vertexConfigs, jobType, endpointFallbackVertices);
-            if (!vertexValidateRes && (!sourceSinkTaskFallbackEnabled
-                    || !endpointFallbackVertices.contains(vertexEntry.getKey()))) {
+            // DataStream retains independent task fallback regardless of the SQL endpoint switch.
+            if (requiresWholeJobFallback(jobType, vertexValidateRes, sourceSinkTaskFallbackEnabled,
+                    endpointFallbackVertices.contains(vertexEntry.getKey()))) {
                 requiresJobFallback = true;
                 LOG.info("Whole job fallback required by vertex {} ({})", vertexEntry.getKey(),
                         vertexEntry.getValue().getName());
@@ -686,6 +687,12 @@ public class StreamingJobGraphGenerator {
         buildAndStorePartitionOmniFlagMap();
         
         OmniGraphOverride.clearTypeInfo();
+    }
+
+    static boolean requiresWholeJobFallback(JobType jobType, boolean vertexSupported,
+            boolean sourceSinkTaskFallbackEnabled, boolean endpointFallback) {
+        return jobType == JobType.SQL && !vertexSupported
+                && (!sourceSinkTaskFallbackEnabled || !endpointFallback);
     }
 
     private boolean isdataStreamLowParaMode(JobType jobType) {

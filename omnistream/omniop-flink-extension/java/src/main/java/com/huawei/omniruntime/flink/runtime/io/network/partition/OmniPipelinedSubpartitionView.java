@@ -168,7 +168,7 @@ public class OmniPipelinedSubpartitionView extends PipelinedSubpartitionView {
 
     private void getNativeData() {
         while (resBinaryRowData == 0) {
-            LOG.info("get data from native, threadId: {}", Thread.currentThread().getId());
+            LOG.debug("get data from native, threadId: {}", Thread.currentThread().getId());
             int res = getNativeNextBuffer(localChannelReaderRef);
             if (res == 1) {
                 decodeReadBufferForSQL();

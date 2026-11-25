@@ -303,9 +303,12 @@ public final class OmniGraphOverride {
                 vertexID, vertexConfig.getOperatorName());
 
         JobVertex jobVertex = vertexEntry.getValue();
-        refreshJobCsvFileSinkFlag(chainInfos);
+        if (jobType == JobType.SQL) {
+            refreshJobCsvFileSinkFlag(chainInfos);
+        }
 
-        Set<Integer> sinkFallbackNodes = collectSinkFallbackNodes(chainInfos);
+        Set<Integer> sinkFallbackNodes = jobType == JobType.SQL
+                ? collectSinkFallbackNodes(chainInfos) : java.util.Collections.emptySet();
         endpointFallbackVertices.remove(vertexID);
         if (validateVertexChainInfoForOmniTask(vertexID, chainInfos, chainedConfigs, jobVertex, vertexConfigs,
                 jobType, endpointFallbackVertices, sinkFallbackNodes)) {
@@ -392,6 +395,10 @@ public final class OmniGraphOverride {
         for (StreamNode node : chainedNode) {
             boolean sinkFallback = sinkFallbackNodes.contains(node.getId());
             if (sinkFallback || validateNodeForOmniTask(vertexID, vertexConfigs, jobType, streamGraph, node)) {
+                // Preserve DataStream validation order and task-local rejection.
+                if (jobType == JobType.STREAM) {
+                    return false;
+                }
                 unsupported = true;
                 endpointOnly &= sinkFallback || isFallbackEndpoint(node);
                 if (sinkFallback) {
@@ -1319,8 +1326,18 @@ public final class OmniGraphOverride {
         Queue<Integer> pending = new LinkedList<>();
         for (Integer id : terminalStages) {
             StreamNode node = nodes.get(id);
-            if ((isWriterOrCommitter(node) && !nativeCsvWriters.contains(id)) || isPaimonSinkAdapter(node)) {
+            if ((isWriterOrCommitter(node) && !nativeCsvWriters.contains(id))
+                    || isPaimonOperator(node)) {
                 pending.add(id);
+            }
+        }
+        // A Paimon conversion Map is a Flink StreamMap. Include it only when it
+        // feeds an identified Paimon sink stage, so an unrelated Map stays native.
+        for (StreamNode node : nodes.values()) {
+            if (isPaimonSinkAdapter(node) && node.getOutEdges().stream().anyMatch(
+                    edge -> terminalStages.contains(edge.getTargetId())
+                            && isPaimonOperator(nodes.get(edge.getTargetId())))) {
+                pending.add(node.getId());
             }
         }
         while (!pending.isEmpty()) {
@@ -1332,12 +1349,19 @@ public final class OmniGraphOverride {
                 pending.add(edge.getTargetId());
             }
         }
+        for (Integer id : fallback) {
+            StreamNode node = nodes.get(id);
+            LOG.info("Flink sink-stage fallback: node={}, operator={}, factory={}", id,
+                    node.getOperatorName(), node.getOperatorFactory() == null ? "null"
+                            : node.getOperatorFactory().getClass().getName());
+        }
         return fallback;
     }
 
     private static boolean isSinkStage(StreamNode node) {
         String name = node.getOperatorName();
-        return (name != null && isSink(name)) || isWriterOrCommitter(node) || isPaimonSinkAdapter(node);
+        return (name != null && isSink(name)) || isWriterOrCommitter(node)
+                || isPaimonOperator(node);
     }
 
     private static boolean isWriterOrCommitter(StreamNode node) {
@@ -1345,8 +1369,23 @@ public final class OmniGraphOverride {
         // may also be named "Writer" or "Committer". Only force known Flink
         // file-sink stages or Paimon stages to the stock runtime here.
         String name = node.getOperatorName();
-        return requiresFlinkFileSink(name, node.getOperatorFactory())
-                || (name != null && name.toLowerCase(Locale.ROOT).contains("paimon"));
+        return requiresFlinkFileSink(name, node.getOperatorFactory());
+    }
+
+    private static boolean isPaimonOperator(StreamNode node) {
+        if (node == null) {
+            return false;
+        }
+        StreamOperatorFactory<?> factory = node.getOperatorFactory();
+        if (factory != null && isPaimonImplementation(factory.getClass())) {
+            return true;
+        }
+        StreamOperator<?> operator = node.getOperator();
+        return operator != null && isPaimonImplementation(operator.getClass());
+    }
+
+    static boolean isPaimonImplementation(Class<?> implementation) {
+        return implementation.getName().startsWith("org.apache.paimon.flink.");
     }
 
     private static boolean isPaimonSinkAdapter(StreamNode node) {

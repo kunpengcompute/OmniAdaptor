@@ -1,3 +1,13 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+
 """
 Flink 算子解析工具模块
 
@@ -8,7 +18,7 @@ Flink 算子解析工具模块
 class ExpressionConverter:
     """
     表达式转换器
-    
+
     负责将表达式对象转换为字符串表示
     """
 
@@ -16,10 +26,10 @@ class ExpressionConverter:
     def expr_to_string(expr):
         """
         将表达式对象转换为字符串表示
-        
+
         :param expr: dict 或 str，表达式对象
         :return: str，表达式字符串
-        
+
         支持的表达式类型:
         - FIELD_REFERENCE: field[列名]
         - LITERAL: 字面量值

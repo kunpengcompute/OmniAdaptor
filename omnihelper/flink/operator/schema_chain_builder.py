@@ -1,3 +1,13 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+
 """
 Flink Schema 链构建模块
 
@@ -16,7 +26,7 @@ from omnihelper.flink.schema.table_schema_reader import TableSchemaReader
 class SchemaChainBuilder:
     """
     Schema 链构建器
-    
+
     核心职责：
     1. 从算子描述中提取表源信息
     2. 构建每个算子的输入/输出 Schema
@@ -57,7 +67,7 @@ class SchemaChainBuilder:
             table_cols = self.type_resolver.table_schema.get(table_name, [])
             if not table_cols:
                 continue
-            
+
             col_type, table_col_type = (
                 TableSchemaReader.build_column_type_mapping(self.type_resolver.table_schema, {table_name})
             )
@@ -103,7 +113,7 @@ class SchemaChainBuilder:
     def build_schema_chain(self, description_data, upstream_context=None):
         """
         构建当前 vertex 的 schema chain
-        
+
         :param description_data: list，描述数据列表
         :param upstream_context: dict，上游上下文
         :return: list，schema chain
@@ -121,7 +131,7 @@ class SchemaChainBuilder:
 
         for desc_item in description_data:
             op_type = self._extract_op_type(desc_item)
-            
+
             if self._is_source_or_first_op(op_type, schema_chain, current_input):
                 tables, output_schema = (self.type_resolver.extract_table_source_info(description_data))
                 if output_schema:
@@ -142,7 +152,7 @@ class SchemaChainBuilder:
                 op_alias_map = (self.type_resolver.extract_alias_map_from_description(filtered_desc))
                 accumulated_alias_map.update(op_alias_map)
                 self.type_resolver.update_alias_map(accumulated_alias_map)
-                
+
                 schema_chain.append({
                     "op_type": op_type,
                     "input_schema": current_input,
@@ -165,14 +175,14 @@ class SchemaChainBuilder:
     def merge_upstream_context(upstream_ids, vertex_context):
         """
         合并上游顶点的上下文信息
-        
+
         :param upstream_ids: list，上游顶点 ID 列表
         :param vertex_context: dict，顶点上下文
         :return: dict，合并后的上下文
         """
         merged_alias_map = {}
         merged_output_schema = []
-        
+
         for uid in upstream_ids:
             ctx = vertex_context.get(uid)
             if not ctx:
@@ -183,7 +193,7 @@ class SchemaChainBuilder:
                     merged_output_schema = list(ctx["output_schema"])
                 else:
                     merged_output_schema.extend(ctx["output_schema"])
-        
+
         return {
             "alias_map": merged_alias_map,
             "output_schema": merged_output_schema,
@@ -192,7 +202,7 @@ class SchemaChainBuilder:
     def get_input_schema_for_op(self, op_type, schema_chain):
         """
         获取算子的输入 schema
-        
+
         :param op_type: str，算子类型
         :param schema_chain: list，schema 链
         :return: list 或 None，输入 schema
@@ -215,7 +225,7 @@ class SchemaChainBuilder:
     def extract_input_types_from_schema_entry(self, chain_entry, description_data):
         """
         从 schema_chain entry 中提取 input_types_str
-        
+
         :param chain_entry: dict，schema chain 条目
         :param description_data: list，描述数据
         :return: str，输入类型字符串
@@ -253,7 +263,7 @@ class SchemaChainBuilder:
                 output_types = desc.get("outputTypes", [])
                 if output_types:
                     return ",".join(TypeNormalizer.normalize_type(t) for t in output_types if t)
-            
+
             if isinstance(desc, str):
                 select_match = re.search(r'select=\[(.*?)\]', desc, re.I)
                 if select_match:
@@ -261,29 +271,29 @@ class SchemaChainBuilder:
                     types = self._extract_types_from_select(select_content, input_schema)
                     if types:
                         return ",".join(types)
-                
+
                 field_match = re.search(r'field=\[(.*?)\]', desc, re.I)
                 if field_match:
                     field_content = field_match.group(1)
                     types = self._extract_types_from_field(field_content, input_schema)
                     if types:
                         return ",".join(types)
-        
+
         return ""
 
     def _extract_types_from_select(self, select_str, input_schema):
         """从 SELECT 语句中提取类型"""
         types = []
         items = self.type_resolver._split_select_items(select_str)
-        
+
         for item in items:
             item = item.strip()
             if not item:
                 continue
-            
+
             original_expr, alias_name = self.type_resolver._wrap_split_alias_from_expr(item)
             field_type = self.type_resolver.resolve_text_expr_type(original_expr, input_schema, 0)
-            
+
             if field_type != "unknown":
                 original_type = self._get_original_type_from_schema(original_expr, input_schema)
                 if original_type and original_type.upper().startswith("ROW"):
@@ -295,19 +305,19 @@ class SchemaChainBuilder:
                 types.append("unknown")
             else:
                 types.append("unknown")
-        
+
         return types
 
     def _extract_types_from_field(self, field_str, input_schema):
         """从字段列表中提取类型"""
         types = []
         fields = field_str.split(",")
-        
+
         for field in fields:
             field = field.strip()
             if not field:
                 continue
-            
+
             if input_schema:
                 field_type = self.type_resolver.resolve_expression_type(field, input_schema)
                 if field_type == "ROW":
@@ -321,7 +331,7 @@ class SchemaChainBuilder:
                     types.append(field_type if field_type else "unknown")
             else:
                 types.append("unknown")
-        
+
         return types
 
     def _get_original_type_from_schema(self, field_expr, input_schema):

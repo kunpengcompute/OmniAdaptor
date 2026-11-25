@@ -1,3 +1,13 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# OmniAdaptor is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#         http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+# KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+
 """
 Flink 算子解析模块 - 主入口
 
@@ -33,7 +43,7 @@ from .excel_row_builder import ExcelRowBuilder
 class FlinkParser:
     """
     Flink 物理计划解析器 - 核心类
-    
+
     协调各子模块完成作业解析：
     1. 加载算子字典
     2. 解析作业计划描述
@@ -54,25 +64,25 @@ class FlinkParser:
     def __init__(self, table_schema=None, column_type=None, table_column_type=None):
         """
         初始化解析器
-        
+
         :param table_schema: dict，表结构字典
         :param column_type: dict，字段名→类型 的全局映射
         :param table_column_type: dict，表名.字段名→类型 的映射
         """
         # 创建类型解析器
         self.type_resolver = FlinkTypeResolver(table_schema, column_type, table_column_type)
-        
+
         # 加载算子字典
         self.op_dictionary = {}
         self.dictionary_path = os.path.join(self.get_resource_path(), "flink_op_dictionary.json")
         self._load_op_dictionary()
         self.supported_operators = set(self.op_dictionary.keys())
-        
+
         # 初始化子模块
         self.metrics_parser = OperatorMetricsParser()
         self.function_analyzer = FunctionAnalyzer(self.type_resolver)
         self.schema_builder = SchemaChainBuilder(self.type_resolver)
-        
+
         # 缓存
         self.schema_chain = {}
 
@@ -181,7 +191,7 @@ class FlinkParser:
 
         queue = [vid for vid, deg in in_degree.items() if deg == 0]
         result = []
-        
+
         while queue:
             vid = queue.pop(0)
             result.append(vid)

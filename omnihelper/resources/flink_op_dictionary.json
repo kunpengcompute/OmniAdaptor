@@ -65,6 +65,15 @@
     ],
     "not_supported_list": []
   },
+  "GroupTableAggregate": {
+    "is_supported": true,
+    "supported_list": [
+      "BIGINT"
+    ],
+    "not_supported_list": [
+      "注：仅针对点名白名单内的 Top2 表聚合 UDF 做 native 适配（参照 group.sql 的 count_char 点名模式）；其他 UDF 自动回退 Java 原生执行。v1 范围：BIGINT 排序键 + BIGINT 分组键；无唯一键（keyless）语义与 Flink 原生 Top2 一致。"
+    ]
+  },
   "Join": {
     "is_supported": true,
     "supported_list": [

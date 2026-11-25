@@ -176,6 +176,9 @@ public final class OmniGraphOverride {
         }
         if (performanceMode) {
             // performance mode supports all op temporarily.Some op will be proposed in the future.
+            // GroupTableAggregate: the native Top2 whitelist operator (GroupTableAggregateFunction);
+            // missing here would break BOTH the SQL job-type detection (getJobType) and the
+            // per-operator validation gate (validateOperatorByNameForOmniTask) for Table API plans.
             SUPPORT_OP_NAME.addAll(Arrays.asList(
                     "Calc",
                     "LookupJoin",
@@ -183,11 +186,13 @@ public final class OmniGraphOverride {
                     "StreamRecordTimestampInserter",
                     "ConstraintEnforcer",
                     "GroupAggregate",
-                    "OverAggregate"));
+                    "OverAggregate",
+                    "GroupTableAggregate"));
         } else {
             SUPPORT_OP_NAME.addAll(Arrays.asList(
                     "Calc",
                     "GroupAggregate",
+                    "GroupTableAggregate",
                     "LocalGroupAggregate",
                     "GlobalGroupAggregate",
                     "IncrementalGroupAggregate",
@@ -211,9 +216,7 @@ public final class OmniGraphOverride {
                     "DropUpdateBefore",
                     "OverAggregate"));
         }
-        SUPPORT_KAFKA_SCHEMA_TYPE.addAll(Arrays.asList(
-                "JsonRowDataDeserializationSchema",
-                "DebeziumJsonDeserializationSchema"));
+        SUPPORT_KAFKA_SCHEMA_TYPE.add("JsonRowDataDeserializationSchema");
         OP_NAME_OF_SQL.addAll(Arrays.asList("Calc", "GroupAggregate", "LocalGroupAggregate", "GlobalGroupAggregate",
                 "IncrementalGroupAggregate", "Join", "LookupJoin", "WindowAggregate", "WindowJoin", "GroupWindowAggregate",
                 "Deduplicate", "Expand", "GlobalWindowAggregate", "LocalWindowAggregate", "WatermarkAssigner", "Rank",

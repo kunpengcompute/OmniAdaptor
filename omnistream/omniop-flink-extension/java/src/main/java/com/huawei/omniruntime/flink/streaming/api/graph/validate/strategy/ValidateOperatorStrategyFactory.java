@@ -39,6 +39,7 @@ public class ValidateOperatorStrategyFactory {
         strategyMap.put("WindowTableFunction", new ValidateWindowTableFunctionOPStrategy());
         strategyMap.put("DropUpdateBefore", new ValidateDropUpdateBeforeOPStrategy());
         strategyMap.put("SinkMaterializer", new ValidateSinkMaterializerOPStrategy());
+        strategyMap.put("GroupTableAggregate", new ValidateGroupTableAggOPStrategy());
     }
 
     public static AbstractValidateOperatorStrategy getStrategy(String operatorName) {

@@ -27,8 +27,11 @@ public abstract class AbstractValidateOperatorStrategy {
     public static final Map<String, Integer> RexTypeToIdMap = new HashMap<>();
     // 所有 validate 策略共用的类型白名单。OVERLAPS 自身仍在 RexNodeUtil 中拒绝精度大于 3
     // 的 TIME/TIMESTAMP；这里保留基线已有的 TIMESTAMP(9)，避免改变其他表达式的支持范围。
+    // INT 与 INTEGER 等价：planner 侧 description 的类型字符串两种写法都可能出现
+    // （Table API flatAggregate 的输出类型字符串化为 INT），白名单需要两者都认。
     protected static final Set<String> SUPPORT_DATA_TYPE = new HashSet<>(Arrays.asList(
             "BIGINT",
+            "INT",
             "INTEGER",
             "TIME_WITHOUT_TIME_ZONE(0)",
             "TIME_WITHOUT_TIME_ZONE(1)",

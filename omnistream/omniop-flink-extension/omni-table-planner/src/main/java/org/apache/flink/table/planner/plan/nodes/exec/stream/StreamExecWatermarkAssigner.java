@@ -28,6 +28,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.flink.FlinkVersion;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.calcite.shaded.com.google.common.collect.ImmutableList;
@@ -170,9 +171,9 @@ public class StreamExecWatermarkAssigner extends ExecNodeBase<RowData>
 
         ImmutableList<RexNode> operands = ((RexCall) watermarkExpr).operands;
         for (RexNode operand : operands) {
-            String name = operand.getType().getSqlTypeName().getName();
-            if (name.equals("INTERVAL_SECOND")){
-                jsonMap.put("intervalSecond",((RexLiteral) operand).getValue());
+            if (operand instanceof RexLiteral
+                    && SqlTypeName.DAY_INTERVAL_TYPES.contains(operand.getType().getSqlTypeName())) {
+                jsonMap.put("intervalSecond", ((RexLiteral) operand).getValueAs(Long.class));
                 break;
             }
         }

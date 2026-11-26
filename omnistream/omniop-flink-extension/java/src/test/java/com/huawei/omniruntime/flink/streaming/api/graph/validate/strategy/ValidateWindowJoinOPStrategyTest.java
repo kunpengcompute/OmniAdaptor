@@ -292,7 +292,7 @@ class ValidateWindowJoinOPStrategyTest {
                 {"DATE", "1"},
                 {"TIME_WITHOUT_TIME_ZONE(3)", "2"},
                 {"TIMESTAMP_WITHOUT_TIME_ZONE(3)", "2"},
-                {"TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)", "2"},
+                {"TIMESTAMP_WITH_LOCAL_TIME_ZONE(3)", "2"}
         };
         for (String[] typeAndId : cases) {
             int dataTypeId = Integer.parseInt(typeAndId[1]);
@@ -328,7 +328,7 @@ class ValidateWindowJoinOPStrategyTest {
                 {"DOUBLE", "3"},
                 {"SMALLINT", "5"},
                 {"TIMESTAMP_WITHOUT_TIME_ZONE(9)", "2"},
-                {"BOOLEAN", "4"},
+                {"BOOLEAN", "4"}
         };
         for (String[] typeAndId : cases) {
             int dataTypeId = Integer.parseInt(typeAndId[1]);

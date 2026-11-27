@@ -19,7 +19,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 public class ValidateWindowJoinOPStrategy extends AbstractValidateOperatorStrategy {
@@ -27,13 +26,23 @@ public class ValidateWindowJoinOPStrategy extends AbstractValidateOperatorStrate
     private static final Set<String> SUPPORT_JOIN_TYPE =
             new HashSet<>(Arrays.asList("InnerJoin", "LeftOuterJoin", "RightOuterJoin", "FullOuterJoin"));
     private static final Set<String> SUPPORT_TIME_TYPE = new HashSet<>(Collections.singletonList("event"));
-    private static final Set<String> SUPPORT_ON_CONDITION_DATA_TYPE = new HashSet<>(Arrays.asList("INTEGER", "INT", "STRING", "BIGINT"));
-    private static final Set<String> SUPPORT_NON_EQUI_OPERATOR = new HashSet<>(Arrays.asList(
-            "EQUAL",
-            "GREATER_THAN_OR_EQUAL",
-            "LESS_THAN_OR_EQUAL",
-            "GREATER_THAN",
-            "LESS_THAN"));
+
+    // The native WindowJoin key selector only carries the BIGINT and string (VARCHAR/STRING)
+    // families. Any other equi join-key type falls back to Flink.
+    private static final Set<String> SUPPORT_JOIN_KEY_TYPES =
+            new HashSet<>(Arrays.asList("BIGINT", "VARCHAR", "STRING"));
+
+    // All outer joins (Left/Right/Full) share the same ordinary-column type policy.
+    private static final Set<String> OUTER_JOIN_TYPES =
+            new HashSet<>(Arrays.asList("LeftOuterJoin", "RightOuterJoin", "FullOuterJoin"));
+    // Outer joins accept DATE in addition to the shared whitelist (native carries it as
+    // OMNI_DATE32), but must fall back for types the native copy path cannot handle.
+    private static final Set<String> OUTER_JOIN_EXTRA_SUPPORT_DATA_TYPE =
+            new HashSet<>(Collections.singletonList("DATE"));
+    private static final Set<String> OUTER_JOIN_DENY_DATA_TYPE =
+            new HashSet<>(Arrays.asList("DECIMAL64", "DECIMAL128", "DATE64"));
+    private static final String TIMESTAMP_WITH_TIME_ZONE_PREFIX = "TIMESTAMP_WITH_TIME_ZONE(";
+    private static final String INTERVAL_PREFIX = "INTERVAL";
 
     @SuppressWarnings("unchecked")
     @Override
@@ -55,101 +64,131 @@ public class ValidateWindowJoinOPStrategy extends AbstractValidateOperatorStrate
         List<Integer> rightJoinKey = (List<Integer>) operatorInfoMap.get("rightJoinKey");
         List<String> leftInputTypes = (List<String>) operatorInfoMap.get("leftInputTypes");
         List<String> rightInputTypes = (List<String>) operatorInfoMap.get("rightInputTypes");
-        List<String> outputTypes = (List<String>) operatorInfoMap.get("outputTypes");
-        Integer leftWindowEndIndex = getInteger(operatorInfoMap.get("leftWindowEndIndex"));
-        Integer rightWindowEndIndex = getInteger(operatorInfoMap.get("rightWindowEndIndex"));
 
         if (leftJoinKey.size() != rightJoinKey.size()) {
             LOG.warn("WindowJoin Key indices do not match");
             return false;
         }
 
+        // Equi condition: the business join keys must be BIGINT or string (VARCHAR/STRING).
+        // Window start/end equalities are stripped from the join spec by the planner and are
+        // therefore not part of leftJoinKey/rightJoinKey here.
         for (int i = 0; i < leftJoinKey.size(); i++) {
-            String leftType = stripNotNull(leftInputTypes.get(leftJoinKey.get(i)));
-            String rightType = stripNotNull(rightInputTypes.get(rightJoinKey.get(i)));
+            String leftRaw = stripNotNull(leftInputTypes.get(leftJoinKey.get(i)));
+            String rightRaw = stripNotNull(rightInputTypes.get(rightJoinKey.get(i)));
+            String leftType = normalizeJoinKeyType(leftRaw);
+            String rightType = normalizeJoinKeyType(rightRaw);
+
+            if (leftType == null || !SUPPORT_JOIN_KEY_TYPES.contains(leftType)) {
+                LOG.warn("WindowJoin join key type must be BIGINT or STRING. leftType = {}", leftRaw);
+                return false;
+            }
             if (!leftType.equals(rightType)) {
-                LOG.warn("WindowJoin Key types are not equal. leftType = {}, rightType = {}", leftType, rightType);
-                return false;
-            }
-            if (leftJoinKey.get(i).equals(leftWindowEndIndex) && rightJoinKey.get(i).equals(rightWindowEndIndex)) {
-                continue;
-            }
-            if (!isSupportOnConditionDataType(leftType)) {
-                LOG.warn("WindowJoin ON condition data type {} is not supported.", leftType);
+                LOG.warn("WindowJoin join key types are not equal. leftType = {}, rightType = {}",
+                        leftRaw, rightRaw);
                 return false;
             }
         }
 
+        // Non-equi condition: strict BINARY + BOOLEAN, then delegate to the shared Calc validator.
         Object condition = operatorInfoMap.get("nonEquiCondition");
-        if (condition != null && !validateNonEquiCondition((Map<String, Object>) condition, outputTypes.size())) {
-            return false;
+        int totalInputSize = leftInputTypes.size() + rightInputTypes.size();
+        if (condition != null) {
+            if (!(condition instanceof Map)
+                    || !nonEquiConditionCheck((Map<String, Object>) condition, totalInputSize)) {
+                return false;
+            }
         }
 
-        return validateDataTypes(getDataTypes(operatorInfoMap, "leftInputTypes", "rightInputTypes", "outputTypes"));
+        List<List<String>> dataTypes =
+                getDataTypes(operatorInfoMap, "leftInputTypes", "rightInputTypes", "outputTypes");
+        if (OUTER_JOIN_TYPES.contains(joinType)) {
+            return validateOuterJoinDataTypes(dataTypes, joinType);
+        }
+        return validateDataTypes(dataTypes);
     }
 
-    private boolean validateNonEquiCondition(Map<String, Object> condition, int inputSize) {
-        if (!"BINARY".equals(condition.get("exprType"))
-                || !RexTypeToIdMap.get("BOOLEAN").equals(condition.get("returnType"))) {
-            return false;
-        }
+    /**
+     * Outer-join (Left/Right/Full) type policy: allow the shared whitelist plus DATE, but force
+     * DECIMAL and TIMESTAMP WITH TIME ZONE to fall back to Flink because the native copy path
+     * cannot carry them. INTERVAL and container types are absent from the shared whitelist and
+     * therefore fall back as well. Everything outside this strict set
+     * (DOUBLE/SMALLINT/TINYINT/FLOAT/BINARY/...) is also rejected so the vertex falls back to
+     * Flink. All outer join types share this policy so their ordinary-column support stays
+     * consistent.
+     */
+    private boolean validateOuterJoinDataTypes(List<List<String>> dataTypesList, String joinType) {
+        return dataTypesList.stream()
+                .flatMap(List::stream)
+                .allMatch(type -> {
+                    String originalType = type;
+                    type = stripNotNull(type);
 
-        Object operator = condition.get("operator");
-        if (!SUPPORT_NON_EQUI_OPERATOR.contains(operator)) {
-            LOG.warn("WindowJoin non-equi operator {} is not supported.", operator);
-            return false;
-        }
+                    if (type.matches("^VARCHAR\\([^)]*\\)$")) {
+                        type = "VARCHAR";
+                    }
 
-        Object left = condition.get("left");
-        Object right = condition.get("right");
-        if (!validateSimpleOperand(left, inputSize) || !validateSimpleOperand(right, inputSize)) {
-            return false;
-        }
-        return Objects.equals(getOperandDataType(left), getOperandDataType(right));
+                    if (type.matches("^DECIMAL64\\([^)]*\\)$")) {
+                        type = "DECIMAL64";
+                    }
+
+                    if (type.matches("^DECIMAL128\\([^)]*\\)$")) {
+                        type = "DECIMAL128";
+                    }
+
+                    if (OUTER_JOIN_DENY_DATA_TYPE.contains(type)
+                            || type.startsWith(TIMESTAMP_WITH_TIME_ZONE_PREFIX)
+                            || type.startsWith(INTERVAL_PREFIX)) {
+                        LOG.info("WindowJoin {} unsupported data type: '{}' (original: '{}')",
+                                joinType, type, originalType);
+                        return false;
+                    }
+
+                    boolean supported =
+                            SUPPORT_DATA_TYPE.contains(type) || OUTER_JOIN_EXTRA_SUPPORT_DATA_TYPE.contains(type);
+                    if (!supported) {
+                        LOG.info("WindowJoin {} unsupported data type: '{}' (original: '{}')",
+                                joinType, type, originalType);
+                        return false;
+                    }
+                    return true;
+                });
     }
 
-    @SuppressWarnings("unchecked")
-    private boolean validateSimpleOperand(Object operand, int inputSize) {
-        if (!(operand instanceof Map)) {
+    /**
+     * Strict non-equi validation for WindowJoin. The top-level condition must be a binary
+     * expression whose return type is BOOLEAN; everything else (UNARY/MULTIPLE_AND_OR/FUNCTION/
+     * IN/BETWEEN/...) falls back to Flink. The expression shape and operands are then validated by
+     * the shared Calc validator so the native JIT never receives an unvalidated condition.
+     */
+    private static boolean nonEquiConditionCheck(Map<String, Object> condition, int inputSize) {
+        if (condition == null || !"BINARY".equals(condition.get("exprType"))) {
+            LOG.warn("WindowJoin non-equi condition must be a binary expression. exprType = {}",
+                    condition == null ? null : condition.get("exprType"));
             return false;
         }
-
-        Map<String, Object> operandMap = (Map<String, Object>) operand;
-        if (!isSupportNonEquiConditionDataTypeId(operandMap.get("dataType"))) {
+        if (!RexTypeToIdMap.get("BOOLEAN").equals(condition.get("returnType"))) {
+            LOG.warn("WindowJoin non-equi condition return type must be BOOLEAN.");
             return false;
         }
+        return ValidateCalcOPStrategy.validateCalcExpr(condition, inputSize);
+    }
 
-        if ("FIELD_REFERENCE".equals(operandMap.get("exprType"))) {
-            Object colVal = operandMap.get("colVal");
-            return colVal instanceof Integer && (int) colVal >= 0 && (int) colVal < inputSize;
+    /**
+     * Normalizes an equi join-key type to the native key family. VARCHAR(n) and STRING are both
+     * carried as OMNI_VARCHAR. Any other type (INTEGER/DATE/BOOLEAN/CHAR/TIME/TIMESTAMP/...)
+     * returns null so the vertex falls back to Flink.
+     */
+    private String normalizeJoinKeyType(String dataType) {
+        String type = stripNotNull(dataType);
+        if (type == null) {
+            return null;
         }
-        if ("LITERAL".equals(operandMap.get("exprType"))) {
-            Object isNull = operandMap.get("isNull");
-            return isNull instanceof Boolean && ((boolean) isNull || operandMap.containsKey("value"));
+        if (type.matches("^VARCHAR\\([^)]*\\)$") || "STRING".equals(type)) {
+            return "VARCHAR";
         }
-        return false;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Object getOperandDataType(Object operand) {
-        return ((Map<String, Object>) operand).get("dataType");
-    }
-
-    private boolean isSupportOnConditionDataType(String dataType) {
-        if (dataType != null && dataType.matches("^VARCHAR\\([^)]*\\)$")) {
-            return true;
-        }
-        return SUPPORT_ON_CONDITION_DATA_TYPE.contains(dataType);
-    }
-
-    private boolean isSupportNonEquiConditionDataTypeId(Object dataTypeId) {
-        return RexTypeToIdMap.get("INTEGER").equals(dataTypeId) || RexTypeToIdMap.get("INT").equals(dataTypeId)
-                || RexTypeToIdMap.get("BIGINT").equals(dataTypeId) || RexTypeToIdMap.get("VARCHAR").equals(dataTypeId);
-    }
-
-    private Integer getInteger(Object value) {
-        if (value instanceof Integer) {
-            return (Integer) value;
+        if ("BIGINT".equals(type)) {
+            return "BIGINT";
         }
         return null;
     }
